@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from .db_tools import sanitize_agent_report
-from .discovery_ui import _SHARED_CSS, render_top_nav
+from .discovery_ui import _SHARED_CSS, render_page_topbar
 from .screening import (
     RUBRIC_META,
     RUBRIC_ORDER,
@@ -141,7 +141,7 @@ def build_taste_profile_payload(store: Any) -> dict[str, Any]:
 
 
 _TASTE_PROFILE_CSS = """
-  .wrap.wrap-taste { max-width: 1360px; }
+  .wrap.wrap-taste { max-width: 1320px; }
 
   .pillar-section {
     background: var(--panel);
@@ -1181,7 +1181,7 @@ _TASTE_PROFILE_SCRIPT = """
 
 def render_taste_profile_page() -> str:
     """Render the `/taste-profile` ('8. Taste Profile') HTML page."""
-    top_nav = render_top_nav("/taste-profile")
+    topbar = render_page_topbar("/taste-profile", "Taste Profile")
     return (
         """<!DOCTYPE html>
 <html lang="en">
@@ -1195,16 +1195,14 @@ def render_taste_profile_page() -> str:
         + """</style>
 </head>
 <body>
-  <div class="wrap wrap-taste">
-    <header>
-      <div class="brand">
-        <h1>Simon <span class="pill purple">8. Taste Profile</span></h1>
-        <p>See how Simon matches your A&amp;R taste across 5 scorecard criteria, producer overrides, and calibration examples.</p>
-      </div>
-      """
-        + top_nav
+  """
+        + topbar
         + """
-    </header>
+  <div class="wrap wrap-taste">
+    <div class="page-hero">
+      <h1>8. Taste Profile <span class="pill purple">Stage 4</span></h1>
+      <p>See how Simon matches your A&amp;R taste across 5 scorecard criteria, producer overrides, and calibration examples.</p>
+    </div>
 
     <div id="tasteBanner" class="banner"></div>
 

@@ -1005,11 +1005,32 @@ _NAV_CSS = """
     background: var(--purple-bg, rgba(192, 132, 252, 0.15)); border-color: var(--purple, #7e22ce); color: var(--purple, #7e22ce);
   }
   .nav-theme-btn {
-    padding: 5px 10px; border-radius: 8px; font-weight: 600; font-size: 0.78rem;
+    padding: 5px 10px; border-radius: 8px; font-weight: 600; font-size: 12px;
     border: 1px solid var(--border); background: var(--panel-2, var(--surface-2));
     color: var(--text); cursor: pointer;
   }
   .nav-theme-btn:hover { border-color: var(--accent); }
+  .simon-topbar {
+    position: sticky; top: 0; z-index: 30;
+    background: var(--panel, var(--surface));
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px; min-height: 56px;
+  }
+  .simon-topbar-inner {
+    max-width: 1320px; margin: 0 auto;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .simon-brand-group { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .simon-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit; }
+  .simon-brand:hover { text-decoration: none; }
+  .simon-brand-mark {
+    width: 32px; height: 32px; border-radius: 9px;
+    background: var(--accent); color: var(--accent-fg);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 15px; flex-shrink: 0;
+  }
+  .simon-brand-title { font-weight: 800; font-size: 15px; letter-spacing: -0.02em; line-height: 1.15; }
+  .simon-brand-sub { font-size: 11px; color: var(--muted); line-height: 1.15; }
   .nav-primary-shell { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .nav-primary-tabs {
     display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap;
@@ -1017,7 +1038,9 @@ _NAV_CSS = """
     padding: 3px; border-radius: 11px;
   }
   .nav-primary-tab {
-    padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 600;
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 32px; padding: 0 12px; border-radius: 8px;
+    font-size: 12.5px; font-weight: 600; line-height: 1; white-space: nowrap;
     color: var(--muted); text-decoration: none; border: 1px solid transparent;
     transition: all 0.14s ease;
   }
@@ -1028,7 +1051,8 @@ _NAV_CSS = """
   }
   .nav-tools-menu { position: relative; }
   .nav-tools-menu summary {
-    list-style: none; padding: 6px 11px; border-radius: 8px; font-size: 0.78rem; font-weight: 600;
+    list-style: none; display: inline-flex; align-items: center; height: 34px;
+    padding: 0 12px; border-radius: 8px; font-size: 12.5px; font-weight: 600;
     border: 1px solid var(--border); background: var(--panel-2, var(--surface-2)); color: var(--text);
     cursor: pointer; user-select: none;
   }
@@ -1044,6 +1068,18 @@ _NAV_CSS = """
   .nav-tools-popover .nav-group { flex-direction: column; align-items: stretch; gap: 2px; padding: 8px; }
   .nav-tools-popover .nav-group-label { border-right: none; padding: 0 4px 4px; margin-bottom: 2px; border-bottom: 1px solid var(--border); }
   .nav-tools-popover .nav-group a { padding: 6px 8px; font-size: 0.8rem; }
+  .nav-tools-footer {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding-top: 8px; border-top: 1px solid var(--border);
+  }
+  .page-hero {
+    margin: 0 0 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border);
+  }
+  .page-hero h1 {
+    margin: 0; font-size: 1.45rem; font-weight: 800; letter-spacing: -0.02em;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .page-hero p { margin: 5px 0 0; color: var(--muted); font-size: 0.88rem; }
   .subflow-nav {
     display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
     padding: 8px 12px; margin-bottom: 16px; border-radius: 12px;
@@ -1155,11 +1191,11 @@ def render_top_nav(active_path: str) -> str:
 
     primary_tabs = "".join(
         [
-            _stage("/?tab=discovery", "Discovery", active_path in ("/discovery", "/field-news", "/reports")),
-            _stage("/investigate", "Investigate", active_path == "/investigate"),
-            _stage("/screen", "Screening", active_path in ("/screen", "/screening")),
-            _stage("/taste-profile", "Taste Profile", active_path == "/taste-profile"),
-            _stage("/?tab=review", "Talent Review", active_path == "/"),
+            _stage("/?tab=discovery", "1. Discovery", active_path in ("/discovery", "/field-news", "/reports")),
+            _stage("/investigate", "2. Investigate", active_path == "/investigate"),
+            _stage("/screen", "3. Screening", active_path in ("/screen", "/screening")),
+            _stage("/taste-profile", "4. Taste Profile", active_path == "/taste-profile"),
+            _stage("/?tab=review", "5. Talent Review", active_path == "/"),
         ]
     )
     theme_btn = (
@@ -1182,10 +1218,90 @@ def render_top_nav(active_path: str) -> str:
         f'<nav class="nav-primary-tabs" aria-label="Primary Pipeline Stages">{primary_tabs}</nav>'
         '<details class="nav-tools-menu">'
         '<summary>Tools ▾</summary>'
-        f'<div class="nav-tools-popover">{directory_nav}</div>'
+        f'<div class="nav-tools-popover">{directory_nav}<div class="nav-tools-footer"><span style="font-size:11px; color:var(--muted);">Theme</span>{theme_btn}</div></div>'
         "</details>"
-        f"{theme_btn}"
         "</div>"
+    )
+
+
+def render_page_topbar(active_path: str, subtitle: str = "Studio") -> str:
+    """Render the full-bleed sticky Simon topbar matching `/` across all standalone pages."""
+    def _stage(href: str, label: str, is_active: bool) -> str:
+        cls = " active" if is_active else ""
+        return f'<a href="{href}" class="nav-primary-tab{cls}">{label}</a>'
+
+    primary_tabs = "".join(
+        [
+            _stage("/?tab=discovery", "1. Discovery", active_path in ("/discovery", "/field-news", "/reports")),
+            _stage("/investigate", "2. Investigate", active_path == "/investigate"),
+            _stage("/screen", "3. Screening", active_path in ("/screen", "/screening")),
+            _stage("/taste-profile", "4. Taste Profile", active_path == "/taste-profile"),
+            _stage("/?tab=review", "5. Talent Review", active_path == "/"),
+        ]
+    )
+    # Build Tools popover reusing render_top_nav's directory + theme toggle
+    def _link(href: str, label: str, elem_id: str = "") -> str:
+        cls = ' class="active"' if active_path == href else ""
+        id_attr = f' id="{elem_id}"' if elem_id else ""
+        return f'<a href="{href}"{id_attr}{cls}>{label}</a>'
+
+    directory_nav = (
+        '<nav class="nav-sections" aria-label="Simon Pipeline Navigation">'
+        '<div class="nav-group stage-discovery">'
+        '<span class="nav-group-label">Discovery</span>'
+        f'{_link("/discovery", "1. Discovery Dashboard")}'
+        f'{_link("/field-news", "2. Field News", "tracesNavLink")}'
+        f'{_link("/reports", "3. Scouting Reports", "reportsNavLink")}'
+        "</div>"
+        '<div class="nav-group stage-investigation">'
+        '<span class="nav-group-label">Investigation</span>'
+        f'{_link("/investigate", "4. Investigator Desk")}'
+        f'{_link("/", "5. Vocal Studio")}'
+        f'{_link("/evals", "6. Evals", "evalsNavLink")}'
+        "</div>"
+        '<div class="nav-group stage-screening">'
+        '<span class="nav-group-label">Screening</span>'
+        f'{_link("/screen", "7. Screening Deck", "screenNavLink")}'
+        f'{_link("/taste-profile", "8. Taste Profile", "tasteProfileNavLink")}'
+        '<a href="/?tab=pipeline">Pipeline Stepper</a>'
+        '<a href="/?tab=lab">Agent Lab</a>'
+        "</div>"
+        "</nav>"
+    )
+    theme_btn = (
+        '<button type="button" id="simonNavThemeBtn" class="nav-theme-btn" '
+        'title="Toggle Editorial Light / Studio Dark">☀ Light</button>'
+        "<script>(function(){"
+        "var k='simon_theme',b=document.getElementById('simonNavThemeBtn');"
+        "function ap(t){document.documentElement.setAttribute('data-theme',t);"
+        "try{localStorage.setItem(k,t);}catch(e){}"
+        "if(b)b.textContent=t==='dark'?'☾ Studio Dark':'☀ Light';}"
+        "var cur='light';try{cur=localStorage.getItem(k)||'light';}catch(e){}"
+        "ap(cur);"
+        "if(b)b.addEventListener('click',function(){ap((document.documentElement.getAttribute('data-theme')||'light')==='dark'?'light':'dark');});"
+        "document.addEventListener('click',function(e){document.querySelectorAll('.nav-tools-menu[open]').forEach(function(m){if(!m.contains(e.target))m.removeAttribute('open');});});"
+        "document.addEventListener('keydown',function(e){if(e.key==='Escape'){document.querySelectorAll('.nav-tools-menu[open]').forEach(function(m){m.removeAttribute('open');});}});"
+        "})();</script>"
+    )
+    return (
+        '<header class="simon-topbar">'
+        '<div class="simon-topbar-inner">'
+        '<div class="simon-brand-group">'
+        '<a href="/" class="simon-brand">'
+        '<div class="simon-brand-mark">S</div>'
+        "<div>"
+        '<div class="simon-brand-title">Simon</div>'
+        f'<div class="simon-brand-sub">{subtitle}</div>'
+        "</div>"
+        "</a>"
+        f'<nav class="nav-primary-tabs" aria-label="Primary Pipeline Stages">{primary_tabs}</nav>'
+        "</div>"
+        '<details class="nav-tools-menu">'
+        '<summary>Tools ▾</summary>'
+        f'<div class="nav-tools-popover">{directory_nav}<div class="nav-tools-footer"><span style="font-size:11px; color:var(--muted);">Theme</span>{theme_btn}</div></div>'
+        "</details>"
+        "</div>"
+        "</header>"
     )
 
 
@@ -1314,7 +1430,7 @@ _SHARED_CSS = (
 
 
 _DISCOVERY_PAGE_CSS = """
-  .wrap.wrap-wide { max-width: 1440px; }
+  .wrap.wrap-wide { max-width: 1320px; }
   .selector-toolbar {
     display: grid;
     grid-template-columns: minmax(260px, 1.8fr) repeat(4, minmax(155px, 1fr));
@@ -1495,14 +1611,12 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
   <style>{_SHARED_CSS}{_DISCOVERY_PAGE_CSS}</style>
 </head>
 <body>
+  {render_page_topbar("/discovery", "Discovery")}
   <div class="wrap wrap-wide">
-    <header>
-      <div class="brand">
-        <h1>Simon <span class="pill amber">1. Discovery Dashboard</span></h1>
-        <p>Pick your sources, write a brief, and send scouts. Track live progress in <strong>Field News</strong>.</p>
-      </div>
-      {render_top_nav("/discovery")}
-    </header>
+    <div class="page-hero">
+      <h1>1. Discovery Dashboard <span class="pill amber">Stage 1</span></h1>
+      <p>Pick your sources, write a brief, and send scouts. Track live progress in <strong>Field News</strong>.</p>
+    </div>
     {render_discovery_subnav("/discovery")}
 
     <div id="banner" class="banner"></div>
@@ -1862,14 +1976,12 @@ FIELD_NEWS_HTML = f"""<!DOCTYPE html>
   <style>{_SHARED_CSS}</style>
 </head>
 <body>
+  {render_page_topbar("/field-news", "Field News")}
   <div class="wrap">
-    <header>
-      <div class="brand">
-        <h1>Simon <span class="pill ok">2. Field News</span></h1>
-        <p>Live updates from active scouts: what each scout checks, finds, and notes in real time.</p>
-      </div>
-      {render_top_nav("/field-news")}
-    </header>
+    <div class="page-hero">
+      <h1>2. Field News <span class="pill ok">Stage 1</span></h1>
+      <p>Live updates from active scouts: what each scout checks, finds, and notes in real time.</p>
+    </div>
     {render_discovery_subnav("/field-news")}
 
     <section class="card">
@@ -2071,14 +2183,12 @@ REPORTS_HTML = f"""<!DOCTYPE html>
   <style>{_SHARED_CSS}</style>
 </head>
 <body>
+  {render_page_topbar("/reports", "Scouting Reports")}
   <div class="wrap">
-    <header>
-      <div class="brand">
-        <h1>Simon <span class="pill blue">3. Scouting Reports</span></h1>
-        <p>Saved scouting reports with checked leads, step-by-step notes, and full lead details.</p>
-      </div>
-      {render_top_nav("/reports")}
-    </header>
+    <div class="page-hero">
+      <h1>3. Scouting Reports <span class="pill blue">Stage 1</span></h1>
+      <p>Saved scouting reports with checked leads, step-by-step notes, and full lead details.</p>
+    </div>
     {render_discovery_subnav("/reports")}
 
     <section class="card">
@@ -2252,14 +2362,12 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
   <style>{_SHARED_CSS}</style>
 </head>
 <body>
+  {render_page_topbar("/investigate", "Investigate")}
   <div class="wrap">
-    <header>
-      <div class="brand">
-        <h1>Simon <span class="pill ok">4. Investigator Desk</span></h1>
-        <p>Check Stage 1 leads, run Stage 2 investigators, and read factual artist dossiers. No scores or ranks.</p>
-      </div>
-      {render_top_nav("/investigate")}
-    </header>
+    <div class="page-hero">
+      <h1>4. Investigator Desk <span class="pill ok">Stage 2</span></h1>
+      <p>Check Stage 1 leads, run Stage 2 investigators, and read factual artist dossiers. No scores or ranks.</p>
+    </div>
 
     <div id="focusBanner" class="banner"></div>
 
@@ -2673,14 +2781,12 @@ EVALS_HTML = f"""<!DOCTYPE html>
   <style>{_SHARED_CSS}</style>
 </head>
 <body>
+  {render_page_topbar("/evals", "Quality Evals")}
   <div class="wrap">
-    <header>
-      <div class="brand">
-        <h1>Simon <span class="pill blue">6. Evals (Vertex AI)</span></h1>
-        <p>Check each agent against quality rubrics, review Vertex AI scorecards, and catch regressions.</p>
-      </div>
-      {render_top_nav("/evals")}
-    </header>
+    <div class="page-hero">
+      <h1>6. Evals (Vertex AI) <span class="pill blue">Quality Tools</span></h1>
+      <p>Check each agent against quality rubrics, review Vertex AI scorecards, and catch regressions.</p>
+    </div>
 
     <div id="evalBanner" class="banner"></div>
 

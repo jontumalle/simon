@@ -9,7 +9,7 @@ gemini-4-neon Judge synthesis, Human-in-the-Loop (HITL) verdict calibration, and
 
 from __future__ import annotations
 
-from .discovery_ui import _SHARED_CSS, _render_top_nav
+from .discovery_ui import _SHARED_CSS, render_page_topbar
 
 _SCREENING_EXTRA_CSS = """
   .control-strip {
@@ -247,7 +247,7 @@ _SCREENING_EXTRA_CSS = """
 
 def render_screening_page() -> str:
     """Render the Stage 3 Single-Card Screening Deck HTML (`/screen`)."""
-    top_nav = _render_top_nav("/screen")
+    topbar = render_page_topbar("/screen", "Screening")
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -257,14 +257,12 @@ def render_screening_page() -> str:
   <style>{_SHARED_CSS}{_SCREENING_EXTRA_CSS}</style>
 </head>
 <body>
+  {topbar}
   <div class="wrap">
-    <header>
-      <div class="brand">
-        <h1>Simon <span class="pill purple">7. Screening Deck</span></h1>
-        <p>Review one artist at a time with <strong>Advocate vs. Skeptic</strong> notes, 5-point scores, a Judge verdict, and your vote.</p>
-      </div>
-      {top_nav}
-    </header>
+    <div class="page-hero">
+      <h1>7. Screening Deck <span class="pill purple">Stage 3</span></h1>
+      <p>Review one artist at a time with <strong>Advocate vs. Skeptic</strong> notes, 5-point scores, a Judge verdict, and your vote.</p>
+    </div>
 
     <div id="screeningBanner" class="banner"></div>
 
