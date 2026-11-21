@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://simon.dev/schemas/eval_run.schema.json",
+  "title": "SimonEvalRun",
+  "description": "Canonical schema for an agent evaluation run stored in Firestore/SQLite (`eval_runs`) and displayed in the Discovery Dashboard `/evals` view.",
+  "type": "object",
+  "required": [
+    "eval_run_id",
+    "agent_id",
+    "rubric_set_id",
+    "runner",
+    "mode",
+    "status",
+    "overall_score",
+    "passed_gates",
+    "created_at",
+    "dimensions"
+  ],
+  "properties": {
+    "eval_run_id": {
+      "type": "string",
+      "minLength": 4
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Target agent identifier, e.g. simon-discovery-scout."
+    },
+    "rubric_set_id": {
+      "type": "string",
+      "description": "Rubric spec identifier from data/evals/discovery_rubrics.json."
+    },
+    "runner": {
+      "type": "string",
+      "enum": ["vertex_ai", "offline_baseline", "hybrid_vertex_offline"]
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["vertex", "offline"]
+    },
+    "trigger": {
+      "type": "string",
+      "description": "Origin of the eval run (github_actions, platform_ui, cli, schedule)."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["passed", "failed", "warning", "running", "error"]
+    },
+    "overall_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "passed_gates": {
+      "type": "boolean"
+    },
+    "sample_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "sample_source": {
+      "type": "string",
+      "description": "golden_dataset | live_reports | mixed"
+    },
+    "git_sha": {
+      "type": ["string", "null"]
+    },
+    "gcp_project": {
+      "type": ["string", "null"]
+    },
+    "gcp_region": {
+      "type": ["string", "null"]
+    },
+    "vertex_experiment": {
+      "type": ["string", "null"]
+    },
+    "vertex_console_url": {
+      "type": ["string", "null"]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "dimensions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rubric_id", "name", "layer", "score", "passed"],
+        "properties": {
+          "rubric_id": { "type": "string" },
+          "name": { "type": "string" },
+          "layer": { "type": "string" },
+          "skill": { "type": "string" },
+          "scale": { "type": "string" },
+          "score": { "type": "number", "minimum": 0, "maximum": 1 },
+          "raw_score": { "type": ["number", "null"] },
+          "max_score": { "type": ["number", "null"] },
+          "passed": { "type": "boolean" },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "case_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "case_id": { "type": "string" },
+          "source": { "type": "string" },
+          "brief": { "type": "string" },
+          "passed": { "type": "boolean" },
+          "score": { "type": "number" },
+          "rationale": { "type": "string" }
+        }
+      }
+    },
+    "notes": {
+      "type": ["string", "null"]
+    }
+  }
+}

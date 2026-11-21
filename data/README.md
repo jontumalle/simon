@@ -20,3 +20,4 @@ Versioned, non-sensitive reference datasets used to seed Simon's database tables
 
 ## Evaluation Benchmarks (`data/evals/`)
 - **[evals/discovery_eval_cases.json](./evals/discovery_eval_cases.json)** — Offline golden eval cases for Stage 1 discovery (`url_hygiene`, `attribution_accuracy`, `dedup_and_grouping`, `contract_validity`, `second_take_coverage`).
+- **[evals/label_signing_recall_eval.json](./evals/label_signing_recall_eval.json)** — Option C two-bucket recall benchmark of 10 real 2025–2026 record-label signings (200–100k YouTube subs & <100k Spotify monthly listeners): 6 in-map NYC/session signings + 4 out-of-map cold-discovery signings.

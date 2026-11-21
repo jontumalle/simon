@@ -1,0 +1,342 @@
+{
+  "dataset_version": "1.0.0",
+  "created_at": "2026-11-21T16:33:00-05:00",
+  "description": "Option C two-bucket recall evaluation benchmark built from real 2025-2026 record-label signing announcements. Targets emerging artists with 200-100,000 YouTube subscribers (and <100k Spotify monthly listeners where indexed) and low-to-moderate video views. Separates in-map extraction recall (6 artists touching seeded NYC/session sources) from out-of-map cold source discovery (4 artists outside seeded sources).",
+  "selection_criteria": {
+    "youtube_subscribers_range": [200, 100000],
+    "spotify_monthly_listeners_max": 100000,
+    "verified_via": "Live YouTube watch-page metadata + public web/Spotify index checks on 2026-11-21",
+    "buckets": {
+      "in_map": "Artists whose live rooms, session channels, or local directories overlap active sources in data/reference/discovery_sources_seed.json (tests extraction recall).",
+      "out_of_map": "Artists signed to labels who sit outside our seeded NYC + US session source map (tests cold source discovery via google_search)."
+    }
+  },
+  "recommended_run_briefs": [
+    {
+      "brief_id": "brief_nyc_indie_rooms",
+      "bucket": "in_map",
+      "target_artist_ids": ["eval_01_starcleaner_reunion", "eval_02_renny_conti", "eval_04_hello_mary", "eval_05_yhwh_nailgun", "eval_06_lip_critic"],
+      "search_brief": "Emerging NYC indie, art-rock, and singer-songwriter acts playing Brooklyn and Lower East Side showcase rooms (Union Pool, Baby's All Right, Mercury Lounge, Pianos) or featured on Audiotree, KEXP, Bandcamp New York, and BrooklynVegan.",
+      "leakage_check": "Does not mention record labels or artist names."
+    },
+    {
+      "brief_id": "brief_ambient_folk_vocal",
+      "bucket": "in_map",
+      "target_artist_ids": ["eval_03_maria_bc", "eval_02_renny_conti"],
+      "search_brief": "Minimalist ambient-folk and indie singer-songwriter vocalists on Bandcamp and independent tastemaker blogs with stripped-back live sets.",
+      "leakage_check": "Does not mention record labels or artist names."
+    },
+    {
+      "brief_id": "brief_cold_global_discovery",
+      "bucket": "out_of_map",
+      "target_artist_ids": ["eval_07_rois", "eval_08_the_sophs", "eval_09_deux_visages", "eval_10_ami_taf_ra"],
+      "search_brief": "Under-the-radar emerging vocalists and bands outside New York (Los Angeles, Ireland, US indie/shoegaze, spiritual jazz-soul) with under 100k followers and early live or official video releases.",
+      "leakage_check": "Does not mention record labels or artist names."
+    }
+  ],
+  "artists": [
+    {
+      "id": "eval_01_starcleaner_reunion",
+      "stage_name": "Starcleaner Reunion",
+      "bucket": "in_map",
+      "label": "Mexican Summer",
+      "origin": "New York, NY",
+      "genres": ["indie-pop", "shoegaze", "chamber-pop"],
+      "metrics": {
+        "youtube_subscribers": 405,
+        "youtube_channel_handle": "@SCReunionVEVO",
+        "youtube_channel_id": "UC0zLTBzrUm34Erx3QfVEwoQ",
+        "spotify_monthly_listeners_approx": 60000,
+        "sample_videos": [
+          {
+            "url": "https://www.youtube.com/watch?v=kjcHNty7nD8",
+            "title": "Starcleaner Reunion - Lay On Plastic Moment (Official Video)",
+            "views": 2545
+          },
+          {
+            "url": "https://www.youtube.com/watch?v=VPpKFMMvOHo",
+            "title": "Starcleaner Reunion live at Elsewhere (Zone One) - Moss On My Brick Wall (Live)",
+            "views": 1675
+          }
+        ]
+      },
+      "overlapping_seed_sources": [
+        "nyc_union_pool",
+        "nyc_pianos",
+        "nyc_mercury_lounge",
+        "bc_new_york_new_arrivals",
+        "other_brooklynvegan"
+      ],
+      "eval_notes": "Very low YouTube subs (405) and views (<3k); ideal ground-floor NYC recall test."
+    },
+    {
+      "id": "eval_02_renny_conti",
+      "stage_name": "Renny Conti",
+      "bucket": "in_map",
+      "label": "Mom+Pop Music (and Domino Publishing)",
+      "origin": "Brooklyn, NY",
+      "genres": ["indie-folk", "singer-songwriter"],
+      "metrics": {
+        "youtube_subscribers": 1400,
+        "youtube_channel_handle": "@RennyConti",
+        "youtube_channel_id": "UCZWNjESXWyr0U8ookHndPOw",
+        "spotify_monthly_listeners_approx": null,
+        "spotify_tier_note": "Under 100k monthly listeners (underground indie-folk tier)",
+        "sample_videos": [
+          {
+            "url": "https://www.youtube.com/watch?v=Ll--AR71fG8",
+            "title": "Renny Conti - Mona Lisa (Official Music Video)",
+            "views": 6844
+          },
+          {
+            "url": "https://www.youtube.com/watch?v=0_0EmQxJpy4",
+            "title": "Renny Conti - Looking at the Geese (Official Video)",
+            "views": 6033
+          }
+        ]
+      },
+      "overlapping_seed_sources": [
+        "nyc_mercury_lounge",
+        "nyc_babys_all_right",
+        "bc_new_york_new_arrivals",
+        "other_brooklynvegan"
+      ],
+      "eval_notes": "Clean solo vocalist-songwriter; low YouTube views (~6k) and signed to Mom+Pop + Domino Publishing."
+    },
+    {
+      "id": "eval_03_maria_bc",
+      "stage_name": "Maria BC",
+      "bucket": "in_map",
+      "label": "Sacred Bones Records",
+      "origin": "Oakland, CA (active NYC touring)",
+      "genres": ["ambient-folk", "singer-songwriter", "experimental"],
+      "metrics": {
+        "youtube_subscribers": 1290,
+        "youtube_channel_handle": "@mariabcmusic",
+        "youtube_channel_id": "UCCQJ7Ek9oTIxtmLWCpdWJVw",
+        "spotify_monthly_listeners_approx": 18000,
+        "sample_videos": [
+          {
+            "url": "https://www.youtube.com/watch?v=lPTp9-d7ark",
+            "title": "Maria BC - Lacuna (Official Music Video)",
+            "views": 11958
+          },
+          {
+            "url": "https://www.youtube.com/watch?v=_dXDSWMM08U",
+            "title": "Maria BC - Live at Zebulon, Los Angeles, CA 3/15/2026",
+            "views": 560
+          }
+        ]
+      },
+      "overlapping_seed_sources": [
+        "other_brooklynvegan",
+        "nyc_union_pool",
+        "credit_musicbrainz_api"
+      ],
+      "eval_notes": "Voice-driven ambient folk with strong Bandcamp footprint (mariabc.bandcamp.com) and 1.29k YT subs."
+    },
+    {
+      "id": "eval_04_hello_mary",
+      "stage_name": "Hello Mary",
+      "bucket": "in_map",
+      "label": "Frenchkiss Records / Fire Talk",
+      "origin": "New York, NY",
+      "genres": ["indie-rock", "alt-rock", "vocal-harmony"],
+      "metrics": {
+        "youtube_subscribers": 3150,
+        "youtube_channel_handle": "@hellomaryband",
+        "youtube_channel_id": "UCy6k2tYuEbantMTCj4oOHJw",
+        "spotify_monthly_listeners_approx": null,
+        "spotify_tier_note": "Under 100k monthly listeners; tests entity disambiguation against unrelated 'Hello Mary' profiles",
+        "sample_videos": [
+          {
+            "url": "https://www.youtube.com/watch?v=-WMoZTedBT4",
+            "title": "Hello Mary on Audiotree Live (Full Session)",
+            "views": 39206
+          },
+          {
+            "url": "https://www.youtube.com/watch?v=lt5SIRVzRZ8",
+            "title": "Hello Mary - 0%",
+            "views": 25857
+          }
+        ]
+      },
+      "overlapping_seed_sources": [
+        "yt_audiotree",
+        "nyc_babys_all_right",
+        "nyc_mercury_lounge",
+        "other_brooklynvegan"
+      ],
+      "eval_notes": "Directly appears on seeded yt_audiotree channel; also tests Stage 2 identity-resolver name disambiguation."
+    },
+    {
+      "id": "eval_05_yhwh_nailgun",
+      "stage_name": "YHWH Nailgun",
+      "bucket": "in_map",
+      "label": "AD 93",
+      "origin": "New York, NY",
+      "genres": ["post-punk", "industrial-rock", "experimental"],
+      "metrics": {
+        "youtube_subscribers": 4420,
+        "youtube_channel_handle": "@yhwhnailgun",
+        "youtube_channel_id": null,
+        "spotify_monthly_listeners_approx": 35000,
+        "sample_videos": [
+          {
+            "url": "https://www.youtube.com/watch?v=41flmWt-9l8",
+            "title": "YHWH Nailgun - Castrato Raw (Fullback)",
+            "views": 59004
+          },
+          {
+            "url": "https://www.youtube.com/watch?v=4KYpfc9WrUU",
+            "title": "YHWH Nailgun - Full Performance (Live on KEXP)",
+            "views": 101201
+          }
+        ]
+      },
+      "overlapping_seed_sources": [
+        "yt_kexp_live",
+        "nyc_union_pool",
+        "bc_new_york_new_arrivals",
+        "other_brooklynvegan"
+      ],
+      "eval_notes": "Directly appears on seeded yt_kexp_live channel; 4.42k YT subs and ~35k Spotify monthly listeners."
+    },
+    {
+      "id": "eval_06_lip_critic",
+      "stage_name": "Lip Critic",
+      "bucket": "in_map",
+      "label": "Partisan Records",
+      "origin": "Brooklyn, NY",
+      "genres": ["dance-punk", "noise-rock", "experimental"],
+      "metrics": {
+        "youtube_subscribers": 5130,
+        "youtube_channel_handle": "@lipcritic",
+        "youtube_channel_id": null,
+        "spotify_monthly_listeners_approx": 74000,
+        "sample_videos": [
+          {
+            "url": "https://www.youtube.com/watch?v=zb36CjFT4Ko",
+            "title": "Lip Critic (Official Video)",
+            "views": 91248
+          }
+        ]
+      },
+      "overlapping_seed_sources": [
+        "nyc_babys_all_right",
+        "nyc_union_pool",
+        "ev_dice_nyc",
+        "other_brooklynvegan"
+      ],
+      "eval_notes": "Brooklyn Partisan signing; 5.13k YT subs and ~74k Spotify monthly listeners."
+    },
+    {
+      "id": "eval_07_rois",
+      "stage_name": "RÓIS",
+      "bucket": "out_of_map",
+      "label": "Domino Recording Co.",
+      "origin": "Fermanagh / Dublin, Ireland",
+      "genres": ["ancestral-electronic", "folk", "experimental-vocal"],
+      "metrics": {
+        "youtube_subscribers": 2160,
+        "youtube_channel_handle": "@roismusicroismusic",
+        "youtube_channel_id": "UCKsyb7eBPplW1pezGDHKOPA",
+        "spotify_monthly_listeners_approx": 5400,
+        "sample_videos": [
+          {
+            "url": "https://www.youtube.com/watch?v=lxZX7OfvJbc",
+            "title": "RÓIS - PORT NA H-EALA (LIVE FROM A WAKE)",
+            "views": 1628
+          },
+          {
+            "url": "https://www.youtube.com/watch?v=oS6VzBVixwo",
+            "title": "RÓIS X hhH - Did ye ever get The Ride at The Wake House?",
+            "views": 27244
+          }
+        ]
+      },
+      "overlapping_seed_sources": [],
+      "eval_notes": "True cold-discovery stress test: 2.16k YT subs, ~5.4k Spotify monthly listeners, 1.6k views on Domino live video; outside our NYC/US source map."
+    },
+    {
+      "id": "eval_08_the_sophs",
+      "stage_name": "The Sophs",
+      "bucket": "out_of_map",
+      "label": "Rough Trade Records",
+      "origin": "Los Angeles, CA",
+      "genres": ["indie-rock", "emo-folk"],
+      "metrics": {
+        "youtube_subscribers": 1360,
+        "youtube_channel_handle": "@TheSophsLA",
+        "youtube_channel_id": "UCJT0unLn0hlZHnEoTwkkeVg",
+        "spotify_monthly_listeners_approx": null,
+        "spotify_tier_note": "Emerging/unindexed standalone profile under 100k",
+        "sample_videos": [
+          {
+            "url": "https://www.youtube.com/watch?v=eS4Vj_GEuBQ",
+            "title": "The Sophs - SWEAT (Official Video)",
+            "views": 61886
+          },
+          {
+            "url": "https://www.youtube.com/watch?v=sT8w2eWr_Kk",
+            "title": "very cool music recs from ★ the sophs ★ | cool people listen",
+            "views": 225
+          }
+        ]
+      },
+      "overlapping_seed_sources": [],
+      "eval_notes": "LA-based Rough Trade signing with 1.36k YT subs; tests whether Stage 1 can expand beyond NYC venues."
+    },
+    {
+      "id": "eval_09_deux_visages",
+      "stage_name": "Deux Visages",
+      "bucket": "out_of_map",
+      "label": "Pure Noise Records",
+      "origin": "United States",
+      "genres": ["alt-rock", "shoegaze", "indie-rock"],
+      "metrics": {
+        "youtube_subscribers": 3050,
+        "youtube_channel_handle": "@Deux.Visages",
+        "youtube_channel_id": "UCTz1LstugNakZ7YJwu2RXZg",
+        "spotify_monthly_listeners_approx": 89000,
+        "sample_videos": [
+          {
+            "url": "https://www.youtube.com/watch?v=tM7GyDMsGZw",
+            "title": "Deux Visages - Tethered (Official Music Video)",
+            "views": 104274
+          }
+        ]
+      },
+      "overlapping_seed_sources": [],
+      "eval_notes": "Pure Noise signing; 3.05k YT subs and ~89k Spotify monthly listeners; outside seeded indie-soul/NYC channels."
+    },
+    {
+      "id": "eval_10_ami_taf_ra",
+      "stage_name": "Ami Taf Ra",
+      "bucket": "out_of_map",
+      "label": "Brainfeeder",
+      "origin": "Los Angeles, CA (North African / spiritual jazz-soul)",
+      "genres": ["spiritual-jazz", "soul", "gnawa", "vocal"],
+      "metrics": {
+        "youtube_subscribers": null,
+        "youtube_channel_note": "Releases hosted primarily on @BrainfeederRecords (128k label subs) and @KamasiWashington; standalone artist channel is tiny/unindexed",
+        "spotify_monthly_listeners_approx": null,
+        "spotify_tier_note": "Emerging spiritual jazz-soul tier under 100k",
+        "sample_videos": [
+          {
+            "url": "https://www.youtube.com/watch?v=zK3GHrLQLyA",
+            "title": "Ami Taf Ra - 'Speak to Us (Intro)' (Official Audio)",
+            "views": 2425
+          },
+          {
+            "url": "https://www.youtube.com/watch?v=zkj3kBkcA4c",
+            "title": "Ami Taf Ra - 'How I Became a Madman (feat. @KamasiWashington)' (Official Video)",
+            "views": 24963
+          }
+        ]
+      },
+      "overlapping_seed_sources": [],
+      "eval_notes": "Edge case for Stage 2 identity-resolver & footprint-profiler: low-view videos hosted on a label channel rather than an artist-owned channel."
+    }
+  ]
+}

@@ -3,6 +3,9 @@
 *Updated: 2026-11-21*
 
 ## Live Now
+- **Discovery Scout 3-Layer Rubrics, Vertex AI Evaluation & `/evals` Dashboard**:
+  - **Rubric Spec & Canonical Schema (`data/evals/`)**: Defined 3-layer evaluation rubrics in `data/evals/discovery_rubrics.json` (Layer 1 Hard Code Gates, Layer 2 Process & Skill Trajectory covering `simon-db`, `music`, `youtube`, `source-discovery`, and `field-reporting`, Layer 3 Vertex AI Quality & Safety), canonical `eval_runs` Draft 2020-12 schema in `data/evals/eval_run_schema.json`, and runbook in `data/evals/README.md`.
+  - **Runtime & Dashboard (`simon/`, `.github/`, `tests/`)**: Built dual-mode eval runner `simon/vertex_eval.py` (offline baseline + live Vertex AI Gen AI Evaluation Service judge via `vertexai.preview.evaluation`), registered `eval_runs` in `ALLOWED_AGENT_COLLECTIONS` (`simon/db_tools.py`), added `/evals` Discovery Dashboard view and API endpoints (`GET /evals`, `GET /api/evals/rubrics`, `GET/POST /api/eval-runs`, `POST /api/eval-runs/run` in `simon/web.py` and `simon/discovery_ui.py`), GitHub Actions workflow `.github/workflows/eval-discovery-vertex.yml`, and unit tests in `tests/test_vertex_evals.py` (**54/54** passing).
 - **Cloud Run + Firestore Platform Deploy & Control Plane (PR #4 merged at `b2057e8`)**:
   - **Public Staging URL**: `https://simon-staging-139550420825.us-east1.run.app` (no auth required, GCP `gemini4nyc26nyc-2203`, `us-east1`), deployed via `cloudbuild.yaml` (`Dockerfile`, `requirements.txt`) with GitHub Actions CI (`.github/workflows/deploy-platform.yml`).
   - **GCP & Persistence**: Provisioned Firestore Native DB `(default)` (`freeTier: true`), Artifact Registry `simon`, and Secret Manager `GEMINI_API_KEY` bound to the Cloud Run compute SA. Added `FirestoreStore` (`simon/firestore_store.py`), `create_store()` (`simon/store.py`), `data/agent_run_schema.json`, `simon/registry.py`, and `source_registry` + `agent_runs` in `ALLOWED_AGENT_COLLECTIONS` (`simon/db_tools.py`).
