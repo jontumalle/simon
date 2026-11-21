@@ -482,7 +482,7 @@ def list_investigator_dossiers(
     dossiers: List[Dict[str, Any]] = []
     for row in docs:
         doc = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else row
-        if not isinstance(doc, dict):
+        if not isinstance(doc, dict) or bool(doc.get("archived", False)):
             continue
         clean = sanitize_agent_report(doc)
         if lead_id and clean.get("lead_id") != lead_id and clean.get("_doc_id") != lead_id:
@@ -504,7 +504,7 @@ def list_discovery_leads(
     seen_keys = set()
 
     def _add_lead(raw: Dict[str, Any], handoff_meta: Optional[Dict[str, Any]] = None) -> None:
-        if not isinstance(raw, dict):
+        if not isinstance(raw, dict) or bool(raw.get("archived", False)):
             return
         lead_id = str(raw.get("lead_id") or raw.get("_doc_id") or "").strip()
         stage_name = str(raw.get("stage_name") or "").strip()
@@ -523,12 +523,12 @@ def list_discovery_leads(
 
     for row in list_agent_documents(store, "leads", limit=max(limit, 100)):
         doc = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else row
-        if isinstance(doc, dict):
+        if isinstance(doc, dict) and not bool(doc.get("archived", False)):
             _add_lead(doc)
 
     for row in list_agent_documents(store, "discovery_handoffs", limit=50):
         doc = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else row
-        if not isinstance(doc, dict):
+        if not isinstance(doc, dict) or bool(doc.get("archived", False)):
             continue
         meta = {
             "run_id": doc.get("run_id"),
@@ -703,6 +703,7 @@ def dispatch_discovery_batch(
     live: bool = False,
     api_key: Optional[str] = None,
     request_fn: Callable[..., Tuple[int, Dict[str, Any]]] = _http_json,
+    reset_previous: bool = False,
 ) -> Dict[str, Any]:
     """Dispatch N Stage 1 Discovery agents across selected sources and persist batch state."""
     registry = load_source_registry(store)
@@ -710,6 +711,11 @@ def dispatch_discovery_batch(
     selected = [by_id[sid] for sid in source_ids if sid in by_id]
     if not selected:
         raise ValueError("Select at least one valid source from the Source Registry.")
+
+    if reset_previous:
+        from .demo_flow import archive_pipeline_workspace
+
+        archive_pipeline_workspace(store)
 
     clean_brief = (brief or DEFAULT_DISCOVERY_BRIEF).strip()
     n_leads = max(1, min(int(leads_per_agent or 2), 10))
@@ -1059,10 +1065,15 @@ def render_top_nav(active_path: str) -> str:
         [
             _link("/investigate", "4. Investigator Desk"),
             _link("/", "5. Vocal Studio"),
-            _link("/evals", "7. Evals", "evalsNavLink"),
+            _link("/evals", "6. Evals", "evalsNavLink"),
         ]
     )
-    screening_links = _link("/screen", "6. Screening Deck", "screenNavLink")
+    screening_links = "".join(
+        [
+            _link("/screen", "7. Screening Deck", "screenNavLink"),
+            _link("/taste-profile", "8. Taste Profile", "tasteProfileNavLink"),
+        ]
+    )
     studio_tools_links = (
         '<a href="/?tab=pipeline">Pipeline Stepper</a>'
         '<a href="/?tab=lab">Agent Lab</a>'
@@ -1097,6 +1108,7 @@ def render_top_nav(active_path: str) -> str:
             _stage("/?tab=discovery", "Discovery", active_path in ("/discovery", "/field-news", "/reports")),
             _stage("/investigate", "Investigate", active_path == "/investigate"),
             _stage("/screen", "Screening", active_path in ("/screen", "/screening")),
+            _stage("/taste-profile", "Taste Profile", active_path == "/taste-profile"),
             _stage("/?tab=review", "Talent Review", active_path == "/"),
         ]
     )
@@ -1462,12 +1474,18 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
             <input type="checkbox" id="liveToggle" />
             <span>Dispatch Live Managed Agents</span>
           </label>
+          <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.86rem; cursor:pointer;">
+            <input type="checkbox" id="resetPrevToggle" checked />
+            <span>Start fresh (archive old runs)</span>
+          </label>
         </div>
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
           <div id="postDispatchLinks" style="display:none; gap:8px; flex-wrap:wrap; align-items:center;">
+            <a id="nextInvestigateBtn" class="btn primary" href="/investigate?autorun=1">Next: Investigate Discovered Leads →</a>
             <a id="followFieldNewsBtn" class="btn" href="/field-news">Follow in Field News →</a>
             <a id="openReportsBtn" class="btn" href="/reports">Open Scouting Reports →</a>
           </div>
+          <button id="clearOldRunsBtn" class="btn" type="button">↺ Clear Old Runs</button>
           <a class="btn" href="/?tab=discovery">Open in Agency Studio →</a>
           <button id="dispatchBtn" class="btn primary" type="button">Send Discovery Agents</button>
         </div>
@@ -1701,6 +1719,26 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       el('toggleExpandBtn').textContent = isExpanded ? 'Collapse List' : 'Expand Full List';
     }};
 
+    el('clearOldRunsBtn').onclick = async () => {{
+      el('clearOldRunsBtn').disabled = true;
+      showBanner('Archiving previous pipeline runs…', 'info');
+      try {{
+        const res = await fetch('/api/demo/reset', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{}}),
+        }});
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload.error || 'Reset failed');
+        if (el('postDispatchLinks')) el('postDispatchLinks').style.display = 'none';
+        showBanner(`Workspace cleared (${{payload.total_archived || 0}} old pipeline record(s) archived). Ready for a fresh Discovery run.`, 'info');
+      }} catch (err) {{
+        showBanner(err.message, 'err');
+      }} finally {{
+        el('clearOldRunsBtn').disabled = false;
+      }}
+    }};
+
     el('dispatchBtn').onclick = async () => {{
       if (selectedIds.size === 0) {{ showBanner('Select at least one source first.', 'err'); return; }}
       showBanner('Dispatching discovery agents…', 'info');
@@ -1715,11 +1753,12 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
             agent_count: Number(el('agentCountInput').value || 1),
             leads_per_agent: Number(el('leadsPerAgentInput').value || 2),
             live: el('liveToggle').checked,
+            reset_previous: el('resetPrevToggle') ? el('resetPrevToggle').checked : false,
           }}),
         }});
         const payload = await res.json();
         if (!res.ok) throw new Error(payload.error || 'Dispatch failed');
-        showBanner(`Dispatched ${{payload.agent_count}} agent(s) in ${{payload.mode}} mode (${{payload.batch_id}}). Track live progress in Field News.`, 'info');
+        showBanner(`Dispatched ${{payload.agent_count}} agent(s) in ${{payload.mode}} mode (${{payload.batch_id}}). Click "Next: Investigate Discovered Leads →" to continue.`, 'info');
         syncBatchLinks(payload.batch_id);
       }} catch (err) {{
         showBanner(err.message, 'err');
@@ -2136,6 +2175,7 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
           <input id="leadSearchInput" type="text" placeholder="Filter by artist or lead ID…" style="min-width:220px;" />
           <button id="clearFocusBtn" class="btn" type="button" style="display:none;">Show All</button>
           <button id="refreshDeskBtn" class="btn" type="button">Refresh Desk</button>
+          <button id="runInvestigateBtn" class="btn primary" type="button">▶ Run Stage 2 Investigation on Active Leads</button>
         </div>
       </div>
       <div id="leadsGrid" class="worker-grid">
@@ -2158,6 +2198,7 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
         <h2>3. Stored Investigator Dossiers <span id="dossiersCountBadge" class="pill ok">0 dossiers</span></h2>
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
           <span class="pill ok">Objective Facts Only · Unranked</span>
+          <button id="sendToScreenBtn" class="btn primary" type="button">Next: Screen These Dossiers →</button>
           <a class="btn" href="/screen" style="border-color:rgba(192,132,252,0.45); color:var(--purple);">Open Screening Deck →</a>
         </div>
       </div>
@@ -2432,7 +2473,70 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
     }};
     el('refreshDeskBtn').onclick = loadDesk;
 
-    loadDesk();
+    async function runInvestigationNow() {{
+      const btn = el('runInvestigateBtn');
+      const b = el('focusBanner');
+      if (btn) btn.disabled = true;
+      b.textContent = 'Running Stage 2 Scout Investigator across active Discovery leads…';
+      b.className = 'banner info';
+      b.style.display = 'block';
+      try {{
+        const payload = focusLeadId ? {{ lead_id: focusLeadId }} : {{}};
+        const res = await fetch('/api/investigate/run', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify(payload),
+        }});
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Stage 2 investigation failed');
+        await loadDesk();
+        b.textContent = `Compiled ${{data.count || 0}} contract-valid 5-block InvestigatorDossier(s). Click "Next: Screen These Dossiers →" to review in Screening Deck.`;
+        b.className = 'banner info';
+        b.style.display = 'block';
+      }} catch (err) {{
+        b.textContent = err.message;
+        b.className = 'banner err';
+        b.style.display = 'block';
+      }} finally {{
+        if (btn) btn.disabled = false;
+      }}
+    }}
+
+    el('runInvestigateBtn').onclick = runInvestigationNow;
+
+    el('sendToScreenBtn').onclick = async () => {{
+      const btn = el('sendToScreenBtn');
+      const b = el('focusBanner');
+      btn.disabled = true;
+      b.textContent = 'Generating Stage 3 Screening Packets…';
+      b.className = 'banner info';
+      b.style.display = 'block';
+      try {{
+        const res = await fetch('/api/screening/run', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ live: false }}),
+        }});
+        if (!res.ok) {{
+          const data = await res.json().catch(() => ({{}}));
+          throw new Error(data.error || 'Screening batch failed');
+        }}
+        window.location.href = '/screen';
+      }} catch (err) {{
+        b.textContent = err.message;
+        b.className = 'banner err';
+        b.style.display = 'block';
+        btn.disabled = false;
+      }}
+    }};
+
+    loadDesk().then(() => {{
+      if (params.get('autorun') === '1' && allLeads.length > 0) {{
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({{}}, '', cleanUrl);
+        runInvestigationNow();
+      }}
+    }});
   </script>
 </body>
 </html>

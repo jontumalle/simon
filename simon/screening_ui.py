@@ -253,14 +253,14 @@ def render_screening_page() -> str:
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Simon · 6. Stage 3 Screening Deck</title>
+  <title>Simon · 7. Stage 3 Screening Deck</title>
   <style>{_SHARED_CSS}{_SCREENING_EXTRA_CSS}</style>
 </head>
 <body>
   <div class="wrap">
     <header>
       <div class="brand">
-        <h1>Simon <span class="pill purple">6. Screening Deck</span></h1>
+        <h1>Simon <span class="pill purple">7. Screening Deck</span></h1>
         <p>Stage 3 Screening Layer: single-candidate dossier report with <strong>Advocate vs. Skeptic</strong> debate, 5-skill rubric scoreboard, <strong>gemini-4-neon</strong> Judge synthesis, and DSPy human calibration.</p>
       </div>
       {top_nav}
@@ -286,12 +286,16 @@ def render_screening_page() -> str:
           <span id="activeModelBadge" class="pill blue" title="Active compiled gemini-decision-1 judging policy">
             Policy: loading…
           </span>
+          <a href="/taste-profile" class="btn dspy" style="padding:5px 11px; font-size:0.78rem;">View Our Taste Profile →</a>
         </div>
       </div>
 
       <div class="culmination-flow-strip">
         <span><strong>The Culmination Loop:</strong> Stage 2 Dossier → Neon Advocate/Skeptic/Judge → Human Override → DSPy Compile → <strong>Instant Calibrated Taste Engine</strong></span>
-        <span class="pill purple">gemini-decision-1 · 0 output tokens</span>
+        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
+          <span class="pill purple">gemini-decision-1 · 0 output tokens</span>
+          <a href="/taste-profile" style="font-weight:700; color:var(--purple); font-size:0.79rem;">Inspect Criteria &amp; Overrides →</a>
+        </div>
       </div>
 
       <div class="control-row-bottom">

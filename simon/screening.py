@@ -1115,10 +1115,12 @@ def run_screening_for_dossier(
         "artist_snapshot": snapshot,
         "input_skills_used": list(baseline["input_skills_used"]),
         "mode": mode,
+        "archived": False,
         "screened_at": _utc_now_iso(),
     }
 
     clean_packet = _normalize_screening_packet(sanitize_agent_report(packet))
+    clean_packet["archived"] = False
     if store is not None:
         save_agent_document(store, "screening_packets", clean_packet, doc_id=packet_id)
         _publish_screening_agent_report(store, clean_packet)
@@ -1626,7 +1628,7 @@ def list_screening_labels(
     labels: List[Dict[str, Any]] = []
     for row in rows:
         doc = _unwrap_doc(row)
-        if not isinstance(doc, dict):
+        if not isinstance(doc, dict) or bool(doc.get("archived", False)):
             continue
         if lead_id and doc.get("lead_id") != lead_id and doc.get("packet_id") != lead_id:
             continue
@@ -1647,7 +1649,7 @@ def list_screening_deck(
     packets_by_lead: Dict[str, Dict[str, Any]] = {}
     for row in list_agent_documents(store, "screening_packets", limit=100):
         doc = _unwrap_doc(row)
-        if not isinstance(doc, dict) or not doc.get("lead_id"):
+        if not isinstance(doc, dict) or not doc.get("lead_id") or bool(doc.get("archived", False)):
             continue
         clean = _normalize_screening_packet(dict(doc))
         lead_key = str(clean["lead_id"])
@@ -1657,7 +1659,7 @@ def list_screening_deck(
     # Check Stage 2 investigator_dossiers and auto-generate baseline ScreeningPackets for unscreened leads
     for row in list_agent_documents(store, "investigator_dossiers", limit=100):
         dossier = _unwrap_doc(row)
-        if not isinstance(dossier, dict) or not dossier.get("lead_id"):
+        if not isinstance(dossier, dict) or not dossier.get("lead_id") or bool(dossier.get("archived", False)):
             continue
         lead_key = str(dossier["lead_id"])
         if lead_key not in packets_by_lead:
@@ -1757,7 +1759,7 @@ def run_screening_batch(
     dossiers_by_lead: Dict[str, Dict[str, Any]] = {}
     for row in list_agent_documents(store, "investigator_dossiers", limit=100):
         doc = _unwrap_doc(row)
-        if isinstance(doc, dict) and doc.get("lead_id"):
+        if isinstance(doc, dict) and doc.get("lead_id") and not bool(doc.get("archived", False)):
             dossiers_by_lead[str(doc["lead_id"])] = doc
 
     if lead_id:
@@ -1835,7 +1837,7 @@ def run_screening_batch(
     existing_leads = {
         str((_unwrap_doc(r) or {}).get("lead_id"))
         for r in list_agent_documents(store, "screening_packets", limit=100)
-        if (_unwrap_doc(r) or {}).get("lead_id")
+        if (_unwrap_doc(r) or {}).get("lead_id") and not bool((_unwrap_doc(r) or {}).get("archived", False))
     }
     unscreened = [d for lid, d in dossiers_by_lead.items() if lid not in existing_leads]
     targets = unscreened or list(dossiers_by_lead.values()) or build_builtin_demo_dossiers()
@@ -2344,7 +2346,7 @@ def list_taste_scores(
     items: List[Dict[str, Any]] = []
     for row in rows:
         doc = _unwrap_doc(row)
-        if not isinstance(doc, dict) or not doc.get("lead_id"):
+        if not isinstance(doc, dict) or not doc.get("lead_id") or bool(doc.get("archived", False)):
             continue
         if lead_id and doc.get("lead_id") != lead_id and doc.get("taste_score_id") != lead_id:
             continue
@@ -2664,6 +2666,7 @@ def evaluate_with_taste_engine(
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
         },
+        "archived": False,
         "evaluated_at": _utc_now_iso(),
     }
     clean_taste = sanitize_agent_report(taste_doc)
