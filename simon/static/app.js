@@ -363,20 +363,29 @@
       return;
     }
 
+    const dossierIds = state.investigatedLeadIds || new Set();
     list.innerHTML = state.discoveredLeads.slice(0, 16).map((lead, idx) => {
       const seeds = Array.isArray(lead.seed_sources) ? lead.seed_sources : [];
       const firstSeed = seeds[0] || {};
+      const lid = String(lead.lead_id || '').toLowerCase();
+      const hasDossier = lid && dossierIds.has(lid);
       return `
         <div class="lead-row">
           <div class="lead-row-top">
             <div>
               <strong style="font-size:13.5px;">${esc(lead.stage_name || lead.lead_id)}</strong>
               <span class="pill ${lead.attribution_status === 'verified' ? 'ok' : ''}" style="margin-left:6px;">${esc(lead.attribution_status || 'lead')}</span>
+              ${hasDossier ? `<span class="pill ok" style="margin-left:4px;">Dossier Stored</span>` : `<span class="pill accent" style="margin-left:4px;">Auto-Investigating</span>`}
               ${firstSeed.source_channel ? `<span class="pill" style="margin-left:4px;">${esc(formatLabel(firstSeed.source_channel))}</span>` : ''}
             </div>
-            <button type="button" class="btn btn-primary disc-send-pipeline-btn" data-lidx="${idx}" style="padding:5px 10px; font-size:11.5px;">
-              Investigate in Pipeline →
-            </button>
+            <div style="display:flex; gap:6px; align-items:center;">
+              <a class="btn ${hasDossier ? 'btn-primary' : ''}" href="/investigate?lead=${encodeURIComponent(lead.lead_id || '')}&subject=${encodeURIComponent(lead.stage_name || '')}" style="padding:5px 10px; font-size:11.5px;">
+                ${hasDossier ? 'View Dossier →' : 'Investigator Desk →'}
+              </a>
+              <button type="button" class="btn disc-send-pipeline-btn" data-lidx="${idx}" style="padding:5px 10px; font-size:11.5px;">
+                Pipeline
+              </button>
+            </div>
           </div>
           ${lead.context_snippet ? `<div class="muted" style="font-size:12px;">${esc(lead.context_snippet.slice(0, 160))}</div>` : ''}
         </div>`;
@@ -393,10 +402,17 @@
   }
 
   async function refreshDiscoveryData() {
-    const [bRes, lRes] = await Promise.all([
+    const [bRes, lRes, dRes] = await Promise.all([
       fetch('/api/discovery/batches').catch(() => null),
       fetch('/api/leads').catch(() => null),
+      fetch('/api/dossiers').catch(() => null),
     ]);
+    if (dRes && dRes.ok) {
+      const dData = await dRes.json();
+      state.investigatedLeadIds = new Set(
+        (dData.dossiers || []).map((d) => String(d.lead_id || '').toLowerCase()).filter(Boolean)
+      );
+    }
     if (bRes && bRes.ok) {
       const bData = await bRes.json();
       state.discoveryBatches = bData.batches || [];

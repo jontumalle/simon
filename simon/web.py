@@ -35,6 +35,7 @@ from .discovery_ui import (
     archive_agent_reports,
     dispatch_discovery_batch,
     get_agent_report,
+    investigate_pending_leads,
     list_agent_reports,
     list_discovery_batches,
     list_discovery_leads,
@@ -1024,6 +1025,7 @@ def dispatch_http_request(
         leads_per_agent = int(req.get("leads_per_agent") or 2)
         agent_count = int(req.get("agent_count") or len(source_ids))
         live = bool(req.get("live", False))
+        auto_investigate = bool(req.get("auto_investigate", True))
         api_key = str(req.get("api_key") or "").strip() or None
         load_dotenv_if_present()
         try:
@@ -1035,6 +1037,7 @@ def dispatch_http_request(
                 agent_count=agent_count,
                 live=live,
                 api_key=api_key,
+                auto_investigate=auto_investigate,
             )
         except (ValueError, RuntimeError, OSError) as exc:
             return (
@@ -1047,6 +1050,45 @@ def dispatch_http_request(
             http_status,
             "application/json; charset=utf-8",
             json.dumps(batch, ensure_ascii=False).encode("utf-8"),
+        )
+
+    if method == "POST" and parsed.path == "/api/investigate/run":
+        try:
+            req = json.loads((raw_body or b"{}").decode("utf-8"))
+        except ValueError:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "Invalid JSON request body."}).encode("utf-8"),
+            )
+        raw_ids = req.get("lead_ids")
+        lead_ids = [str(x) for x in raw_ids] if isinstance(raw_ids, list) else None
+        live = bool(req.get("live", False))
+        force = bool(req.get("force", False))
+        background = bool(req.get("background", live))
+        api_key = str(req.get("api_key") or "").strip() or None
+        load_dotenv_if_present()
+        if live and not api_key:
+            api_key = os.environ.get("GEMINI_API_KEY") or None
+        try:
+            summary = investigate_pending_leads(
+                store=store,
+                lead_ids=lead_ids,
+                live=live,
+                api_key=api_key,
+                background=background,
+                force=force,
+            )
+        except (ValueError, RuntimeError, OSError) as exc:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": str(exc)}).encode("utf-8"),
+            )
+        return (
+            HTTPStatus.ACCEPTED if summary.get("background") and summary.get("triggered") else HTTPStatus.OK,
+            "application/json; charset=utf-8",
+            json.dumps(summary, ensure_ascii=False).encode("utf-8"),
         )
 
     if method == "POST" and parsed.path == "/api/fleet/run":

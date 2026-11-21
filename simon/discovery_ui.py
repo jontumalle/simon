@@ -7,10 +7,14 @@ and strict `DiscoveryHandoff v1.0.0` contract validation.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
+import re
 import sys
+import threading
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 import uuid
@@ -27,6 +31,14 @@ from .fleet import (
     dispatch_fleet,
     poll_interaction,
     resolve_discovery_agent_id,
+)
+from .investigator import (
+    assemble_dossier,
+    evaluate_dossier_process,
+    run_footprint_profiler,
+    run_identity_resolver,
+    run_signal_forensics,
+    run_track_record_mapper,
 )
 from .store import SimonStore
 
@@ -542,6 +554,435 @@ def list_discovery_leads(
     return leads_out[:limit]
 
 
+def _resolve_stage2_agent_id(package_name: str) -> str:
+    prefix = os.environ.get("SIMON_AGENT_PREFIX", "").strip()
+    return f"{prefix}simon-{package_name}"
+
+
+def _normalize_lead_for_stage2(raw_lead: Dict[str, Any]) -> Dict[str, Any]:
+    """Ensure a lead dict has the minimum DiscoveryLead fields expected by Stage 2."""
+    lead = dict(raw_lead)
+    stage_name = str(lead.get("stage_name") or "").strip()
+    lead_id = str(lead.get("lead_id") or lead.get("_doc_id") or "").strip()
+    if not lead_id:
+        slug = re.sub(r"[^a-z0-9]+", "_", stage_name.lower()).strip("_")
+        lead_id = f"lead_{slug or uuid.uuid4().hex[:8]}"
+    lead["lead_id"] = lead_id
+    lead["stage_name"] = stage_name or lead_id
+    lead.setdefault("attribution_status", "uncertain")
+    lead.setdefault("context_snippet", "Discovered in Stage 1.")
+    seeds = lead.get("seed_sources")
+    if not isinstance(seeds, list) or not seeds:
+        seed_url = str(lead.get("seed_source_url") or "").strip()
+        lead["seed_sources"] = (
+            [
+                {
+                    "url": seed_url,
+                    "source_channel": str(lead.get("source_channel") or "other"),
+                    "seed_query_or_venue_node": "stage_1_discovery",
+                    "discovered_at": _utc_now_iso(),
+                    "notes": lead["context_snippet"],
+                }
+            ]
+            if seed_url
+            else []
+        )
+    return lead
+
+
+def _save_investigator_report(
+    store: SimonStore,
+    lead_id: str,
+    stage_name: str,
+    status: str,
+    headline: str,
+    current_focus: str,
+    steps: List[Dict[str, Any]],
+    batch_id: Optional[str] = None,
+    mode: str = "simulated",
+    output: Optional[Dict[str, Any]] = None,
+    findings: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    now = _utc_now_iso()
+    report_id = f"rep_inv_{lead_id}"
+    report_doc: Dict[str, Any] = {
+        "contract_version": "1.0.0",
+        "report_id": report_id,
+        "batch_id": batch_id or f"inv_{lead_id}",
+        "lead_id": lead_id,
+        "agent_name": f"Stage 2 Investigator · {stage_name}",
+        "stage": "investigator",
+        "mode": mode,
+        "status": status,
+        "headline": headline,
+        "current_focus": current_focus,
+        "steps": steps,
+        "findings": findings or [],
+        "updated_at": now,
+    }
+    if output is not None:
+        report_doc["output"] = sanitize_agent_report(output)
+    if status == "completed":
+        report_doc["completed_at"] = now
+    try:
+        save_agent_document(store, "agent_reports", sanitize_agent_report(report_doc), doc_id=report_id)
+    except ValueError:
+        pass
+    return report_doc
+
+
+def _investigate_single_lead(
+    store: SimonStore,
+    raw_lead: Dict[str, Any],
+    batch_id: Optional[str] = None,
+    live: bool = False,
+    api_key: Optional[str] = None,
+    request_fn: Callable[..., Tuple[int, Dict[str, Any]]] = _http_json,
+) -> Dict[str, Any]:
+    """Run full Stage 2 (Phase 2A -> 2B parallel -> 2C dossier) for one lead and persist results."""
+    lead = _normalize_lead_for_stage2(raw_lead)
+    lead_id = lead["lead_id"]
+    stage_name = lead["stage_name"]
+    mode = "live" if (live and api_key) else "simulated"
+    steps: List[Dict[str, Any]] = []
+
+    try:
+        save_agent_document(store, "leads", sanitize_agent_report(lead), doc_id=lead_id)
+    except ValueError:
+        pass
+
+    _save_investigator_report(
+        store,
+        lead_id=lead_id,
+        stage_name=stage_name,
+        status="in_motion",
+        headline=f"Auto-investigating {stage_name} (Phase 2A Identity → 2B Parallel → 2C Dossier)",
+        current_focus="Phase 2A · Identity Resolver",
+        steps=steps,
+        batch_id=batch_id,
+        mode=mode,
+    )
+
+    try:
+        # Phase 2A: Sequential identity anchor (always compute deterministic baseline; merge live output when enabled)
+        bundle = run_identity_resolver(lead)
+        if live and api_key:
+            try:
+                res_id = dispatch_fleet(
+                    agent_id=_resolve_stage2_agent_id("identity-resolver"),
+                    assignments=[lead],
+                    wait=True,
+                    dry_run=False,
+                    api_key=api_key,
+                    request_fn=request_fn,
+                )
+                w_id = (res_id.get("workers") or res_id.get("results") or [{}])[0]
+                live_id_json = w_id.get("output_json")
+                if isinstance(live_id_json, dict) and isinstance(live_id_json.get("identity_and_contact"), dict):
+                    bundle["identity_and_contact"].update(
+                        {k: v for k, v in live_id_json["identity_and_contact"].items() if v is not None}
+                    )
+            except Exception:  # noqa: BLE001
+                pass
+
+        ic = bundle.get("identity_and_contact") or {}
+        links_count = len([v for v in (ic.get("platform_urls") or {}).values() if v])
+        steps.append(
+            {
+                "step_number": 1,
+                "phase": "looking_at",
+                "title": "Phase 2A · Identity Resolver",
+                "looking_at": f"Resolved canonical identity for {stage_name}",
+                "finding": (
+                    f"City: {ic.get('home_city') or 'unknown'} · "
+                    f"Links: {links_count} · Contact: {ic.get('contact_route_type') or 'none'}"
+                ),
+                "analysis": "Canonical identity bundle anchored for parallel Phase 2B fan-out.",
+            }
+        )
+        _save_investigator_report(
+            store,
+            lead_id=lead_id,
+            stage_name=stage_name,
+            status="in_motion",
+            headline=f"Phase 2B running for {stage_name}: footprint, comment forensics & track record in parallel",
+            current_focus="Phase 2B · Parallel Investigators (3x)",
+            steps=list(steps),
+            batch_id=batch_id,
+            mode=mode,
+        )
+
+        # Phase 2B: 3-way parallel fan-out
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            fut_fp = pool.submit(run_footprint_profiler, bundle)
+            fut_sf = pool.submit(run_signal_forensics, bundle)
+            fut_tr = pool.submit(run_track_record_mapper, bundle)
+            live_futs = {}
+            if live and api_key:
+                for pkg in ("footprint-profiler", "signal-forensics", "track-record-mapper"):
+                    live_futs[pkg] = pool.submit(
+                        dispatch_fleet,
+                        agent_id=_resolve_stage2_agent_id(pkg),
+                        assignments=[bundle],
+                        wait=True,
+                        dry_run=False,
+                        api_key=api_key,
+                        request_fn=request_fn,
+                    )
+            fp = fut_fp.result()
+            sf = fut_sf.result()
+            tr = fut_tr.result()
+            for pkg, fut in live_futs.items():
+                try:
+                    lres = fut.result()
+                    lw = (lres.get("workers") or lres.get("results") or [{}])[0]
+                    ljson = lw.get("output_json")
+                    if isinstance(ljson, dict):
+                        if pkg == "footprint-profiler" and isinstance(ljson.get("public_footprint"), dict):
+                            fp["public_footprint"].update(
+                                {k: v for k, v in ljson["public_footprint"].items() if v is not None}
+                            )
+                        elif pkg == "signal-forensics" and isinstance(ljson.get("comment_forensics"), dict):
+                            sf["comment_forensics"].update(
+                                {k: v for k, v in ljson["comment_forensics"].items() if v is not None}
+                            )
+                        elif pkg == "track-record-mapper" and isinstance(ljson.get("live_history_and_credits"), dict):
+                            tr["live_history_and_credits"].update(
+                                {k: v for k, v in ljson["live_history_and_credits"].items() if v is not None}
+                            )
+                except Exception:  # noqa: BLE001
+                    pass
+
+        fp_regime = (fp.get("public_footprint") or {}).get("footprint_regime") or "unknown"
+        cf_sample = (sf.get("comment_forensics") or {}).get("sample_size") or 0
+        shows_count = len((tr.get("live_history_and_credits") or {}).get("show_history") or [])
+        steps.append(
+            {
+                "step_number": 2,
+                "phase": "finding",
+                "title": "Phase 2B · Parallel Investigators (3x)",
+                "looking_at": "Ran footprint-profiler, signal-forensics, and track-record-mapper concurrently",
+                "finding": f"Regime: {fp_regime} · Comments sampled: {cf_sample} · Shows found: {shows_count}",
+                "analysis": "Zero ranking or scoring applied; all missing fields recorded honestly.",
+            }
+        )
+
+        # Phase 2C: Deterministic dossier join + process evals
+        dossier = assemble_dossier(bundle, fp, sf, tr)
+        proc_eval = evaluate_dossier_process(dossier)
+        dossier_doc = sanitize_agent_report(dict(dossier))
+        dossier_doc.setdefault("stage_name", stage_name)
+        dossier_doc["investigated_at"] = _utc_now_iso()
+        dossier_doc["process_eval"] = proc_eval
+        save_agent_document(store, "investigator_dossiers", dossier_doc, doc_id=lead_id)
+
+        steps.append(
+            {
+                "step_number": 3,
+                "phase": "analysis",
+                "title": "Phase 2C · Dossier Assembled & Stored",
+                "looking_at": f"Saved objective Artist Dossier for {stage_name}",
+                "finding": (
+                    f"Process eval: {'PASS' if proc_eval['passed'] else 'CHECK'} "
+                    f"({proc_eval.get('checks_run', 7)} rules) · Missing fields: {len(dossier.get('missing_fields') or [])}"
+                ),
+                "analysis": "Ready for Stage 3 Screening Deck.",
+            }
+        )
+        _save_investigator_report(
+            store,
+            lead_id=lead_id,
+            stage_name=stage_name,
+            status="completed",
+            headline=f"Dossier complete for {stage_name} ({fp_regime}, {cf_sample} comments, {shows_count} shows).",
+            current_focus="Completed · Stored in investigator_dossiers",
+            steps=steps,
+            batch_id=batch_id,
+            mode=mode,
+            output=dossier_doc,
+            findings=[
+                {
+                    "lead_id": lead_id,
+                    "title": stage_name,
+                    "summary": f"Regime: {fp_regime} · {cf_sample} comments · {shows_count} shows",
+                    "status": "completed",
+                }
+            ],
+        )
+        return {
+            "lead_id": lead_id,
+            "stage_name": stage_name,
+            "status": "completed",
+            "dossier_saved": True,
+            "process_eval_passed": bool(proc_eval.get("passed")),
+        }
+    except Exception as exc:  # noqa: BLE001
+        _save_investigator_report(
+            store,
+            lead_id=lead_id,
+            stage_name=stage_name,
+            status="failed",
+            headline=f"Stage 2 investigation failed for {stage_name}: {exc}",
+            current_focus="Error",
+            steps=steps,
+            batch_id=batch_id,
+            mode=mode,
+        )
+        return {
+            "lead_id": lead_id,
+            "stage_name": stage_name,
+            "status": "failed",
+            "dossier_saved": False,
+            "error": str(exc),
+        }
+
+
+def auto_investigate_leads(
+    store: SimonStore,
+    leads: List[Dict[str, Any]],
+    batch_id: Optional[str] = None,
+    live: bool = False,
+    api_key: Optional[str] = None,
+    request_fn: Callable[..., Tuple[int, Dict[str, Any]]] = _http_json,
+    background: bool = False,
+    force: bool = False,
+) -> Dict[str, Any]:
+    """Automatically run Stage 2 Investigation for any leads that lack a stored dossier."""
+    existing_dossiers = set()
+    for row in list_agent_documents(store, "investigator_dossiers", limit=300):
+        doc = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else row
+        if isinstance(doc, dict):
+            lid = str(doc.get("lead_id") or doc.get("_doc_id") or "").strip().lower()
+            if lid:
+                existing_dossiers.add(lid)
+
+    in_motion_leads = set()
+    for rep in list_agent_reports(store, stage="investigator", limit=200):
+        if str(rep.get("status") or "") in ("in_motion", "starting"):
+            lid = str(rep.get("lead_id") or "").strip().lower()
+            if lid:
+                in_motion_leads.add(lid)
+
+    pending: List[Dict[str, Any]] = []
+    seen_pending = set()
+    skipped = 0
+    for raw in leads or []:
+        if not isinstance(raw, dict):
+            continue
+        norm = _normalize_lead_for_stage2(raw)
+        key = norm["lead_id"].lower()
+        if key in seen_pending:
+            continue
+        if not force and (key in existing_dossiers or key in in_motion_leads):
+            skipped += 1
+            continue
+        seen_pending.add(key)
+        pending.append(norm)
+
+    mode = "live" if (live and api_key) else "simulated"
+    if not pending:
+        return {
+            "triggered": 0,
+            "skipped": skipped,
+            "mode": mode,
+            "background": background,
+            "lead_ids": [],
+            "results": [],
+        }
+
+    if background:
+        for lead in pending:
+            _save_investigator_report(
+                store,
+                lead_id=lead["lead_id"],
+                stage_name=lead["stage_name"],
+                status="in_motion",
+                headline=f"Queued auto-investigation for {lead['stage_name']}…",
+                current_focus="Starting Phase 2A · Identity Resolver",
+                steps=[],
+                batch_id=batch_id,
+                mode=mode,
+            )
+
+        def _bg_runner() -> None:
+            with ThreadPoolExecutor(max_workers=min(3, len(pending))) as pool:
+                list(
+                    pool.map(
+                        lambda ld: _investigate_single_lead(
+                            store,
+                            ld,
+                            batch_id=batch_id,
+                            live=live,
+                            api_key=api_key,
+                            request_fn=request_fn,
+                        ),
+                        pending,
+                    )
+                )
+
+        t = threading.Thread(target=_bg_runner, name=f"simon-auto-inv-{batch_id or 'desk'}", daemon=True)
+        t.start()
+        return {
+            "triggered": len(pending),
+            "skipped": skipped,
+            "mode": mode,
+            "background": True,
+            "lead_ids": [l["lead_id"] for l in pending],
+            "results": [],
+        }
+
+    with ThreadPoolExecutor(max_workers=min(4, len(pending))) as pool:
+        results = list(
+            pool.map(
+                lambda ld: _investigate_single_lead(
+                    store,
+                    ld,
+                    batch_id=batch_id,
+                    live=live,
+                    api_key=api_key,
+                    request_fn=request_fn,
+                ),
+                pending,
+            )
+        )
+    return {
+        "triggered": len(pending),
+        "skipped": skipped,
+        "mode": mode,
+        "background": False,
+        "lead_ids": [l["lead_id"] for l in pending],
+        "results": results,
+    }
+
+
+def investigate_pending_leads(
+    store: SimonStore,
+    lead_ids: Optional[List[str]] = None,
+    live: bool = False,
+    api_key: Optional[str] = None,
+    request_fn: Callable[..., Tuple[int, Dict[str, Any]]] = _http_json,
+    background: bool = False,
+    force: bool = False,
+) -> Dict[str, Any]:
+    """Find all stored Stage 1 leads (or a subset by lead_ids) and auto-investigate pending ones."""
+    all_leads = list_discovery_leads(store, limit=200)
+    if lead_ids:
+        wanted = {str(x).strip().lower() for x in lead_ids if str(x).strip()}
+        target_leads = [l for l in all_leads if str(l.get("lead_id") or "").strip().lower() in wanted]
+    else:
+        target_leads = all_leads
+    return auto_investigate_leads(
+        store,
+        target_leads,
+        batch_id=f"auto_inv_{uuid.uuid4().hex[:8]}",
+        live=live,
+        api_key=api_key,
+        request_fn=request_fn,
+        background=background,
+        force=force,
+    )
+
+
 def _validate_handoff_payload(output_json: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if not isinstance(output_json, dict):
         return {"valid": False, "errors": ["No JSON DiscoveryHandoff payload returned yet."], "lead_count": 0}
@@ -703,6 +1144,7 @@ def dispatch_discovery_batch(
     live: bool = False,
     api_key: Optional[str] = None,
     request_fn: Callable[..., Tuple[int, Dict[str, Any]]] = _http_json,
+    auto_investigate: bool = True,
 ) -> Dict[str, Any]:
     """Dispatch N Stage 1 Discovery agents across selected sources and persist batch state."""
     registry = load_source_registry(store)
@@ -721,8 +1163,10 @@ def dispatch_discovery_batch(
     created_at = _utc_now_iso()
 
     workers: List[Dict[str, Any]] = []
+    auto_inv_summary: Optional[Dict[str, Any]] = None
 
     if not live:
+        discovered_leads: List[Dict[str, Any]] = []
         for idx, assigned in enumerate(partitions):
             worker = _build_simulated_worker(idx, batch_id, clean_brief, n_leads, assigned)
             worker["report_id"] = f"rep_{batch_id}_w{idx + 1}"
@@ -732,7 +1176,18 @@ def dispatch_discovery_batch(
                     save_agent_document(store, "discovery_handoffs", worker["output_json"])
                 except ValueError:
                     pass
+                for ld in worker["output_json"].get("leads") or []:
+                    if isinstance(ld, dict):
+                        discovered_leads.append(ld)
             _sync_worker_agent_report(store, batch_id, clean_brief, worker, mode="simulated")
+        if auto_investigate and discovered_leads:
+            auto_inv_summary = auto_investigate_leads(
+                store,
+                discovered_leads,
+                batch_id=batch_id,
+                live=False,
+                background=False,
+            )
         mode = "simulated"
     else:
         assignments = [
@@ -821,6 +1276,8 @@ def dispatch_discovery_batch(
         "leads_per_agent": n_leads,
         "agent_count": n_agents,
         "selected_source_ids": [s["source_id"] for s in selected],
+        "auto_investigate": bool(auto_investigate),
+        "auto_investigation": auto_inv_summary,
         "created_at": created_at,
         "updated_at": created_at,
         "workers": workers,
@@ -916,6 +1373,19 @@ def _poll_batch_once(
                     save_agent_document(store, "discovery_handoffs", worker["output_json"])
                 except ValueError:
                     pass
+                worker_leads = [
+                    ld for ld in (worker["output_json"].get("leads") or []) if isinstance(ld, dict)
+                ]
+                if batch.get("auto_investigate", True) and worker_leads:
+                    worker["auto_investigation"] = auto_investigate_leads(
+                        store,
+                        worker_leads,
+                        batch_id=batch_id,
+                        live=True,
+                        api_key=api_key,
+                        request_fn=request_fn,
+                        background=(request_fn is _http_json),
+                    )
 
         _sync_worker_agent_report(
             store,
@@ -2128,12 +2598,14 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
     </header>
 
     <div id="focusBanner" class="banner"></div>
+    <div id="autoInvBanner" class="banner"></div>
 
     <section class="card">
       <div class="section-head">
-        <h2>1. Verified Leads Ready for Stage 2 Investigation <span id="leadsCountBadge" class="pill blue">0 leads</span></h2>
+        <h2>1. Verified Leads &amp; Auto-Investigation Queue <span id="leadsCountBadge" class="pill blue">0 leads</span></h2>
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
           <input id="leadSearchInput" type="text" placeholder="Filter by artist or lead ID…" style="min-width:220px;" />
+          <button id="investigatePendingBtn" class="btn primary" type="button">Investigate Pending</button>
           <button id="clearFocusBtn" class="btn" type="button" style="display:none;">Show All</button>
           <button id="refreshDeskBtn" class="btn" type="button">Refresh Desk</button>
         </div>
@@ -2175,6 +2647,10 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
     let focusSubject = params.get('subject') || '';
     let allLeads = [];
     let allDossiers = [];
+    let allInvReports = [];
+    let hasLiveApiKey = false;
+    let autoTriggeredLeadIds = new Set();
+    let deskPollTimer = null;
 
     function statusPill(status) {{
       if (status === 'completed' || status === 'verified') return '<span class="pill ok">' + esc(status) + '</span>';
@@ -2220,6 +2696,11 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
     function renderLeads() {{
       const dossierLeadIds = new Set(allDossiers.map((d) => String(d.lead_id || '').toLowerCase()));
       const dossierNames = new Set(allDossiers.map((d) => String((d.identity_and_contact && d.identity_and_contact.stage_name) || d.stage_name || '').toLowerCase()));
+      const inMotionIds = new Set(
+        allInvReports
+          .filter((r) => ['in_motion', 'starting'].includes(String(r.status || '')))
+          .map((r) => String(r.lead_id || '').toLowerCase())
+      );
       const visible = allLeads.filter((l) => matchesFocus(l.stage_name, l.lead_id));
       el('leadsCountBadge').textContent = `${{visible.length}} lead(s)`;
       if (!visible.length) {{
@@ -2227,8 +2708,15 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
         return;
       }}
       el('leadsGrid').innerHTML = visible.map((l) => {{
-        const hasDossier = dossierLeadIds.has(String(l.lead_id || '').toLowerCase())
+        const lidKey = String(l.lead_id || '').toLowerCase();
+        const hasDossier = dossierLeadIds.has(lidKey)
           || dossierNames.has(String(l.stage_name || '').toLowerCase());
+        const isRunning = !hasDossier && inMotionIds.has(lidKey);
+        const stageBadge = hasDossier
+          ? '<span class="pill ok">Dossier Stored</span>'
+          : isRunning
+            ? '<span class="pill amber">Investigating…</span>'
+            : '<span class="pill blue">Auto-Queued</span>';
         const seeds = l.seed_sources || [];
         return `
           <div class="worker-card">
@@ -2236,7 +2724,7 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
               <strong>${{esc(l.stage_name || l.lead_id)}}</strong>
               <div style="display:flex; gap:6px; flex-wrap:wrap;">
                 ${{statusPill(l.attribution_status || 'uncertain')}}
-                ${{hasDossier ? '<span class="pill ok">Dossier Stored</span>' : '<span class="pill blue">Ready for Stage 2</span>'}}
+                ${{stageBadge}}
               </div>
             </div>
             <div class="mono">lead_id: ${{esc(l.lead_id || '—')}}</div>
@@ -2246,7 +2734,7 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
             </div>
             <div style="margin-top:auto; padding-top:6px; display:flex; justify-content:space-between; align-items:center; gap:6px; flex-wrap:wrap;">
               <button class="btn" type="button" data-focus-lead="${{esc(l.lead_id || '')}}" data-focus-name="${{esc(l.stage_name || '')}}" style="font-size:0.78rem; padding:5px 10px;">Focus Lead &amp; Dossier</button>
-              <a class="btn" href="/?tab=pipeline&amp;phase=2a_identity&amp;subject=${{encodeURIComponent(l.stage_name || '')}}${{l.lead_id ? '&amp;lead=' + encodeURIComponent(l.lead_id) : ''}}" style="font-size:0.78rem; padding:5px 10px;">Send to Studio Pipeline →</a>
+              <a class="btn" href="/?tab=pipeline&amp;phase=2a_identity&amp;subject=${{encodeURIComponent(l.stage_name || '')}}${{l.lead_id ? '&amp;lead=' + encodeURIComponent(l.lead_id) : ''}}" style="font-size:0.78rem; padding:5px 10px;">Inspect in Pipeline →</a>
               <a href="/reports" style="font-size:0.8rem;">View Discovery Report →</a>
             </div>
           </div>`;
@@ -2398,12 +2886,60 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
       }});
     }}
 
-    async function loadDesk() {{
-      const [leadsRes, newsRes, dossiersRes] = await Promise.all([
+    function setAutoInvBanner(msg, kind = 'info') {{
+      const b = el('autoInvBanner');
+      if (!msg) {{
+        b.style.display = 'none';
+        b.textContent = '';
+        return;
+      }}
+      b.textContent = msg;
+      b.className = 'banner ' + kind;
+      b.style.display = 'block';
+    }}
+
+    async function triggerPendingInvestigations(pendingIds, manual = false) {{
+      if (!pendingIds.length) {{
+        if (manual) setAutoInvBanner('All discovered leads already have Stage 2 dossiers.', 'info');
+        return;
+      }}
+      pendingIds.forEach((id) => autoTriggeredLeadIds.add(id.toLowerCase()));
+      setAutoInvBanner(`Auto-investigating ${{pendingIds.length}} pending lead(s) through Stage 2 (Identity → Footprint / Forensics / Track Record → Dossier)…`, 'info');
+      try {{
+        const res = await fetch('/api/investigate/run', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{
+            lead_ids: pendingIds,
+            live: hasLiveApiKey,
+            background: hasLiveApiKey,
+          }}),
+        }});
+        if (res.ok) {{
+          const data = await res.json();
+          if (data.background && data.triggered > 0) {{
+            setAutoInvBanner(`Stage 2 investigation running in background for ${{data.triggered}} lead(s). Updating live…`, 'info');
+          }} else if (data.triggered > 0) {{
+            setAutoInvBanner(`Auto-investigated ${{data.triggered}} lead(s) and stored dossiers.`, 'info');
+          }}
+          await loadDesk(false);
+        }}
+      }} catch (err) {{
+        setAutoInvBanner('Error starting automatic investigation: ' + err.message, 'err');
+      }}
+    }}
+
+    async function loadDesk(allowAutoTrigger = true) {{
+      const [statusRes, leadsRes, newsRes, dossiersRes] = await Promise.all([
+        fetch('/api/status').catch(() => null),
         fetch('/api/leads'),
         fetch('/api/field-news?stage=investigator'),
         fetch('/api/dossiers'),
       ]);
+      if (statusRes && statusRes.ok) {{
+        const st = await statusRes.json();
+        hasLiveApiKey = Boolean(st.has_api_key);
+      }}
       if (leadsRes.ok) {{
         const data = await leadsRes.json();
         allLeads = data.leads || [];
@@ -2414,14 +2950,58 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
       }}
       if (newsRes.ok) {{
         const data = await newsRes.json();
-        renderInvestigatorFieldNews(data.reports || []);
+        allInvReports = data.reports || [];
+        renderInvestigatorFieldNews(allInvReports);
       }}
       updateFocusBanner();
       renderLeads();
       renderDossiers();
+
+      const dossierLeadIds = new Set(allDossiers.map((d) => String(d.lead_id || '').toLowerCase()));
+      const dossierNames = new Set(allDossiers.map((d) => String((d.identity_and_contact && d.identity_and_contact.stage_name) || d.stage_name || '').toLowerCase()));
+      const inMotionIds = new Set(
+        allInvReports
+          .filter((r) => ['in_motion', 'starting'].includes(String(r.status || '')))
+          .map((r) => String(r.lead_id || '').toLowerCase())
+      );
+
+      if (allowAutoTrigger) {{
+        const pendingIds = allLeads
+          .filter((l) => {{
+            const lid = String(l.lead_id || '').trim();
+            if (!lid) return false;
+            const key = lid.toLowerCase();
+            if (dossierLeadIds.has(key) || dossierNames.has(String(l.stage_name || '').toLowerCase())) return false;
+            if (inMotionIds.has(key) || autoTriggeredLeadIds.has(key)) return false;
+            return true;
+          }})
+          .map((l) => String(l.lead_id));
+        if (pendingIds.length) {{
+          await triggerPendingInvestigations(pendingIds, false);
+          return;
+        }}
+      }}
+
+      if (inMotionIds.size > 0) {{
+        setAutoInvBanner(`Stage 2 investigating ${{inMotionIds.size}} lead(s) in real time…`, 'info');
+        if (!deskPollTimer) {{
+          deskPollTimer = setInterval(() => loadDesk(false), 3500);
+        }}
+      }} else if (deskPollTimer) {{
+        clearInterval(deskPollTimer);
+        deskPollTimer = null;
+        setAutoInvBanner('', 'info');
+      }}
     }}
 
     el('leadSearchInput').oninput = () => {{ renderLeads(); renderDossiers(); }};
+    el('investigatePendingBtn').onclick = () => {{
+      const dossierLeadIds = new Set(allDossiers.map((d) => String(d.lead_id || '').toLowerCase()));
+      const pendingIds = allLeads
+        .filter((l) => l.lead_id && !dossierLeadIds.has(String(l.lead_id).toLowerCase()))
+        .map((l) => String(l.lead_id));
+      triggerPendingInvestigations(pendingIds, true);
+    }};
     el('clearFocusBtn').onclick = () => {{
       focusLeadId = '';
       focusSubject = '';
@@ -2430,9 +3010,9 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
       renderLeads();
       renderDossiers();
     }};
-    el('refreshDeskBtn').onclick = loadDesk;
+    el('refreshDeskBtn').onclick = () => loadDesk(true);
 
-    loadDesk();
+    loadDesk(true);
   </script>
 </body>
 </html>

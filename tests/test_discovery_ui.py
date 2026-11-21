@@ -191,12 +191,21 @@ class TestDiscoveryUIAndTraces(unittest.TestCase):
 
         # Verify human-first Field News & Scouting Reports API stored output without telemetry
         code_fn, _, body_fn = dispatch_http_request(
-            store, "GET", f"/api/field-news?batch_id={batch['batch_id']}"
+            store, "GET", f"/api/field-news?batch_id={batch['batch_id']}&stage=discovery"
         )
         self.assertEqual(code_fn, 200)
         fn_payload = json.loads(body_fn)
         self.assertEqual(fn_payload["count"], 1)
         rep = fn_payload["reports"][0]
+
+        # And verify Stage 2 auto-investigation ran automatically for Clara Reyes
+        code_inv, _, body_inv = dispatch_http_request(
+            store, "GET", f"/api/field-news?batch_id={batch['batch_id']}&stage=investigator"
+        )
+        self.assertEqual(code_inv, 200)
+        inv_payload = json.loads(body_inv)
+        self.assertEqual(inv_payload["count"], 1)
+        self.assertEqual(inv_payload["reports"][0]["status"], "completed")
         self.assertEqual(rep["status"], "completed")
         self.assertNotIn("interaction_id", rep)
         self.assertNotIn("environment_id", rep)
@@ -578,6 +587,77 @@ class TestDiscoveryUIAndTraces(unittest.TestCase):
         self.assertIn("genres", reg)
         self.assertIn("soul", reg["genres"])
         self.assertIn("indie", reg["genres"])
+
+    def test_auto_investigation_runs_after_discovery_and_via_api(self) -> None:
+        store = self.store
+        # 1. Simulated discovery dispatch automatically investigates all discovered leads
+        req_body = json.dumps(
+            {
+                "source_ids": ["yt_sofar_sounds", "nyc_babys_all_right"],
+                "brief": "Find NYC emerging solo vocalists",
+                "agent_count": 2,
+                "leads_per_agent": 2,
+                "live": False,
+            }
+        ).encode("utf-8")
+        code, _, body = dispatch_http_request(store, "POST", "/api/discovery/dispatch", req_body)
+        self.assertEqual(code, 200)
+        batch = json.loads(body)
+        auto_inv = batch.get("auto_investigation") or {}
+        self.assertGreaterEqual(auto_inv.get("triggered", 0), 4)
+
+        # Dossiers and investigator field news are created automatically without manual handoff
+        code_dos, _, body_dos = dispatch_http_request(store, "GET", "/api/dossiers")
+        self.assertEqual(code_dos, 200)
+        dossiers = json.loads(body_dos)["dossiers"]
+        self.assertGreaterEqual(len(dossiers), 4)
+
+        code_news, _, body_news = dispatch_http_request(store, "GET", "/api/field-news?stage=investigator")
+        self.assertEqual(code_news, 200)
+        inv_reports = json.loads(body_news)["reports"]
+        self.assertGreaterEqual(len(inv_reports), 4)
+        self.assertTrue(all(r.get("status") == "completed" for r in inv_reports))
+
+        # 2. Idempotency: POST /api/investigate/run skips already-investigated leads
+        code_noop, _, body_noop = dispatch_http_request(
+            store, "POST", "/api/investigate/run", json.dumps({"live": False}).encode("utf-8")
+        )
+        self.assertEqual(code_noop, 200)
+        noop = json.loads(body_noop)
+        self.assertEqual(noop["triggered"], 0)
+        self.assertGreaterEqual(noop["skipped"], 4)
+
+        # 3. Adding a new pending lead and calling POST /api/investigate/run investigates only the new lead
+        save_agent_document(
+            store,
+            "leads",
+            {
+                "lead_id": "lead_pending_auto_99",
+                "stage_name": "Nora Vale",
+                "attribution_status": "verified",
+                "context_snippet": "Acoustic room set in Brooklyn.",
+                "seed_sources": [
+                    {
+                        "url": "https://www.youtube.com/watch?v=3-K26i1go0s",
+                        "source_channel": "youtube_live_session",
+                    }
+                ],
+            },
+            doc_id="lead_pending_auto_99",
+        )
+        code_run, _, body_run = dispatch_http_request(
+            store, "POST", "/api/investigate/run", json.dumps({"live": False}).encode("utf-8")
+        )
+        self.assertEqual(code_run, 200)
+        ran = json.loads(body_run)
+        self.assertEqual(ran["triggered"], 1)
+        self.assertEqual(ran["lead_ids"], ["lead_pending_auto_99"])
+
+        # 4. /investigate HTML includes automatic pending-lead trigger
+        code_html, _, html = dispatch_http_request(store, "GET", "/investigate")
+        self.assertEqual(code_html, 200)
+        self.assertIn(b"/api/investigate/run", html)
+        self.assertIn(b"triggerPendingInvestigations", html)
 
 
 if __name__ == "__main__":

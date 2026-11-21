@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import threading
 from typing import Any, Dict, List, Optional
 
 from .models import ScoutRun
@@ -104,6 +105,7 @@ class SimonStore:
     def __init__(self, db_path: Optional[Path | str] = None):
         self.db_path = str(db_path) if db_path is not None else str(DEFAULT_DB_PATH)
         self._memory_conn: Optional[sqlite3.Connection] = None
+        self._lock = threading.RLock()
         if self.db_path != ":memory:":
             Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self._init_schema()
@@ -295,49 +297,52 @@ class SimonStore:
         payload.setdefault("doc_id", doc_id)
         updated_at = datetime.now(timezone.utc).isoformat()
         payload["updated_at"] = updated_at
-        conn = self._connect()
-        try:
-            with conn:
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO documents (collection, doc_id, updated_at, payload_json)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (collection, doc_id, updated_at, json.dumps(payload, ensure_ascii=False)),
-                )
-        finally:
-            if self.db_path != ":memory:":
-                conn.close()
+        with self._lock:
+            conn = self._connect()
+            try:
+                with conn:
+                    conn.execute(
+                        """
+                        INSERT OR REPLACE INTO documents (collection, doc_id, updated_at, payload_json)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (collection, doc_id, updated_at, json.dumps(payload, ensure_ascii=False)),
+                    )
+            finally:
+                if self.db_path != ":memory:":
+                    conn.close()
         return payload
 
     def get_document(self, collection: str, doc_id: str) -> Optional[Dict[str, Any]]:
-        conn = self._connect()
-        try:
-            row = conn.execute(
-                "SELECT payload_json FROM documents WHERE collection = ? AND doc_id = ?",
-                (collection, doc_id),
-            ).fetchone()
-            return json.loads(row["payload_json"]) if row else None
-        finally:
-            if self.db_path != ":memory:":
-                conn.close()
+        with self._lock:
+            conn = self._connect()
+            try:
+                row = conn.execute(
+                    "SELECT payload_json FROM documents WHERE collection = ? AND doc_id = ?",
+                    (collection, doc_id),
+                ).fetchone()
+                return json.loads(row["payload_json"]) if row else None
+            finally:
+                if self.db_path != ":memory:":
+                    conn.close()
 
     def list_documents(self, collection: str, limit: int = 20) -> List[Dict[str, Any]]:
-        conn = self._connect()
-        try:
-            rows = conn.execute(
-                """
-                SELECT payload_json FROM documents
-                WHERE collection = ?
-                ORDER BY updated_at DESC
-                LIMIT ?
-                """,
-                (collection, limit),
-            ).fetchall()
-            return [json.loads(row["payload_json"]) for row in rows]
-        finally:
-            if self.db_path != ":memory:":
-                conn.close()
+        with self._lock:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT payload_json FROM documents
+                    WHERE collection = ?
+                    ORDER BY updated_at DESC
+                    LIMIT ?
+                    """,
+                    (collection, limit),
+                ).fetchall()
+                return [json.loads(row["payload_json"]) for row in rows]
+            finally:
+                if self.db_path != ":memory:":
+                    conn.close()
 
 
 def create_store(
