@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 from simon.db_tools import validate_collection_payload, verify_agent_db_auth
-from simon.deploy import compile_agent_package, list_agent_packages
+from simon.deploy import compile_agent_package, list_agent_packages, sync_env_credential
 from simon.store import SimonStore
 from simon.web import dispatch_http_request
 
@@ -139,6 +139,31 @@ class TestSharedAgentDBTools(unittest.TestCase):
             targets = {s["target"] for s in compiled["payload"]["base_environment"]["sources"]}
             self.assertIn(".agents/skills/simon-db/SKILL.md", targets)
             self.assertIn(".agents/skills/simon-db/scripts/simon_db.py", targets)
+
+    def test_sync_env_credential_recreates_existing(self) -> None:
+        calls = []
+
+        def fake_req(method, url, api_key, body=None, timeout=60):
+            calls.append((method, url, body))
+            if method == "GET":
+                return 200, {"id": "simon-db-token"}
+            if method == "DELETE":
+                return 204, {}
+            if method == "POST":
+                return 201, {"id": body["id"]}
+            raise AssertionError(method)
+
+        res = sync_env_credential(
+            credential_id="simon-db-token",
+            value="secret-val",
+            trusted_domains=["simon-staging-139550420825.us-east1.run.app"],
+            api_key="test-key",
+            request_fn=fake_req,
+        )
+        self.assertEqual(res["action"], "recreated")
+        self.assertEqual([c[0] for c in calls], ["GET", "DELETE", "POST"])
+        self.assertEqual(calls[2][2]["type"], "environment_variable")
+        self.assertEqual(calls[2][2]["injection_location"], "header")
 
 
 if __name__ == "__main__":

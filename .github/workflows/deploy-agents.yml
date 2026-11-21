@@ -53,6 +53,7 @@ jobs:
       - name: Compile and deploy Managed Agents
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SIMON_AGENT_DB_TOKEN: ${{ secrets.SIMON_AGENT_DB_TOKEN }}
           SIMON_AGENT_MODEL_OVERRIDE: ${{ vars.SIMON_AGENT_MODEL_OVERRIDE }}
         run: |
           set -euo pipefail
@@ -79,6 +80,19 @@ jobs:
             echo "Running offline --dry-run validation (prefix=$PREFIX)..."
             ARGS+=(--dry-run --out-dir build/agents)
           else
+            if [ -n "${SIMON_AGENT_DB_TOKEN:-}" ]; then
+              echo "Syncing simon-db-token credential on /v1beta/credentials..."
+              python3 -c '
+import os, json
+from simon.deploy import sync_env_credential
+res = sync_env_credential(
+    credential_id="simon-db-token",
+    value=os.environ["SIMON_AGENT_DB_TOKEN"],
+    trusted_domains=["simon-staging-139550420825.us-east1.run.app"],
+)
+print(json.dumps(res))
+'
+            fi
             echo "Deploying Managed Agents live to /v1beta/agents (prefix=$PREFIX)..."
           fi
 
