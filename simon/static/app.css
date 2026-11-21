@@ -321,27 +321,30 @@ button, input, select, textarea { font-family: inherit; color: inherit; }
 .muted { color: var(--muted); }
 .mono { font-family: var(--mono); }
 
-/* Platform two-section navigation integration */
-.platform-nav-bar {
-  max-width: 1320px;
-  margin: 8px auto 0;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
+/* Quiet More popover for secondary workspace links & tools */
+.more-menu { position: relative; }
+.more-menu summary { list-style: none; }
+.more-menu summary::-webkit-details-marker { display: none; }
+.more-popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: 340px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  padding: 12px;
   display: flex;
-  justify-content: flex-start;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 60;
 }
-.platform-nav-bar .nav-section-group {
-  background: var(--surface-2) !important;
-  border-color: var(--border) !important;
-}
-.platform-nav-bar .nav-section-label {
-  color: var(--muted) !important;
-}
-.platform-nav-bar .nav-link {
-  color: var(--text) !important;
-}
-.platform-nav-bar .nav-link.active {
-  background: var(--accent-bg) !important;
-  color: var(--accent) !important;
-  border-color: var(--accent) !important;
+.more-popover .nav-sections { flex-direction: column; align-items: stretch; gap: 8px; }
+.more-popover .nav-group { flex-direction: column; align-items: stretch; gap: 2px; padding: 8px; }
+.more-popover .nav-group-label { border-right: none; padding: 0 4px 4px; margin-bottom: 2px; border-bottom: 1px solid var(--border); }
+.more-popover .nav-group a { padding: 6px 8px; font-size: 12.5px; }
+.more-footer {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 6px; padding-top: 8px; border-top: 1px solid var(--border);
 }

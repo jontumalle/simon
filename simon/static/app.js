@@ -74,7 +74,11 @@
     });
   });
   $('openBriefBtn').addEventListener('click', () => $('briefDrawer').classList.remove('hidden'));
-  $('openTraceBtn').addEventListener('click', () => $('traceDrawer').classList.remove('hidden'));
+  $('openTraceBtn').addEventListener('click', () => {
+    const m = $('moreMenu');
+    if (m) m.removeAttribute('open');
+    $('traceDrawer').classList.remove('hidden');
+  });
 
   // =========================================================
   // TAB 1: TALENT REVIEW
@@ -133,6 +137,7 @@
 
   function updatePromoteBar() {
     const bar = $('promoteBar');
+    if (!bar) return;
     if (state.selectedLeads.size > 0) {
       bar.classList.remove('hidden');
       $('selectedCountLabel').textContent = `${state.selectedLeads.size} selected`;
@@ -252,9 +257,9 @@
     const leads = run.artist_leads || [];
     const clips = run.clip_evidence || [];
     const shortlist = run.shortlist || [];
-    $('recordCountBadge').textContent = `${leads.length} leads · ${clips.length} clips`;
-    $('subtabShortlistBtn').textContent = `Top-3 Shortlist (${shortlist.length})`;
-    $('subtabAllBtn').textContent = `All Scouted Artists (${leads.length})`;
+    $('recordCountBadge').textContent = `${leads.length} artists · ${clips.length} clips`;
+    $('subtabShortlistBtn').textContent = `Shortlist (${shortlist.length})`;
+    $('subtabAllBtn').textContent = `All Artists (${leads.length})`;
 
     // Cue #1 shortlist artist without autoplay on initial load
     if (shortlist.length > 0) {
@@ -290,15 +295,12 @@
         return `
           <article class="card artist-card">
             <div class="artist-card-top">
-              <div class="artist-id-row">
-                <input type="checkbox" class="lead-check" data-lead-id="${esc(lead.lead_id)}" style="margin-top:5px; cursor:pointer;" title="Select for Phase 2 Investigation" />
-                <div>
-                  <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                    <span class="pill accent">#${esc(item.rank)} Shortlist</span>
-                    <h3 class="artist-name">${esc(item.stage_name)}</h3>
-                  </div>
-                  <div class="badges">${badges.join('')}</div>
+              <div>
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                  <span class="pill accent">#${esc(item.rank)}</span>
+                  <h3 class="artist-name">${esc(item.stage_name)}</h3>
                 </div>
+                <div class="badges">${badges.join('')}</div>
               </div>
               <button type="button" class="btn open-profile-btn" data-lead-id="${esc(lead.lead_id)}">Full Profile →</button>
             </div>
@@ -335,17 +337,14 @@
         return `
           <article class="card artist-card">
             <div class="artist-card-top">
-              <div class="artist-id-row">
-                <input type="checkbox" class="lead-check" data-lead-id="${esc(lead.lead_id)}" style="margin-top:5px; cursor:pointer;" />
-                <div>
-                  <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                    <span class="pill ${shortlisted ? 'accent' : ''}">${shortlisted ? '#' + shortlisted.rank + ' Shortlist' : 'Scouted Lead'}</span>
-                    <h3 class="artist-name">${esc(lead.stage_name)}</h3>
-                  </div>
-                  <div class="badges">
-                    <span class="pill ${lead.attribution_status === 'uncertain' ? 'warn' : 'ok'}">${lead.attribution_status === 'uncertain' ? '⚠ Uncertain Attribution' : 'Verified Performer'}</span>
-                    <span class="pill">${leadClips.length} Clips</span>
-                  </div>
+              <div>
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                  <span class="pill ${shortlisted ? 'accent' : ''}">${shortlisted ? '#' + shortlisted.rank : 'Artist'}</span>
+                  <h3 class="artist-name">${esc(lead.stage_name)}</h3>
+                </div>
+                <div class="badges">
+                  <span class="pill ${lead.attribution_status === 'uncertain' ? 'warn' : 'ok'}">${lead.attribution_status === 'uncertain' ? '⚠ Uncertain Credit' : 'Verified'}</span>
+                  <span class="pill">${leadClips.length} Clips</span>
                 </div>
               </div>
               <button type="button" class="btn open-profile-btn" data-lead-id="${esc(lead.lead_id)}">Full Profile →</button>
@@ -402,13 +401,16 @@
     });
   });
 
-  $('promoteToPhase2Btn').addEventListener('click', () => {
-    if (!state.currentRun || state.selectedLeads.size === 0) return;
-    const firstId = Array.from(state.selectedLeads)[0];
-    const lead = (state.currentRun.artist_leads || []).find((l) => l.lead_id === firstId);
-    const clips = (state.currentRun.clip_evidence || []).filter((c) => c.lead_id === firstId);
-    if (lead) promoteLeadToPhase2(lead, clips);
-  });
+  const promoteBtn = $('promoteToPhase2Btn');
+  if (promoteBtn) {
+    promoteBtn.addEventListener('click', () => {
+      if (!state.currentRun || state.selectedLeads.size === 0) return;
+      const firstId = Array.from(state.selectedLeads)[0];
+      const lead = (state.currentRun.artist_leads || []).find((l) => l.lead_id === firstId);
+      const clips = (state.currentRun.clip_evidence || []).filter((c) => c.lead_id === firstId);
+      if (lead) promoteLeadToPhase2(lead, clips);
+    });
+  }
 
   // =========================================================
   // TAB 2: PIPELINE RUNNER

@@ -16,14 +16,14 @@
           <div class="brand-mark">S</div>
           <div>
             <div class="brand-title">Simon</div>
-            <div class="brand-sub">5. Vocal Studio · Talent Review</div>
+            <div class="brand-sub">Talent Review</div>
           </div>
         </div>
 
         <nav class="nav-tabs" aria-label="Studio Views">
-          <button class="nav-tab active" data-tab="review" type="button">1. Talent Review</button>
-          <button class="nav-tab" data-tab="pipeline" type="button">2. Pipeline Runner</button>
-          <button class="nav-tab" data-tab="lab" type="button">3. Agent Lab</button>
+          <button class="nav-tab active" data-tab="review" type="button">Talent Review</button>
+          <button class="nav-tab" data-tab="pipeline" type="button">Pipeline</button>
+          <button class="nav-tab" data-tab="lab" type="button">Agent Lab</button>
         </nav>
       </div>
 
@@ -33,18 +33,22 @@
         </select>
 
         <button id="openBriefBtn" class="btn btn-primary" type="button">+ New Brief</button>
-        <button id="openTraceBtn" class="btn" type="button">Trace</button>
 
-        <span id="serverKeyBadge" class="status-dot-pill">
-          <span class="dot"></span>
-          <span>Checking…</span>
-        </span>
-
-        <button id="themeToggleBtn" class="btn" type="button" title="Toggle Editorial Light / Studio Dark">☀ Light</button>
+        <details class="more-menu" id="moreMenu">
+          <summary class="btn">More ▾</summary>
+          <div class="more-popover">
+            <!--__TOP_NAV__-->
+            <div class="more-footer">
+              <button id="openTraceBtn" class="btn" type="button">Run Trace</button>
+              <span id="serverKeyBadge" class="status-dot-pill">
+                <span class="dot"></span>
+                <span>Checking…</span>
+              </span>
+              <button id="themeToggleBtn" class="btn" type="button" title="Toggle Editorial Light / Studio Dark">☀ Light</button>
+            </div>
+          </div>
+        </details>
       </div>
-    </div>
-    <div class="platform-nav-bar">
-      <!--__TOP_NAV__-->
     </div>
   </header>
 
@@ -60,8 +64,8 @@
         <h1 id="activeBriefHeading" class="brief-headline">Loading latest scouting run…</h1>
       </div>
       <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-        <span id="recordCountBadge" class="pill ok">0 leads · 0 clips</span>
-        <span id="runModeBadge" class="pill">—</span>
+        <span id="recordCountBadge" class="pill ok">0 artists · 0 clips</span>
+        <span id="runModeBadge" class="pill hidden">—</span>
       </div>
     </div>
 
@@ -99,13 +103,8 @@
       <section>
         <div class="queue-toolbar">
           <div class="subtabs">
-            <button id="subtabShortlistBtn" class="nav-tab active" data-subtab="shortlist" type="button">Top-3 Shortlist (0)</button>
-            <button id="subtabAllBtn" class="nav-tab" data-subtab="all" type="button">All Scouted Artists (0)</button>
-          </div>
-
-          <div id="promoteBar" class="promote-bar hidden">
-            <span id="selectedCountLabel">0 selected</span>
-            <button id="promoteToPhase2Btn" class="btn btn-primary" type="button">Run Phase 2 Investigation →</button>
+            <button id="subtabShortlistBtn" class="nav-tab active" data-subtab="shortlist" type="button">Shortlist (0)</button>
+            <button id="subtabAllBtn" class="nav-tab" data-subtab="all" type="button">All Artists (0)</button>
           </div>
         </div>
 
