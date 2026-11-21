@@ -26,10 +26,10 @@ from .db_tools import (
 from .deploy import compile_agent_package, list_agent_packages
 from .discovery_ui import (
     DISCOVERY_HTML,
+    EVALS_HTML,
     FIELD_NEWS_HTML,
     INVESTIGATE_HTML,
     REPORTS_HTML,
-    TRACES_HTML,
     _NAV_CSS,
     archive_agent_reports,
     dispatch_discovery_batch,
@@ -37,11 +37,13 @@ from .discovery_ui import (
     list_agent_reports,
     list_discovery_batches,
     list_discovery_leads,
+    list_eval_runs,
     list_investigator_dossiers,
     load_source_registry,
     refresh_discovery_batch,
     render_top_nav,
 )
+from .vertex_eval import list_available_eval_agents, load_agent_rubrics, run_agent_eval
 from .fleet import dispatch_fleet
 from .phases import (
     AGENT_EVALS_COLLECTION,
@@ -55,7 +57,6 @@ from .registry import (
     append_agent_trace,
     list_agent_runs,
     new_run_id,
-    query_discovery_sources,
     record_agent_run,
     record_fleet_agent_runs,
     seed_discovery_sources,
@@ -245,6 +246,45 @@ def dispatch_http_request(
 
         if parsed.path == "/investigate":
             return (HTTPStatus.OK, "text/html; charset=utf-8", INVESTIGATE_HTML.encode("utf-8"))
+
+        if parsed.path == "/evals":
+            return (HTTPStatus.OK, "text/html; charset=utf-8", EVALS_HTML.encode("utf-8"))
+
+        if parsed.path == "/api/evals/agents":
+            agents = list_available_eval_agents()
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps({"count": len(agents), "agents": agents}, ensure_ascii=False).encode("utf-8"),
+            )
+
+        if parsed.path == "/api/evals/rubrics":
+            qs = parse_qs(parsed.query)
+            agent = (qs.get("agent") or ["discovery-scout"])[0]
+            try:
+                spec = load_agent_rubrics(agent)
+            except FileNotFoundError as exc:
+                return (
+                    HTTPStatus.NOT_FOUND,
+                    "application/json; charset=utf-8",
+                    json.dumps({"error": str(exc)}).encode("utf-8"),
+                )
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps(spec, ensure_ascii=False).encode("utf-8"),
+            )
+
+        if parsed.path == "/api/eval-runs":
+            qs = parse_qs(parsed.query)
+            limit = int((qs.get("limit") or ["50"])[0])
+            agent_id = (qs.get("agent_id") or [None])[0]
+            runs = list_eval_runs(store, agent_id=agent_id, limit=limit)
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps({"count": len(runs), "eval_runs": runs}, ensure_ascii=False).encode("utf-8"),
+            )
 
         if parsed.path == "/api/dossiers":
             qs = parse_qs(parsed.query)
@@ -582,6 +622,93 @@ def dispatch_http_request(
             "application/json; charset=utf-8",
             json.dumps(record, ensure_ascii=False).encode("utf-8"),
         )
+    if method == "POST" and parsed.path == "/api/eval-runs":
+        ok_auth, auth_err = verify_agent_db_auth(headers)
+        if not ok_auth:
+            return (
+                HTTPStatus.UNAUTHORIZED,
+                "application/json; charset=utf-8",
+                json.dumps({"error": auth_err}).encode("utf-8"),
+            )
+        try:
+            req = json.loads((raw_body or b"{}").decode("utf-8"))
+        except ValueError:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "Invalid JSON request body."}).encode("utf-8"),
+            )
+        try:
+            saved = save_agent_document(store, "eval_runs", req)
+        except ValueError as exc:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": str(exc)}).encode("utf-8"),
+            )
+        return (
+            HTTPStatus.CREATED,
+            "application/json; charset=utf-8",
+            json.dumps(saved, ensure_ascii=False).encode("utf-8"),
+        )
+
+    if method == "POST" and parsed.path == "/api/eval-runs/run":
+        try:
+            req = json.loads((raw_body or b"{}").decode("utf-8"))
+        except ValueError:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "Invalid JSON request body."}).encode("utf-8"),
+            )
+        mode = str(req.get("mode") or "offline").strip()
+        if mode not in ("offline", "vertex"):
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "`mode` must be 'offline' or 'vertex'."}).encode("utf-8"),
+            )
+        sample_source = str(req.get("sample_source") or "mixed").strip()
+        all_agents = bool(req.get("all_agents", False))
+        agent = str(req.get("agent") or "discovery-scout").strip()
+        try:
+            if all_agents:
+                results = []
+                for ag in list_available_eval_agents():
+                    ev = run_agent_eval(
+                        agent=ag["slug"],
+                        mode=mode,
+                        sample_source=sample_source,
+                        store=store,
+                        trigger="platform_ui",
+                    )
+                    save_agent_document(store, "eval_runs", ev)
+                    results.append(ev)
+                return (
+                    HTTPStatus.CREATED,
+                    "application/json; charset=utf-8",
+                    json.dumps({"count": len(results), "eval_runs": results}, ensure_ascii=False).encode("utf-8"),
+                )
+            eval_run = run_agent_eval(
+                agent=agent,
+                mode=mode,
+                sample_source=sample_source,
+                store=store,
+                trigger="platform_ui",
+            )
+            save_agent_document(store, "eval_runs", eval_run)
+        except Exception as exc:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": str(exc)}).encode("utf-8"),
+            )
+        return (
+            HTTPStatus.CREATED,
+            "application/json; charset=utf-8",
+            json.dumps(eval_run, ensure_ascii=False).encode("utf-8"),
+        )
+
     if method == "POST" and parsed.path == "/api/discovery/dispatch":
         try:
             req = json.loads((raw_body or b"{}").decode("utf-8"))

@@ -20,6 +20,7 @@ ALLOWED_AGENT_COLLECTIONS = frozenset(
         "fleet_runs",
         "agent_runs",
         "agent_reports",
+        "eval_runs",
     }
 )
 
@@ -196,6 +197,15 @@ def validate_collection_payload(collection: str, payload: Any) -> Tuple[List[str
         if findings is not None and not isinstance(findings, list):
             errors.append("Field 'findings' must be a list of human-readable findings.")
         doc_id = str(payload.get("report_id") or payload.get("doc_id") or "").strip() or None
+
+    elif collection == "eval_runs":
+        for field in ("eval_run_id", "agent_id", "rubric_set_id", "status"):
+            if not str(payload.get(field) or "").strip():
+                errors.append(f"Missing required field '{field}'.")
+        dims = payload.get("dimensions")
+        if not isinstance(dims, list):
+            errors.append("Field 'dimensions' must be a list of rubric dimension scores.")
+        doc_id = str(payload.get("eval_run_id") or payload.get("doc_id") or "").strip() or None
 
     return errors, doc_id
 
