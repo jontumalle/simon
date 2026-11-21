@@ -1,5 +1,6 @@
 # `signal-forensics` (`simon-signal-forensics`)
 
+- **Model:** `gemini-4-argon` (`max_total_tokens: "64000"`)
 - **Phase:** B (Runs concurrently with `footprint-profiler` and `track-record-mapper`)
 - **Pattern:** Hybrid — fetch public text once (generic), classify in 1 pass using merged generic + domain buckets
 - **Input:** `IdentityBundle` from `identity-resolver`

@@ -20,9 +20,9 @@ flowchart LR
 
 | Domain | Core Job | Repo Paths | Branch Prefix |
 | :--- | :--- | :--- | :--- |
-| **1. Intake (Scouting)** | Discover vocalists, check source attribution, run metric-blind `gemini-4-hydrogen` digestion, and store timestamped evidence. | `simon/youtube.py`, `simon/store.py`, `agents/discovery-scout/` | `intake/<slug>` |
-| **2. Decision Engine** | Run `gemini-decision-1` + DSPy gates, fan out independent Managed Agent critics, and surface standout disagreements without score-averaging. | `simon/scout.py`, `simon/gemini.py`, `agents/synthesis-scout/`, `agents/*-critic/` | `decision/<slug>` |
-| **3. Outcome *(To Be Defined)*** | Turn shortlisted talent into concrete producer value (currently *First Listen NYC* callback drafts + Scouting Studio UI; final commercial/showcase action remains open). | `simon/web.py`, `agents/showcase-producer/`, `ideas/` | `outcome/<slug>` |
+| **1. Intake (Discovery & Investigation)** | **Stage 1:** Discover unranked leads (`discovery-scout` on `gemini-4-hydrogen`). **Stage 2:** Build factual artist dossiers via 4 Managed Agents (`identity-resolver`, `footprint-profiler`, `signal-forensics`, `track-record-mapper` on `gemini-4-argon`). | `simon/investigator*.py`, `simon/discovery_ui.py`, `agents/discovery-scout/`, `agents/identity-resolver/`, `agents/footprint-profiler/`, `agents/signal-forensics/`, `agents/track-record-mapper/` | `intake/<slug>` |
+| **2. Decision Engine (Screening & Taste)** | **Stage 3:** Run parallel Advocate vs. Skeptic debate (`screen-advocate`, `screen-skeptic` on `gemini-4-carbon`), rubric verdict (`screening-judge` on `gemini-4-neon`), and HITL DSPy + `gemini-decision-1` calibration. | `simon/screening.py`, `simon/screening_ui.py`, `simon/taste_profile_ui.py`, `agents/screen-advocate/`, `agents/screen-skeptic/`, `agents/screening-judge/` | `decision/<slug>` |
+| **3. Outcome (Production & Studio)** | **Stage 4:** Turn approved `ScreeningPacket` + Stage 2 Dossier into human-gated callback drafts (`showcase-producer` on `gemini-4-carbon`) across the unified 4-Stage Studio UI. | `simon/web.py`, `simon/phases.py`, `simon/demo_flow.py`, `agents/showcase-producer/` | `outcome/<slug>` |
 
 ---
 

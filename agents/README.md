@@ -39,19 +39,36 @@ Any agent can opt into shared sandbox tools by adding them to `shared_skills` in
 
 ---
 
-## Planned & Active Agent Roster
+## Agent Map (4-Stage Pipeline)
 
-| Directory / Agent | Harness & Model | Network | Role | Status |
-| :--- | :--- | :--- | :--- | :--- |
-| `identity-resolver` | `antigravity-preview-09-2026` (`gemini-4-argon`) | Search + URL | **Stage 2 Phase A:** 2-step (`1a Generic -> 1b Domain`) identity, link graph, MusicBrainz MBID & contact route | **Active (Stage 2)** |
-| `footprint-profiler` | `antigravity-preview-09-2026` (`gemini-4-argon`) | URL + Python | **Stage 2 Phase B (Parallel):** oEmbed media queue (zero decode), public reach & Python concentration math | **Active (Stage 2)** |
-| `signal-forensics` | `antigravity-preview-09-2026` (`gemini-4-argon`) | URL + Python | **Stage 2 Phase B (Parallel):** Fetch ≤50 public comments & 1-pass merged generic/domain intent counts | **Active (Stage 2)** |
-| `track-record-mapper` | `antigravity-preview-09-2026` (`gemini-4-argon`) | Search + URL | **Stage 2 Phase B (Parallel):** Public show history, venue caps, explicit team mentions & collaborator credits | **Active (Stage 2)** |
-| `screen-advocate` | `antigravity-preview-09-2026` (`gemini-4-carbon`) | Python + `simon-db` | **Stage 3 (Parallel Critic):** Builds strongest factual upside case (`pros` + `standout_hook`) across all 5 dossier blocks | **Active (Stage 3)** |
-| `screen-skeptic` | `antigravity-preview-09-2026` (`gemini-4-carbon`) | Python + `simon-db` | **Stage 3 (Parallel Critic):** Audits concrete risks (`>85%` view skew, studio-only, `uncertain` attribution, lockups) & `missing_fields` | **Active (Stage 3)** |
-| `screening-judge` | `antigravity-preview-09-2026` (`gemini-4-neon`) | Python + `simon-db` | **Stage 3 (Synthesis Judge):** Scores 5 `0–2` rubrics (`0..10`), weighs Pros vs. Cons, persists `ScreeningPacket` v1.0.0 & posts synthesis report | **Active (Stage 3)** |
-| `discovery-scout` | `antigravity-preview-09-2026` (`gemini-4-hydrogen`) | Search + oEmbed | Searches public YouTube venues, sessions & open mics from a taste brief; groups by performer & flags uncertain attribution | **Active (MVP)** |
-| `synthesis-scout` | `antigravity-preview-09-2026` (`gemini-4-carbon`) | `disabled` | Compares `gemini-4-hydrogen` clip evidence, triggers second-take loop when thin, outputs <=3 singer listening shortlist | **Active (MVP)** |
-| `performance-critic` | `antigravity-preview-09-2026` (`gemini-4-hydrogen`) | `disabled` | Independent vocal phrasing, dynamics, waveform/single-take forensics & performance critique (*First Listen NYC* showcase flow) | Seeded |
-| `booking-critic` | `antigravity-preview-09-2026` (`gemini-4-hydrogen`) | `disabled` | Independent stage setup, slot length, original-song fit & practical open questions (*First Listen NYC* showcase flow) | Seeded |
-| `showcase-producer` | `antigravity-preview-09-2026` (`gemini-4-carbon`) | `disabled` / Allowlisted | Arbitrates critic disagreements, checks showcase unit economics, drafts `pending_human_review` offer | Seeded |
+```mermaid
+flowchart LR
+    S1["Stage 1 · Discovery\ndiscovery-scout\ngemini-4-hydrogen (192k)"]
+    S2A["Stage 2A · Identity\nidentity-resolver\ngemini-4-argon (64k)"]
+    S2B["Stage 2B · Parallel Forensics\nfootprint-profiler · signal-forensics\ntrack-record-mapper\ngemini-4-argon (64k)"]
+    S3C["Stage 3 · Adversarial Critics\nscreen-advocate · screen-skeptic\ngemini-4-carbon (64k)"]
+    S3J["Stage 3 · Synthesis Judge\nscreening-judge\ngemini-4-neon (64k)"]
+    S3T["Calibrated Taste Engine\nDSPy + gemini-decision-1"]
+    S4["Stage 4 · Outcome\nshowcase-producer\ngemini-4-carbon"]
+
+    S1 --> S2A --> S2B --> S3C --> S3J --> S4
+    S3J -. "Human Override" .-> S3T
+    S3T -. "Taste Score" .-> S4
+```
+
+## Active & Seeded Agent Roster
+
+| Stage | Directory / Agent | Model & Budget | Network / Tools | Role | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Stage 1 · Discovery** | `discovery-scout` | `gemini-4-hydrogen` (`192k`) | Search + oEmbed + `youtube` + `simon-db` | Discovers unranked leads from grassroots music sources (`DiscoveryHandoff` v1.0.0) | **Active** |
+| **Stage 2A · Investigation** | `identity-resolver` | `gemini-4-argon` (`64k`) | Search + URL + `youtube` + `simon-db` | 2-step (`1a Generic -> 1b Domain`) identity, link graph, MusicBrainz MBID & contact route | **Active** |
+| **Stage 2B · Investigation** | `footprint-profiler` | `gemini-4-argon` (`64k`) | URL + Python + `youtube` + `simon-db` | Zero-decode oEmbed media queue, public reach & Python concentration math | **Active** |
+| **Stage 2B · Investigation** | `signal-forensics` | `gemini-4-argon` (`64k`) | URL + Python + `youtube` + `simon-db` | Fetches ≤50 public comments & 1-pass merged generic/domain intent counts | **Active** |
+| **Stage 2B · Investigation** | `track-record-mapper` | `gemini-4-argon` (`64k`) | Search + URL + `youtube` + `simon-db` | Public show history, venue caps, explicit team mentions & collaborator credits | **Active** |
+| **Stage 3 · Screening** | `screen-advocate` | `gemini-4-carbon` (`64k`) | Python + `simon-db` + 5 `dossier-*` | Builds strongest factual upside case (`pros` + `standout_hook`) across all 5 dossier blocks | **Active** |
+| **Stage 3 · Screening** | `screen-skeptic` | `gemini-4-carbon` (`64k`) | Python + `simon-db` + 5 `dossier-*` | Audits concrete risks (`>85%` view skew, studio-only, `uncertain` attribution, lockups) & `missing_fields` | **Active** |
+| **Stage 3 · Screening** | `screening-judge` | `gemini-4-neon` (`64k`) | Python + `simon-db` + 5 `dossier-*` | Scores 5 `0–2` rubrics (`0..10`), weighs Pros vs. Cons, persists `ScreeningPacket` v1.0.0 | **Active** |
+| **Stage 4 · Outcome** | `showcase-producer` | `gemini-4-carbon` | `disabled` (repo-mounted) | Turns approved `ScreeningPacket` + Stage 2 Dossier into a human-gated callback invitation draft | **Active** |
+| **Legacy / MVP** | `synthesis-scout` | `gemini-4-carbon` | `disabled` | Legacy MVP: compares `gemini-4-hydrogen` clip evidence into a <=3 singer listening shortlist | Legacy MVP |
+| **Legacy / Seeded** | `performance-critic` | `gemini-4-hydrogen` | `disabled` | Replaced in Phase 3 by Active Screening (`screen-advocate` / `screen-skeptic` / `screening-judge`) | Legacy |
+| **Legacy / Seeded** | `booking-critic` | `gemini-4-hydrogen` | `disabled` | Replaced in Phase 3 by Active Screening (`screen-advocate` / `screen-skeptic` / `screening-judge`) | Legacy |

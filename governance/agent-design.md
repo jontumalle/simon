@@ -61,8 +61,11 @@ Choose the smallest set of tools the job needs:
 ## 5. Model & Budget (`agent_config`)
 
 - **`model`:** Locked at `POST /v1beta/agents` time (cannot be overridden per interaction on named agents).
-  - `gemini-4-hydrogen` — Default fast multimodal scout and critic model.
-  - `gemini-4-carbon` / `gemini-4-argon` — Frontier reasoning for complex arbitration, synthesis, and multi-step investigation.
+  - `gemini-4-hydrogen` — Stage 1 Discovery (`discovery-scout`) and direct multimodal YouTube clip evaluation.
+  - `gemini-4-argon` — Stage 2 Investigation (`identity-resolver`, `footprint-profiler`, `signal-forensics`, `track-record-mapper`).
+  - `gemini-4-carbon` — Stage 3 parallel screening critics (`screen-advocate`, `screen-skeptic`), Stage 4 Outcome (`showcase-producer`), and `synthesis-scout`.
+  - `gemini-4-neon` — Stage 3 final rubric arbitration (`screening-judge`).
+  - `gemini-decision-1` — Calibrated 0-output-token taste scoring (DSPy + Gemini Decisions API, outside Managed Agents).
   - `gemini-3.8-flash` / `gemini-3.5-flash-lite` — High-throughput, low-latency fleet sweeps.
 - **`max_total_tokens`:** Set a hard token ceiling per run to prevent runaway loops during autonomous fleet execution.
 
