@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 import sys
 
+from .deploy import deploy_agents
+from .fleet import dispatch_fleet
 from .gemini import Gemini
 from .scout import DEFAULT_TASTE_BRIEF, load_dotenv_if_present, run_scout
 from .store import SimonStore
@@ -128,6 +130,115 @@ def main(argv=None):
         except (OSError, UnicodeError, ValueError, KeyError, TypeError, RuntimeError) as exc:
             parser.exit(1, f"Simon scout failed: {exc}\n")
         print(json.dumps(run.to_dict(), indent=2, ensure_ascii=False))
+        return
+
+    if raw_args and raw_args[0] == "deploy":
+        parser = argparse.ArgumentParser(
+            prog="python3 -m simon deploy",
+            description="Compile agents/<name>/ packages and deploy them to Gemini /v1beta/agents.",
+        )
+        parser.add_argument(
+            "--agent",
+            action="append",
+            dest="agents",
+            help="Agent folder name under agents/ (repeatable). Omit or pass --all for all packages.",
+        )
+        parser.add_argument("--all", action="store_true", help="Deploy all packages in agents/.")
+        parser.add_argument(
+            "--prefix",
+            default=None,
+            help="Agent ID prefix (overrides SIMON_AGENT_PREFIX, e.g. kevin-, staging-, prod-).",
+        )
+        parser.add_argument(
+            "--model-override",
+            default=None,
+            help="Optional model override for agent_config.model (e.g. gemini-3.8-flash or gemini-4-argon).",
+        )
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Compile payloads offline without calling the Gemini API.",
+        )
+        parser.add_argument(
+            "--no-recreate",
+            action="store_true",
+            help="Skip agents that already exist instead of deleting and recreating them.",
+        )
+        parser.add_argument(
+            "--out-dir",
+            type=Path,
+            default=None,
+            help="Optional directory to write compiled <agent>.json payloads for gemini-api CLI.",
+        )
+        args = parser.parse_args(raw_args[1:])
+        load_dotenv_if_present()
+        try:
+            summary = deploy_agents(
+                agent_names=None if args.all else args.agents,
+                prefix=args.prefix,
+                model_override=args.model_override,
+                dry_run=args.dry_run,
+                recreate=not args.no_recreate,
+                out_dir=args.out_dir,
+            )
+        except (OSError, UnicodeError, ValueError, KeyError, TypeError, RuntimeError) as exc:
+            parser.exit(1, f"Simon deploy failed: {exc}\n")
+        print(json.dumps(summary, indent=2, ensure_ascii=False))
+        return
+
+    if raw_args and raw_args[0] == "fleet":
+        parser = argparse.ArgumentParser(
+            prog="python3 -m simon fleet",
+            description="Scale one deployed Managed Agent across N targets in parallel.",
+        )
+        parser.add_argument("--agent", required=True, help="Deployed Managed Agent ID.")
+        parser.add_argument(
+            "--targets",
+            nargs="+",
+            required=True,
+            help="One or more targets/lanes to fan out across isolated sandboxes.",
+        )
+        parser.add_argument(
+            "--prompt-template",
+            default="Investigate and return objective factual data for: {target}",
+            help="Prompt template with {target} placeholder.",
+        )
+        parser.add_argument(
+            "--max-concurrency",
+            type=int,
+            default=5,
+            help="Maximum concurrent workers (1-20, default: 5).",
+        )
+        parser.add_argument(
+            "--webhook-url",
+            default=None,
+            help="Optional HTTPS webhook URL for outbound interaction.completed events.",
+        )
+        parser.add_argument(
+            "--wait",
+            action="store_true",
+            help="Poll until all fleet workers complete instead of returning immediately.",
+        )
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Preview fan-out requests offline without calling the Gemini API.",
+        )
+        args = parser.parse_args(raw_args[1:])
+        load_dotenv_if_present()
+        try:
+            summary = dispatch_fleet(
+                agent_id=args.agent,
+                targets=args.targets,
+                prompt_template=args.prompt_template,
+                max_concurrency=args.max_concurrency,
+                webhook_url=args.webhook_url,
+                wait=args.wait,
+                dry_run=args.dry_run,
+            )
+        except (OSError, UnicodeError, ValueError, KeyError, TypeError, RuntimeError) as exc:
+            parser.exit(1, f"Simon fleet failed: {exc}\n")
+        print(json.dumps(summary, indent=2, ensure_ascii=False))
         return
 
     if raw_args and raw_args[0] == "serve":

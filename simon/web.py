@@ -13,6 +13,8 @@ import os
 from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
+from .deploy import compile_agent_package, list_agent_packages
+from .fleet import dispatch_fleet
 from .scout import DEFAULT_TASTE_BRIEF, load_dotenv_if_present, run_scout
 from .store import SimonStore
 
@@ -636,6 +638,26 @@ def dispatch_http_request(
                 json.dumps(payload, ensure_ascii=False).encode("utf-8"),
             )
 
+        if parsed.path == "/api/agents":
+            prefix = os.environ.get("SIMON_AGENT_PREFIX", "")
+            items = []
+            for pkg_dir in list_agent_packages():
+                compiled = compile_agent_package(pkg_dir, prefix=prefix)
+                items.append(
+                    {
+                        "package": compiled["package"],
+                        "deployed_id": compiled["deployed_id"],
+                        "sha256": compiled["sha256"],
+                        "base_agent": compiled["payload"]["base_agent"],
+                        "model": compiled["payload"].get("agent_config", {}).get("model"),
+                    }
+                )
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps({"prefix": prefix, "agents": items}, ensure_ascii=False).encode("utf-8"),
+            )
+
         if parsed.path == "/api/runs":
             qs = parse_qs(parsed.query)
             run_id = (qs.get("id") or [None])[0]
@@ -662,6 +684,57 @@ def dispatch_http_request(
             HTTPStatus.NOT_FOUND,
             "application/json; charset=utf-8",
             json.dumps({"error": "Not found."}).encode("utf-8"),
+        )
+
+    if method == "POST" and parsed.path == "/api/fleet/run":
+        try:
+            req = json.loads((raw_body or b"{}").decode("utf-8"))
+        except ValueError:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "Invalid JSON request body."}).encode("utf-8"),
+            )
+
+        agent_id = str(req.get("agent") or "").strip()
+        targets = req.get("targets")
+        if not isinstance(targets, list) or not targets:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "`targets` must be a non-empty list of strings."}).encode("utf-8"),
+            )
+        prompt_template = str(
+            req.get("prompt_template")
+            or "Investigate and return objective factual data for: {target}"
+        )
+        max_concurrency = int(req.get("max_concurrency") or 5)
+        webhook_url = str(req.get("webhook_url") or "").strip() or None
+        wait = bool(req.get("wait", False))
+        dry_run = bool(req.get("dry_run", False))
+        api_key = str(req.get("api_key") or "").strip() or None
+        try:
+            summary = dispatch_fleet(
+                agent_id=agent_id,
+                targets=[str(t) for t in targets],
+                prompt_template=prompt_template,
+                max_concurrency=max_concurrency,
+                webhook_url=webhook_url,
+                wait=wait,
+                dry_run=dry_run,
+                api_key=api_key,
+            )
+        except (ValueError, RuntimeError, OSError) as exc:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": str(exc)}).encode("utf-8"),
+            )
+        http_status = HTTPStatus.OK if (wait or dry_run) else HTTPStatus.ACCEPTED
+        return (
+            http_status,
+            "application/json; charset=utf-8",
+            json.dumps(summary, ensure_ascii=False).encode("utf-8"),
         )
 
     if method == "POST" and parsed.path == "/api/scout":
