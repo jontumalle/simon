@@ -1,0 +1,26 @@
+id: simon-source-hunter
+description: "Daily & on-demand Source Hunter agent: audits Simon's Source Registry for geographic and genre gaps, discovers and verifies new grassroots open-mic calendars, radio live sessions, Bandcamp city hubs, and indie directories, and saves verified new sources to simon-db."
+base_agent: antigravity-preview-09-2026
+agent_config:
+  type: antigravity
+  model: gemini-4-hydrogen
+  max_total_tokens: "64000"
+system_instruction_file: SYSTEM.md
+tools:
+  - type: google_search
+  - type: url_context
+  - type: code_execution
+base_environment:
+  type: remote
+  env:
+    SIMON_DOMAIN: music
+    SIMON_DB_URL: https://simon-staging-139550420825.us-east1.run.app
+    SIMON_AGENT_DB_TOKEN:
+      credential: simon-db-token
+    YOUTUBE_API_KEY:
+      credential: youtube-api-key
+shared_skills:
+  - simon-db
+  - youtube
+  - field-reporting
+  - source-discovery
