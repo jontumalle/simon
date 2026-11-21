@@ -1,0 +1,48 @@
+{
+  "contract_version": "1.0.0",
+  "run_id": "run_stage1_demo_001",
+  "search_brief": "Find NYC-based emerging indie vocalists performing stripped-back live sessions",
+  "requested_count": 2,
+  "generated_at": "2026-11-21T19:45:00Z",
+  "leads": [
+    {
+      "lead_id": "lead_mira_sol",
+      "stage_name": "Mira Sol",
+      "seed_sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+          "source_channel": "youtube_live_session",
+          "seed_query_or_venue_node": "Sofar Sounds Brooklyn live vocal session",
+          "discovered_at": "2026-11-21T19:44:00Z",
+          "notes": "Live acoustic room performance recorded in Brooklyn."
+        }
+      ],
+      "attribution_status": "verified",
+      "context_snippet": "Performed stripped-back original set at Brooklyn loft session."
+    },
+    {
+      "lead_id": "lead_devon_k",
+      "stage_name": "Devon K",
+      "seed_sources": [
+        {
+          "url": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
+          "source_channel": "open_mic_lineup",
+          "seed_query_or_venue_node": "Pete's Candy Store open mic",
+          "discovered_at": "2026-11-21T19:44:30Z",
+          "notes": "Open mic clip; no DSP links listed."
+        }
+      ],
+      "attribution_status": "uncertain",
+      "context_snippet": "Short open-mic performance uploaded by venue channel."
+    }
+  ],
+  "discovered_sources": [
+    {
+      "url": "https://www.youtube.com/@SofarSounds",
+      "source_channel": "youtube_live_session",
+      "title_or_node": "Sofar Sounds",
+      "why_useful": "Consistent live-room vocal sessions with clear performer credits.",
+      "discovered_by": "stage_1_discovery"
+    }
+  ]
+}
