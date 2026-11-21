@@ -188,14 +188,14 @@ def _human_steps_for_worker(
                 "title": "Checked & deduplicated leads",
                 "looking_at": "Checked artist attribution, link hygiene, and unranked output.",
                 "finding": (
-                    "All leads passed DiscoveryHandoff v1.0.0 checks."
+                    "All leads passed lead handoff checks."
                     if worker.get("contract_valid")
-                    else "Run finished with contract notes to review."
+                    else "Run finished with lead checklist notes to review."
                 ),
                 "analysis": (
                     "No scores or ranks added. Ready for Stage 2 investigation."
                     if worker.get("contract_valid")
-                    else "; ".join(worker.get("contract_errors") or ["Review the output payload."])
+                    else "; ".join(worker.get("contract_errors") or ["Review the saved lead handoff."])
                 ),
                 "status": "done" if worker.get("contract_valid") else "blocked",
                 "updated_at": now,
@@ -204,8 +204,8 @@ def _human_steps_for_worker(
                 "step_number": 4,
                 "phase": "saved",
                 "title": "Scouting report & output stored",
-                "looking_at": "Final DiscoveryHandoff output contract",
-                "finding": f"Stored {len(findings)} lead(s) and full structured output for review.",
+                "looking_at": "Final lead handoff",
+                "finding": f"Saved {len(findings)} lead(s) and full scouting details for review.",
                 "analysis": "Available now in Scouting Reports.",
                 "status": "done",
                 "updated_at": now,
@@ -251,10 +251,10 @@ def _human_steps_for_worker(
             {
                 "step_number": 2,
                 "phase": "finding",
-                "title": "Pulling candidate subjects & seed links",
+                "title": "Collecting artists and public links",
                 "looking_at": f"Checking public listings and channels across {src_names}",
                 "finding": "Collecting artist names, live clip links, and venue/channel context.",
-                "analysis": "Filtering out duplicates and verifying public attribution before saving.",
+                "analysis": "Removing duplicates and checking public attribution before saving.",
                 "status": "active",
                 "updated_at": now,
             }
@@ -544,7 +544,7 @@ def list_discovery_leads(
 
 def _validate_handoff_payload(output_json: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if not isinstance(output_json, dict):
-        return {"valid": False, "errors": ["No JSON DiscoveryHandoff payload returned yet."], "lead_count": 0}
+        return {"valid": False, "errors": ["No lead handoff returned yet."], "lead_count": 0}
     cleaned, errors = clean_and_dedupe_handoff(output_json, verify_oembed=False)
     return {
         "valid": len(errors) == 0,
@@ -682,7 +682,7 @@ def _build_simulated_worker(
             {
                 "index": 4,
                 "type": "model_output",
-                "preview": f"Emitted DiscoveryHandoff v1.0.0 with {len(leads)} unranked lead(s).",
+                "preview": f"Saved lead handoff with {len(leads)} unranked lead(s).",
             },
         ],
         "output_json": validation.get("cleaned", handoff),
@@ -1461,6 +1461,31 @@ _DISCOVERY_PAGE_CSS = """
 """
 
 
+_FORMAT_LABEL_JS = """
+    function formatLabel(val) {
+      if (val == null || val === '') return '';
+      const special = {
+        nyc: 'NYC', diy: 'DIY', rnb: 'R&B', ep: 'EP', dsp: 'DSP', dm: 'DM',
+        youtube: 'YouTube', soundcloud: 'SoundCloud', bandcamp: 'Bandcamp',
+        tiktok: 'TikTok', instagram: 'Instagram', spotify: 'Spotify',
+        musicbrainz: 'MusicBrainz', ai: 'AI', url: 'URL', gcp: 'GCP', cli: 'CLI', ui: 'UI',
+      };
+      return String(val)
+        .replace(/^staging-/, '')
+        .replace(/^simon-/, '')
+        .replace(/[_-]+/g, ' ')
+        .trim()
+        .split(/\\s+/)
+        .map((w) => {
+          const low = w.toLowerCase();
+          if (special[low]) return special[low];
+          return low.charAt(0).toUpperCase() + low.slice(1);
+        })
+        .join(' ');
+    }
+"""
+
+
 DISCOVERY_HTML = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1509,23 +1534,23 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
     <section class="card">
       <div class="section-head">
         <h2>2. Orchestrate Discovery Fleet</h2>
-        <span id="agentIdBadge" class="pill blue">simon-discovery-scout</span>
+        <span id="agentIdBadge" class="pill blue">Discovery Scout</span>
       </div>
       <label for="briefInput" style="display:block; font-weight:600; font-size:0.86rem; margin-bottom:6px;">Search Brief</label>
       <textarea id="briefInput">{DEFAULT_DISCOVERY_BRIEF}</textarea>
       <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; margin-top:14px;">
         <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:center;">
           <label style="font-size:0.86rem;">
-            Discovery Agents:
+            Discovery Scouts:
             <input type="number" id="agentCountInput" min="1" max="10" value="3" style="width:68px; margin-left:6px;" />
           </label>
           <label style="font-size:0.86rem;">
-            Leads / Agent (N):
+            Leads / Scout:
             <input type="number" id="leadsPerAgentInput" min="1" max="10" value="2" style="width:68px; margin-left:6px;" />
           </label>
           <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.86rem; cursor:pointer;">
             <input type="checkbox" id="liveToggle" />
-            <span>Dispatch Live Managed Agents</span>
+            <span>Run Live Scouts</span>
           </label>
           <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.86rem; cursor:pointer;">
             <input type="checkbox" id="resetPrevToggle" checked />
@@ -1540,7 +1565,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
           </div>
           <button id="clearOldRunsBtn" class="btn" type="button">↺ Clear Old Runs</button>
           <a class="btn" href="/?tab=discovery">Open in Agency Studio →</a>
-          <button id="dispatchBtn" class="btn primary" type="button">Send Discovery Agents</button>
+          <button id="dispatchBtn" class="btn primary" type="button">Send Discovery Scouts</button>
         </div>
       </div>
     </section>
@@ -1559,9 +1584,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       if (!msg) {{ b.style.display = 'none'; return; }}
       b.textContent = msg; b.className = 'banner ' + (kind || 'info'); b.style.display = 'block';
     }}
-    function formatLabel(val) {{
-      return String(val || '').replace(/_/g, ' ');
-    }}
+{_FORMAT_LABEL_JS}
 
     function syncBatchLinks(batchId) {{
       if (!batchId) return;
@@ -1685,7 +1708,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
         const statusCls = s.status === 'active' ? 'ok' : 'warn';
         const tags = (Array.isArray(s.genre_tags) ? s.genre_tags : []).filter((g) => g && g !== 'all').slice(0, 5);
         const tagsHtml = tags.length
-          ? `<div class="source-genres">${{tags.map((g) => `<span class="genre-tag">${{esc(g)}}</span>`).join('')}}</div>`
+          ? `<div class="source-genres">${{tags.map((g) => `<span class="genre-tag">${{esc(formatLabel(g))}}</span>`).join('')}}</div>`
           : '';
         const noteHtml = s.notes ? `<div class="source-note">Note: ${{esc(s.notes)}}</div>` : '';
         const extHtml = s.url
@@ -1701,7 +1724,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
               </span>
               <span style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
                 ${{extHtml}}
-                <span class="pill ${{statusCls}}">${{esc(s.status)}}</span>
+                <span class="pill ${{statusCls}}">${{esc(formatLabel(s.status))}}</span>
               </span>
             </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
@@ -1736,7 +1759,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       const genres = (data.genres && data.genres.length)
         ? data.genres
         : Array.from(new Set(allSources.flatMap((s) => Array.isArray(s.genre_tags) ? s.genre_tags : []).filter((g) => g && g !== 'all'))).sort();
-      genres.forEach((g) => el('genreFilter').add(new Option(g, g)));
+      genres.forEach((g) => el('genreFilter').add(new Option(formatLabel(g), g)));
       // Default quick selection: 3 active diverse sources
       ['yt_sofar_sounds', 'nyc_babys_all_right', 'bc_brooklyn_soul_rnb'].forEach((id) => {{
         if (allSources.some((s) => s.source_id === id)) selectedIds.add(id);
@@ -1786,7 +1809,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
         const payload = await res.json();
         if (!res.ok) throw new Error(payload.error || 'Reset failed');
         if (el('postDispatchLinks')) el('postDispatchLinks').style.display = 'none';
-        showBanner(`Workspace cleared (${{payload.total_archived || 0}} old pipeline record(s) archived). Ready for a fresh Discovery run.`, 'info');
+        showBanner(`Workspace cleared (${{payload.total_archived || 0}} old run(s) archived). Ready for a new Discovery run.`, 'info');
       }} catch (err) {{
         showBanner(err.message, 'err');
       }} finally {{
@@ -1796,7 +1819,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
 
     el('dispatchBtn').onclick = async () => {{
       if (selectedIds.size === 0) {{ showBanner('Select at least one source first.', 'err'); return; }}
-      showBanner('Dispatching discovery agents…', 'info');
+      showBanner('Sending discovery scouts…', 'info');
       el('dispatchBtn').disabled = true;
       try {{
         const res = await fetch('/api/discovery/dispatch', {{
@@ -1813,7 +1836,8 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
         }});
         const payload = await res.json();
         if (!res.ok) throw new Error(payload.error || 'Dispatch failed');
-        showBanner(`Dispatched ${{payload.agent_count}} agent(s) in ${{payload.mode}} mode (${{payload.batch_id}}). Click "Next: Investigate Discovered Leads →" to continue.`, 'info');
+        const modeLabel = payload.mode === 'live' ? 'live' : 'preview';
+        showBanner(`Sent ${{payload.agent_count}} scout(s) in ${{modeLabel}} mode. Click "Next: Investigate Discovered Leads →" to continue.`, 'info');
         syncBatchLinks(payload.batch_id);
       }} catch (err) {{
         showBanner(err.message, 'err');
@@ -1834,7 +1858,7 @@ FIELD_NEWS_HTML = f"""<!DOCTYPE html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Simon · 2. Field News (Agents in Motion)</title>
+  <title>Simon · 2. Field News (Live Scouts)</title>
   <style>{_SHARED_CSS}</style>
 </head>
 <body>
@@ -1875,13 +1899,14 @@ FIELD_NEWS_HTML = f"""<!DOCTYPE html>
   <script>
     const el = (id) => document.getElementById(id);
     function esc(s) {{ const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }}
+{_FORMAT_LABEL_JS}
     let currentBatchId = new URLSearchParams(window.location.search).get('batch') || '';
     let pollTimer = null;
 
     function statusPill(status) {{
-      if (status === 'completed') return '<span class="pill ok">completed</span>';
-      if (status === 'in_motion' || status === 'starting') return '<span class="pill amber">' + esc(status.replace('_', ' ')) + '</span>';
-      return '<span class="pill warn">' + esc(status || 'unknown') + '</span>';
+      if (status === 'completed') return '<span class="pill ok">Completed</span>';
+      if (status === 'in_motion' || status === 'starting') return '<span class="pill amber">' + esc(formatLabel(status)) + '</span>';
+      return '<span class="pill warn">' + esc(formatLabel(status || 'unknown')) + '</span>';
     }}
 
     function phaseBadge(phase) {{
@@ -1990,7 +2015,7 @@ FIELD_NEWS_HTML = f"""<!DOCTYPE html>
       sel.innerHTML = '';
       sel.add(new Option('All recent field dispatches', ''));
       batches.forEach((b) => {{
-        const label = `${{b.search_brief ? b.search_brief.slice(0, 42) : b.batch_id}} (${{b.completed}}/${{b.agent_count}} done · ${{b.total_leads}} leads)`;
+        const label = `${{b.search_brief ? b.search_brief.slice(0, 42) : 'Recent Scout Batch'}} (${{b.completed}}/${{b.agent_count}} done · ${{b.total_leads}} leads)`;
         sel.add(new Option(label, b.batch_id));
       }});
       if (currentBatchId && batches.some((b) => b.batch_id === currentBatchId)) {{
@@ -2050,7 +2075,7 @@ REPORTS_HTML = f"""<!DOCTYPE html>
     <header>
       <div class="brand">
         <h1>Simon <span class="pill blue">3. Scouting Reports</span></h1>
-        <p>Saved scouting reports with checked leads, step-by-step notes, and raw JSON outputs.</p>
+        <p>Saved scouting reports with checked leads, step-by-step notes, and full lead details.</p>
       </div>
       {render_top_nav("/reports")}
     </header>
@@ -2083,6 +2108,7 @@ REPORTS_HTML = f"""<!DOCTYPE html>
   <script>
     const el = (id) => document.getElementById(id);
     function esc(s) {{ const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }}
+{_FORMAT_LABEL_JS}
     const params = new URLSearchParams(window.location.search);
     const filterBatchId = params.get('batch') || '';
     const focusReportId = params.get('report') || '';
@@ -2091,9 +2117,9 @@ REPORTS_HTML = f"""<!DOCTYPE html>
     }}
 
     function statusPill(status) {{
-      if (status === 'completed') return '<span class="pill ok">completed</span>';
-      if (status === 'in_motion' || status === 'starting') return '<span class="pill amber">' + esc(status.replace('_', ' ')) + '</span>';
-      return '<span class="pill warn">' + esc(status || 'unknown') + '</span>';
+      if (status === 'completed') return '<span class="pill ok">Completed</span>';
+      if (status === 'in_motion' || status === 'starting') return '<span class="pill amber">' + esc(formatLabel(status)) + '</span>';
+      return '<span class="pill warn">' + esc(formatLabel(status || 'unknown')) + '</span>';
     }}
 
     function renderReports(reports) {{
@@ -2115,13 +2141,13 @@ REPORTS_HTML = f"""<!DOCTYPE html>
               <div class="lead-box">
                 <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
                   <strong>${{esc(f.title)}}</strong>
-                  ${{f.attribution_status ? `<span class="pill ok">${{esc(f.attribution_status)}}</span>` : ''}}
+                  ${{f.attribution_status ? `<span class="pill ok">${{esc(formatLabel(f.attribution_status))}}</span>` : ''}}
                 </div>
                 <div style="font-size:0.84rem; color:var(--muted); margin-top:4px;">${{esc(f.summary)}}</div>
                 <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center; justify-content:space-between;">
                   <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
                     ${{f.source_name ? `<span class="pill">${{esc(f.source_name)}}</span>` : ''}}
-                    ${{f.source_channel ? `<span class="pill">${{esc(f.source_channel)}}</span>` : ''}}
+                    ${{f.source_channel ? `<span class="pill">${{esc(formatLabel(f.source_channel))}}</span>` : ''}}
                     ${{f.url ? `<a href="${{esc(f.url)}}" target="_blank" rel="noopener" style="font-size:0.82rem;">Open source ↗</a>` : ''}}
                   </div>
                   <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
@@ -2142,17 +2168,17 @@ REPORTS_HTML = f"""<!DOCTYPE html>
 
         const outputHtml = r.output
           ? `<details style="margin-top:10px;">
-               <summary style="cursor:pointer; font-size:0.85rem; color:var(--teal); font-weight:600;">View Stored Output Contract</summary>
+               <summary style="cursor:pointer; font-size:0.85rem; color:var(--teal); font-weight:600;">View Full Lead Handoff</summary>
                <pre class="json-view">${{esc(JSON.stringify(r.output, null, 2))}}</pre>
              </details>`
-          : '<div style="font-size:0.82rem; color:var(--muted); margin-top:8px;">Final output pending completion…</div>';
+          : '<div style="font-size:0.82rem; color:var(--muted); margin-top:8px;">Final handoff pending completion…</div>';
 
         const highlightStyle = focusReportId && r.report_id === focusReportId ? 'border-color: var(--accent);' : '';
         return `
           <section class="card" id="${{esc(r.report_id)}}" style="${{highlightStyle}}">
             <div class="section-head">
               <div>
-                <h2 style="margin:0;">${{esc(r.agent_name)}} <span class="pill">${{esc(r.stage)}}</span> ${{statusPill(r.status)}} ${{r.archived ? '<span class="pill warn">archived</span>' : ''}}</h2>
+                <h2 style="margin:0;">${{esc(r.agent_name)}} <span class="pill">${{esc(formatLabel(r.stage))}}</span> ${{statusPill(r.status)}} ${{r.archived ? '<span class="pill warn">Archived</span>' : ''}}</h2>
                 <div style="font-size:0.95rem; font-weight:600; margin-top:6px;">${{esc(r.headline || '')}}</div>
                 <div style="font-size:0.84rem; color:var(--muted); margin-top:2px;">Brief: ${{esc(r.brief || '')}}</div>
               </div>
@@ -2241,7 +2267,7 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
       <div class="section-head">
         <h2>1. Verified Leads Ready for Stage 2 Investigation <span id="leadsCountBadge" class="pill blue">0 leads</span></h2>
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-          <input id="leadSearchInput" type="text" placeholder="Filter by artist or lead ID…" style="min-width:220px;" />
+          <input id="leadSearchInput" type="text" placeholder="Filter by artist name…" style="min-width:220px;" />
           <button id="clearFocusBtn" class="btn" type="button" style="display:none;">Show All</button>
           <button id="refreshDeskBtn" class="btn" type="button">Refresh Desk</button>
           <button id="runInvestigateBtn" class="btn primary" type="button">▶ Run Stage 2 Investigation on Active Leads</button>
@@ -2255,7 +2281,7 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
     <section class="card">
       <div class="section-head">
         <h2>2. Stage 2 Investigator Field News <span id="invNewsCountBadge" class="pill amber">0 dispatches</span></h2>
-        <span class="pill">stage=investigator</span>
+        <span class="pill">Stage 2 · Live Updates</span>
       </div>
       <div id="invFieldNews" class="worker-grid">
         <div class="mono">Loading Stage 2 investigator field news…</div>
@@ -2266,7 +2292,7 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
       <div class="section-head">
         <h2>3. Stored Investigator Dossiers <span id="dossiersCountBadge" class="pill ok">0 dossiers</span></h2>
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-          <span class="pill ok">Objective Facts Only · Unranked</span>
+          <span class="pill ok">Verified Facts Only · Unranked</span>
           <button id="sendToScreenBtn" class="btn primary" type="button">Next: Screen These Dossiers →</button>
           <a class="btn" href="/screen" style="border-color:rgba(192,132,252,0.45); color:var(--purple);">Open Screening Deck →</a>
         </div>
@@ -2280,6 +2306,7 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
   <script>
     const el = (id) => document.getElementById(id);
     function esc(s) {{ const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }}
+{_FORMAT_LABEL_JS}
     const params = new URLSearchParams(window.location.search);
     let focusLeadId = params.get('lead') || '';
     let focusSubject = params.get('subject') || '';
@@ -2287,9 +2314,9 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
     let allDossiers = [];
 
     function statusPill(status) {{
-      if (status === 'completed' || status === 'verified') return '<span class="pill ok">' + esc(status) + '</span>';
-      if (status === 'in_motion' || status === 'starting' || status === 'uncertain') return '<span class="pill amber">' + esc(status.replace('_', ' ')) + '</span>';
-      return '<span class="pill warn">' + esc(status || 'unknown') + '</span>';
+      if (status === 'completed' || status === 'verified') return '<span class="pill ok">' + esc(formatLabel(status)) + '</span>';
+      if (status === 'in_motion' || status === 'starting' || status === 'uncertain') return '<span class="pill amber">' + esc(formatLabel(status)) + '</span>';
+      return '<span class="pill warn">' + esc(formatLabel(status || 'unknown')) + '</span>';
     }}
 
     function phaseBadge(phase) {{
@@ -2316,8 +2343,8 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
     function updateFocusBanner() {{
       const b = el('focusBanner');
       if (focusLeadId || focusSubject) {{
-        const label = focusSubject || focusLeadId;
-        b.textContent = `Focused on lead: ${{label}}${{focusLeadId ? ' (' + focusLeadId + ')' : ''}}`;
+        const label = focusSubject || 'Selected Artist';
+        b.textContent = `Focused on artist: ${{label}}`;
         b.className = 'banner info';
         b.style.display = 'block';
         el('clearFocusBtn').style.display = 'inline-flex';
@@ -2340,19 +2367,24 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
         const hasDossier = dossierLeadIds.has(String(l.lead_id || '').toLowerCase())
           || dossierNames.has(String(l.stage_name || '').toLowerCase());
         const seeds = l.seed_sources || [];
+        const firstSeed = seeds[0] || {{}};
+        const leadMeta = [
+          firstSeed.seed_query_or_venue_node,
+          firstSeed.source_channel ? formatLabel(firstSeed.source_channel) : '',
+        ].filter(Boolean).join(' · ');
         return `
           <div class="worker-card">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-              <strong>${{esc(l.stage_name || l.lead_id)}}</strong>
+              <strong>${{esc(l.stage_name || 'Unnamed Artist')}}</strong>
               <div style="display:flex; gap:6px; flex-wrap:wrap;">
                 ${{statusPill(l.attribution_status || 'uncertain')}}
                 ${{hasDossier ? '<span class="pill ok">Dossier Stored</span>' : '<span class="pill blue">Ready for Stage 2</span>'}}
               </div>
             </div>
-            <div class="mono">lead_id: ${{esc(l.lead_id || '—')}}</div>
+            ${{leadMeta ? `<div style="font-size:0.8rem; color:var(--muted);">${{esc(leadMeta)}}</div>` : ''}}
             <div style="font-size:0.84rem; color:var(--muted);">${{esc(l.context_snippet || 'Discovered in Stage 1.')}}</div>
             <div style="display:flex; flex-direction:column; gap:4px;">
-              ${{seeds.map((ss) => `<a class="mono" href="${{esc(ss.url)}}" target="_blank" rel="noopener">↗ [${{esc(ss.source_channel || 'source')}}] ${{esc(ss.url)}}</a>`).join('')}}
+              ${{seeds.map((ss) => `<a class="mono" href="${{esc(ss.url)}}" target="_blank" rel="noopener">↗ ${{esc(formatLabel(ss.source_channel || 'Source'))}} · ${{esc(ss.seed_query_or_venue_node || ss.url)}}</a>`).join('')}}
             </div>
             <div style="margin-top:auto; padding-top:6px; display:flex; justify-content:space-between; align-items:center; gap:6px; flex-wrap:wrap;">
               <button class="btn" type="button" data-focus-lead="${{esc(l.lead_id || '')}}" data-focus-name="${{esc(l.stage_name || '')}}" style="font-size:0.78rem; padding:5px 10px;">Focus Lead &amp; Dossier</button>
@@ -2377,7 +2409,7 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
     function renderInvestigatorFieldNews(reports) {{
       el('invNewsCountBadge').textContent = `${{reports.length}} dispatch(es)`;
       if (!reports.length) {{
-        el('invFieldNews').innerHTML = '<div class="mono">No Stage 2 investigator field dispatches yet. Dispatches posted with stage="investigator" appear here automatically.</div>';
+        el('invFieldNews').innerHTML = '<div class="mono">No Stage 2 investigator updates yet. Live notes appear here once an investigation starts.</div>';
         return;
       }}
       el('invFieldNews').innerHTML = reports.map((r) => {{
@@ -2426,21 +2458,25 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
         const intents = cfObj.comment_intent_counts || {{}};
         const liveObj = d.live_history_and_credits || {{}};
         const team = liveObj.public_team_mentions || {{}};
-        const stageName = idObj.stage_name || d.stage_name || d.lead_id || 'Unnamed Subject';
+        const stageName = idObj.stage_name || d.stage_name || 'Unnamed Artist';
         const city = [idObj.home_neighborhood, idObj.home_city].filter(Boolean).join(', ') || d.home_city || '—';
-        const projectType = idObj.project_type || d.project_type || 'unknown';
-        const contactRoute = idObj.contact_route_type || (idObj.has_public_business_contact ? 'public_contact' : 'none');
-        const regime = fpObj.footprint_regime || d.footprint_regime || 'unknown';
+        const projectType = formatLabel(idObj.project_type || d.project_type || 'unknown');
+        const contactRoute = idObj.contact_route_type
+          ? formatLabel(idObj.contact_route_type)
+          : (idObj.has_public_business_contact ? 'Public Contact' : 'None Listed');
+        const regime = (fpObj.footprint_regime || d.footprint_regime)
+          ? formatLabel(fpObj.footprint_regime || d.footprint_regime)
+          : 'Not Classified';
         const platformUrls = idObj.platform_urls || {{}};
         const platformLinks = Object.entries(platformUrls)
           .filter(([, url]) => Boolean(url))
-          .map(([k, url]) => `<a class="pill blue" href="${{esc(url)}}" target="_blank" rel="noopener">${{esc(k)}} ↗</a>`)
+          .map(([k, url]) => `<a class="pill blue" href="${{esc(url)}}" target="_blank" rel="noopener">${{esc(formatLabel(k))}} ↗</a>`)
           .join('');
         const mediaLinks = (srcObj.media_links || []).map((m) => `
           <div class="lead-box" style="padding:8px 10px;">
             <div style="display:flex; justify-content:space-between; gap:8px;">
               <strong>${{esc(m.title || m.url)}}</strong>
-              <span class="pill ${{m.oembed_live_embeddable ? 'ok' : ''}}">${{m.oembed_live_embeddable ? 'embeddable' : 'link'}}</span>
+              <span class="pill ${{m.oembed_live_embeddable ? 'ok' : ''}}">${{m.oembed_live_embeddable ? 'Playable' : 'Link'}}</span>
             </div>
             <a class="mono" href="${{esc(m.url)}}" target="_blank" rel="noopener">${{esc(m.url)}}</a>
           </div>`).join('');
@@ -2456,7 +2492,7 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
                 <span class="pill ok" style="margin-left:8px;">${{esc(projectType)}}</span>
                 <span class="pill blue">${{esc(regime)}}</span>
               </div>
-              <span class="mono">lead_id: ${{esc(d.lead_id || '—')}}</span>
+              <span class="pill">${{esc(city !== '—' ? city : 'Factual Dossier')}}</span>
             </div>
             ${{srcObj.bio_text ? `<div style="font-size:0.86rem; color:var(--muted);">${{esc(srcObj.bio_text)}}</div>` : ''}}
             <div class="kv-grid">
@@ -2464,7 +2500,7 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
               <div class="kv-cell"><div class="kv-label">Contact Route</div><div class="kv-val">${{esc(contactRoute)}}</div></div>
               <div class="kv-cell"><div class="kv-label">YouTube Subscribers</div><div class="kv-val">${{reach.youtube_subscribers != null ? esc(reach.youtube_subscribers) : '—'}}</div></div>
               <div class="kv-cell"><div class="kv-label">Top Video Views</div><div class="kv-val">${{reach.top_video_views != null ? esc(reach.top_video_views) : '—'}}</div></div>
-              <div class="kv-cell"><div class="kv-label">Comment Forensics</div><div class="kv-val">${{intents.sample_size != null ? `${{intents.sample_size}} sampled · ${{intents.release_requests || 0}} release req · ${{intents.live_show_requests || 0}} show req` : '—'}}</div></div>
+              <div class="kv-cell"><div class="kv-label">Comment Signals</div><div class="kv-val">${{intents.sample_size != null ? `${{intents.sample_size}} sampled · ${{intents.release_requests || 0}} release requests · ${{intents.live_show_requests || 0}} show requests` : '—'}}</div></div>
               <div class="kv-cell"><div class="kv-label">Public Team</div><div class="kv-val">${{esc(team.management || team.label || team.booking_agent || 'Independent / none observed')}}</div></div>
             </div>
             ${{platformLinks ? `<div style="display:flex; gap:6px; flex-wrap:wrap;">${{platformLinks}}</div>` : ''}}
@@ -2472,7 +2508,7 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
             <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">${{showsHtml}}</div>
             <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between; padding-top:4px; border-top:1px solid var(--border);">
               <details style="flex:1;">
-                <summary style="cursor:pointer; font-size:0.84rem; color:var(--teal); font-weight:600;">Inspect Full Factual Dossier JSON</summary>
+                <summary style="cursor:pointer; font-size:0.84rem; color:var(--teal); font-weight:600;">Inspect Full Artist Dossier</summary>
                 <pre class="json-view">${{esc(JSON.stringify(d, null, 2))}}</pre>
               </details>
               <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
@@ -2560,7 +2596,7 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Stage 2 investigation failed');
         await loadDesk();
-        b.textContent = `Compiled ${{data.count || 0}} contract-valid 5-block InvestigatorDossier(s). Click "Next: Screen These Dossiers →" to review in Screening Deck.`;
+        b.textContent = `Built ${{data.count || 0}} factual artist dossier(s). Click "Next: Screen These Dossiers →" to review in Screening Deck.`;
         b.className = 'banner info';
         b.style.display = 'block';
       }} catch (err) {{
@@ -2578,7 +2614,7 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
       const btn = el('sendToScreenBtn');
       const b = el('focusBanner');
       btn.disabled = true;
-      b.textContent = 'Generating Stage 3 Screening Packets…';
+      b.textContent = 'Preparing Stage 3 screening briefs…';
       b.className = 'banner info';
       b.style.display = 'block';
       try {{
@@ -2641,7 +2677,7 @@ EVALS_HTML = f"""<!DOCTYPE html>
     <header>
       <div class="brand">
         <h1>Simon <span class="pill blue">6. Evals (Vertex AI)</span></h1>
-        <p>Run 3-layer rubrics on each Simon agent, view Vertex AI scorecards, and catch regressions.</p>
+        <p>Check each agent against quality rubrics, review Vertex AI scorecards, and catch regressions.</p>
       </div>
       {render_top_nav("/evals")}
     </header>
@@ -2650,26 +2686,26 @@ EVALS_HTML = f"""<!DOCTYPE html>
 
     <section class="card">
       <div class="section-head">
-        <h2>Run Agent Eval</h2>
-        <span class="pill amber">data/evals/*_rubrics.json</span>
+        <h2>Run Quality Check</h2>
+        <span class="pill amber">Quality Rubrics</span>
       </div>
       <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between;">
         <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
           <label style="font-size:0.86rem;">
             Agent:
             <select id="evalAgentSelect" style="margin-left:6px;">
-              <option value="discovery-scout">discovery-scout</option>
+              <option value="discovery-scout">Discovery Scout</option>
             </select>
           </label>
           <label style="font-size:0.86rem;">
             Runner:
             <select id="evalModeSelect" style="margin-left:6px;">
-              <option value="offline">Offline Gates + Heuristics (Instant)</option>
-              <option value="vertex">Vertex AI Gen AI Eval Service (GCP)</option>
+              <option value="offline">Instant Quality Checks (Offline)</option>
+              <option value="vertex">Full Vertex AI Review (Cloud)</option>
             </select>
           </label>
           <label style="font-size:0.86rem;">
-            Trace:
+            Sample Run:
             <select id="evalTraceSelect" style="margin-left:6px; max-width:340px;">
               <option value="">All Samples (Batch)</option>
             </select>
@@ -2678,15 +2714,15 @@ EVALS_HTML = f"""<!DOCTYPE html>
             Samples:
             <select id="evalSampleSelect" style="margin-left:6px;">
               <option value="live_reports">Live Scouting Reports Only</option>
-              <option value="mixed">Live Reports + Golden Dataset</option>
-              <option value="golden_dataset">Golden Dataset Only</option>
+              <option value="mixed">Live Reports + Benchmark Set</option>
+              <option value="golden_dataset">Benchmark Set Only</option>
             </select>
           </label>
         </div>
         <div style="display:flex; gap:8px;">
           <button id="refreshEvalsBtn" class="btn" type="button">Refresh</button>
-          <button id="runAllEvalsBtn" class="btn" type="button">Run All Agents Baseline</button>
-          <button id="runEvalBtn" class="btn primary" type="button">Run Eval Now</button>
+          <button id="runAllEvalsBtn" class="btn" type="button">Run All Agents</button>
+          <button id="runEvalBtn" class="btn primary" type="button">Run Check Now</button>
         </div>
       </div>
     </section>
@@ -2694,7 +2730,7 @@ EVALS_HTML = f"""<!DOCTYPE html>
     <section class="card">
       <div class="section-head">
         <h2>Eval Runs &amp; Vertex AI Scorecards <span id="evalCountBadge" class="pill">0 runs</span></h2>
-        <span class="mono" style="font-size:0.8rem;">Synced from GitHub Actions (.github/workflows/eval-discovery-vertex.yml) &amp; UI runs</span>
+        <span style="font-size:0.8rem; color:var(--muted);">Synced from automated checks and manual runs</span>
       </div>
       <div id="evalRunsContainer">
         <div class="mono">Loading evaluation runs...</div>
@@ -2703,8 +2739,8 @@ EVALS_HTML = f"""<!DOCTYPE html>
 
     <section class="card">
       <div class="section-head">
-        <h2>Active Rubric Spec <span id="rubricVersionBadge" class="pill blue">v1.0.0</span></h2>
-        <span id="rubricAgentLabel" class="mono" style="font-size:0.8rem;">simon-discovery-scout</span>
+        <h2>Active Quality Rubrics <span id="rubricVersionBadge" class="pill blue">v1.0.0</span></h2>
+        <span id="rubricAgentLabel" class="pill">Discovery Scout</span>
       </div>
       <div id="rubricCatalogContainer">
         <div class="mono">Loading rubrics...</div>
@@ -2715,6 +2751,7 @@ EVALS_HTML = f"""<!DOCTYPE html>
   <script>
     const el = (id) => document.getElementById(id);
     function esc(s) {{ const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }}
+{_FORMAT_LABEL_JS}
 
     function showBanner(msg, isError) {{
       const b = el('evalBanner');
@@ -2725,14 +2762,14 @@ EVALS_HTML = f"""<!DOCTYPE html>
     }}
 
     function statusPill(status) {{
-      if (status === 'passed') return '<span class="pill ok">PASSED</span>';
-      if (status === 'failed' || status === 'error') return '<span class="pill bad">' + esc(status.toUpperCase()) + '</span>';
-      return '<span class="pill amber">' + esc((status || 'warning').toUpperCase()) + '</span>';
+      if (status === 'passed') return '<span class="pill ok">Passed</span>';
+      if (status === 'failed' || status === 'error') return '<span class="pill bad">' + esc(formatLabel(status)) + '</span>';
+      return '<span class="pill amber">' + esc(formatLabel(status || 'warning')) + '</span>';
     }}
 
     function renderRubrics(spec) {{
-      el('rubricVersionBadge').textContent = (spec.rubric_set_id || 'agent') + ' · v' + (spec.version || '1.0.0');
-      el('rubricAgentLabel').textContent = spec.agent_id || '';
+      el('rubricVersionBadge').textContent = 'v' + (spec.version || '1.0.0');
+      el('rubricAgentLabel').textContent = formatLabel(spec.agent_id || 'agent');
       const layers = spec.layers || [];
       el('rubricCatalogContainer').innerHTML = layers.map((layer) => {{
         const rows = (layer.rubrics || []).map((r) => `
@@ -2740,8 +2777,8 @@ EVALS_HTML = f"""<!DOCTYPE html>
             <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
               <strong>${{esc(r.name)}}</strong>
               <div style="display:flex; gap:6px;">
-                <span class="pill blue">${{esc(r.skill || 'SYSTEM.md')}}</span>
-                <span class="pill">${{esc(r.scale || 'pass_fail')}}</span>
+                <span class="pill blue">${{esc(r.skill ? formatLabel(r.skill) : 'Core Guidelines')}}</span>
+                <span class="pill">${{esc(formatLabel(r.scale || 'pass_fail'))}}</span>
               </div>
             </div>
             <div style="color:var(--muted); margin-top:4px;">${{esc(r.criteria || '')}}</div>
@@ -2750,7 +2787,7 @@ EVALS_HTML = f"""<!DOCTYPE html>
           <div style="margin-bottom:16px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
               <strong style="font-size:0.95rem;">${{esc(layer.name)}}</strong>
-              <span class="pill ${{layer.blocking ? 'bad' : 'amber'}}">${{layer.blocking ? 'Blocking Gate (100%)' : 'Target >= ' + Math.round((layer.pass_threshold || 0.75) * 100) + '%'}}</span>
+              <span class="pill ${{layer.blocking ? 'bad' : 'amber'}}">${{layer.blocking ? 'Required Gate (100%)' : 'Target >= ' + Math.round((layer.pass_threshold || 0.75) * 100) + '%'}}</span>
             </div>
             ${{rows}}
           </div>`;
@@ -2760,16 +2797,17 @@ EVALS_HTML = f"""<!DOCTYPE html>
     function renderEvalRuns(runs) {{
       el('evalCountBadge').textContent = `${{runs.length}} run${{runs.length === 1 ? '' : 's'}}`;
       if (!runs.length) {{
-        el('evalRunsContainer').innerHTML = '<div class="mono">No eval runs recorded yet. Click <strong>Run Eval Now</strong> or <strong>Run All Agents Baseline</strong> above.</div>';
+        el('evalRunsContainer').innerHTML = '<div class="mono">No quality checks recorded yet. Click <strong>Run Check Now</strong> or <strong>Run All Agents</strong> above.</div>';
         return;
       }}
       el('evalRunsContainer').innerHTML = runs.map((run, idx) => {{
         const pct = Math.round((run.overall_score || 0) * 100);
+        const agentLabel = formatLabel(run.agent_id || 'agent');
         const prev = runs.slice(idx + 1).find((r) => r.agent_id === run.agent_id);
         let deltaHtml = '';
         if (prev) {{
           const delta = Math.round(((run.overall_score || 0) - (prev.overall_score || 0)) * 100);
-          if (delta < 0) deltaHtml = `<span class="pill bad">REGRESSION ${{delta}}%</span>`;
+          if (delta < 0) deltaHtml = `<span class="pill bad">Regression ${{delta}}%</span>`;
           else if (delta > 0) deltaHtml = `<span class="pill ok">+${{delta}}% vs prev</span>`;
           else deltaHtml = `<span class="pill">0% vs prev</span>`;
         }}
@@ -2778,7 +2816,7 @@ EVALS_HTML = f"""<!DOCTYPE html>
           <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border); font-size:0.84rem;">
             <div>
               <strong>${{esc(d.name)}}</strong>
-              <span class="pill" style="margin-left:6px;">${{esc(d.skill || '')}}</span>
+              ${{d.skill ? `<span class="pill" style="margin-left:6px;">${{esc(formatLabel(d.skill))}}</span>` : ''}}
               <div style="color:var(--muted); font-size:0.78rem;">${{esc(d.detail || '')}}</div>
             </div>
             <div style="white-space:nowrap;">
@@ -2788,11 +2826,11 @@ EVALS_HTML = f"""<!DOCTYPE html>
         const cases = run.case_results || [];
         const casesHtml = cases.length ? `
           <details style="margin-top:10px;">
-            <summary style="cursor:pointer; font-size:0.84rem; color:var(--accent); font-weight:600;">Per-Case Judge Rationales (${{cases.length}})</summary>
+            <summary style="cursor:pointer; font-size:0.84rem; color:var(--accent); font-weight:600;">Per-Case Review Notes (${{cases.length}})</summary>
             <div style="margin-top:8px;">
               ${{cases.map((c) => `
                 <div class="step-row">
-                  <div><strong>${{esc(c.case_id)}}</strong> <span class="pill ${{c.passed ? 'ok' : 'bad'}}">${{c.passed ? 'PASS' : 'FAIL'}}</span></div>
+                  <div><strong>${{esc(formatLabel(c.case_id))}}</strong> <span class="pill ${{c.passed ? 'ok' : 'bad'}}">${{c.passed ? 'Pass' : 'Fail'}}</span></div>
                   <div style="color:var(--muted); margin-top:3px;">${{esc(c.rationale || '')}}</div>
                 </div>`).join('')}}
             </div>
@@ -2804,13 +2842,13 @@ EVALS_HTML = f"""<!DOCTYPE html>
           <div class="worker-card" style="margin-bottom:14px;">
             <div class="section-head" style="margin-bottom:8px;">
               <div>
-                <h3 style="margin:0; font-size:1rem;">${{esc(run.agent_id)}} · <span class="mono">${{esc(run.eval_run_id)}}</span> ${{statusPill(run.status)}} <span class="pill blue">${{pct}}% overall</span> ${{deltaHtml}}</h3>
-                <div class="mono" style="margin-top:4px; font-size:0.78rem;">
-                  Runner: ${{esc(run.runner)}} · Trigger: ${{esc(run.trigger || 'cli')}} · Samples: ${{esc(run.sample_count)}} (${{esc(run.sample_source || 'mixed')}}) · ${{esc(run.created_at || '')}}
+                <h3 style="margin:0; font-size:1rem;">${{esc(agentLabel)}} ${{statusPill(run.status)}} <span class="pill blue">${{pct}}% overall</span> ${{deltaHtml}}</h3>
+                <div style="margin-top:4px; font-size:0.78rem; color:var(--muted);">
+                  Runner: ${{esc(formatLabel(run.runner || ''))}} · Source: ${{esc(formatLabel(run.trigger || 'manual'))}} · Samples: ${{esc(run.sample_count)}} (${{esc(formatLabel(run.sample_source || 'mixed'))}}) · ${{esc(run.created_at || '')}}
                 </div>
               </div>
               <div style="display:flex; gap:8px; align-items:center;">
-                <span class="pill ${{run.passed_gates ? 'ok' : 'bad'}}">Gates: ${{run.passed_gates ? 'PASS' : 'FAIL'}}</span>
+                <span class="pill ${{run.passed_gates ? 'ok' : 'bad'}}">Gates: ${{run.passed_gates ? 'Pass' : 'Fail'}}</span>
                 ${{vertexBtn}}
               </div>
             </div>
@@ -2828,7 +2866,7 @@ EVALS_HTML = f"""<!DOCTYPE html>
       if (!agents.length) return;
       const sel = el('evalAgentSelect');
       const current = sel.value || 'discovery-scout';
-      sel.innerHTML = agents.map((a) => `<option value="${{esc(a.slug)}}">${{esc(a.slug)}} (${{a.rubric_count}} rubrics)</option>`).join('');
+      sel.innerHTML = agents.map((a) => `<option value="${{esc(a.slug)}}">${{esc(formatLabel(a.slug))}} (${{a.rubric_count}} checks)</option>`).join('');
       if (agents.some((a) => a.slug === current)) sel.value = current;
     }}
 
@@ -2880,10 +2918,10 @@ EVALS_HTML = f"""<!DOCTYPE html>
         if (!res.ok) {{
           showBanner(data.error || 'Eval run failed.', true);
         }} else if (allAgents) {{
-          showBanner(`Completed baseline across ${{(data.eval_runs || []).length}} agents.`, false);
+          showBanner(`Completed quality checks across ${{(data.eval_runs || []).length}} agents.`, false);
           await loadRubricAndRuns();
         }} else {{
-          showBanner(`Completed ${{data.agent_id}} (${{Math.round((data.overall_score || 0) * 100)}}% overall).`, false);
+          showBanner(`Completed ${{formatLabel(data.agent_id || 'agent')}} (${{Math.round((data.overall_score || 0) * 100)}}% overall).`, false);
           await loadRubricAndRuns();
         }}
       }} catch (err) {{
