@@ -1048,7 +1048,7 @@ def render_taste_profile_page() -> str:
     <header>
       <div class="brand">
         <h1>Simon <span class="pill purple">8. Taste Profile</span></h1>
-        <p>Inspect <strong>where we are</strong> in calibration, <strong>what we care about</strong> across 5 factual dossier skills &amp; human overrides, and <strong>our methodology</strong> separating objective scouting facts from subjective A&amp;R taste.</p>
+        <p>See how our judging model matches your taste across 5 factual skills, human overrides, and DSPy calibration.</p>
       </div>
       """
         + top_nav

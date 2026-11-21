@@ -36,7 +36,7 @@ from .investigator import (
     run_signal_forensics,
     run_track_record_mapper,
 )
-from .scout import DEFAULT_TASTE_BRIEF, run_scout
+from .scout import DEFAULT_TASTE_BRIEF
 from .screening import run_screening_batch
 
 
@@ -94,8 +94,8 @@ PHASE_DEFINITIONS: List[Dict[str, Any]] = [
         "name": "Discovery",
         "domain": "Intake · Discovery Scout Fleet",
         "agents": ["discovery-scout"],
-        "description": "Dispatches Discovery Scout agents across curated Source Registry channels to return verified, unranked leads.",
-        "input_hint": "Search brief + Source Registry IDs (or pick in Discovery tab)",
+        "description": "Sends Discovery Scouts across chosen sources to return checked, unranked leads.",
+        "input_hint": "Search brief and source IDs (or pick in Discovery)",
         "default_input": {
             "brief": DEFAULT_DISCOVERY_BRIEF,
             "source_ids": ["yt_sofar_sounds", "nyc_babys_all_right", "bc_brooklyn_soul_rnb"],
@@ -109,7 +109,7 @@ PHASE_DEFINITIONS: List[Dict[str, Any]] = [
         "name": "Identity",
         "domain": "Intake · Sequential Anchor",
         "agents": ["identity-resolver"],
-        "description": "Resolves canonical artist identity, official links, MusicBrainz ID, and business contact route.",
+        "description": "Finds the artist's official links, MusicBrainz ID, and public booking contact.",
         "input_hint": "Lead from Phase 1",
         "default_input": DEFAULT_LEAD_FIXTURE,
     },
@@ -119,7 +119,7 @@ PHASE_DEFINITIONS: List[Dict[str, Any]] = [
         "name": "Investigators ×3",
         "domain": "Intake · Parallel Fan-Out",
         "agents": ["footprint-profiler", "signal-forensics", "track-record-mapper"],
-        "description": "Fans out footprint-profiler, signal-forensics, and track-record-mapper concurrently.",
+        "description": "Runs footprint, audience comment, and live show investigators in parallel.",
         "input_hint": "Identity bundle from Phase 2A (or a raw lead)",
         "default_input": DEFAULT_LEAD_FIXTURE,
     },
@@ -129,7 +129,7 @@ PHASE_DEFINITIONS: List[Dict[str, Any]] = [
         "name": "Profile Join",
         "domain": "Intake · Deterministic Assembler",
         "agents": ["dossier-assembler"],
-        "description": "Merges Phase 2A + 2B into a clean Artist Profile, enforces abstention, and runs process evals.",
+        "description": "Merges Phase 2A and 2B into one factual Artist Dossier and runs process checks.",
         "input_hint": "Identity + Phase 2B results (or a raw lead)",
         "default_input": DEFAULT_LEAD_FIXTURE,
     },
@@ -139,8 +139,8 @@ PHASE_DEFINITIONS: List[Dict[str, Any]] = [
         "name": "Active Screening",
         "domain": "Decision Engine · Advocate / Skeptic / Judge",
         "agents": ["screen-advocate", "screen-skeptic", "screening-judge"],
-        "description": "Runs adversarial Advocate & Skeptic debate plus Neon Judge verdict on the Stage 2 Artist Dossier.",
-        "input_hint": "Dossier from Phase 2C (or lead_id already in /api/dossiers)",
+        "description": "Runs Advocate and Skeptic debate plus a Neon Judge verdict on the Artist Dossier.",
+        "input_hint": "Dossier from Phase 2C (or lead_id in /api/dossiers)",
         "default_input": {
             "lead_id": "lead_luna_jinna",
             "stage_name": "Luna Jinna",
@@ -152,7 +152,7 @@ PHASE_DEFINITIONS: List[Dict[str, Any]] = [
         "name": "Showcase Producer",
         "domain": "Outcome · Human Review",
         "agents": ["showcase-producer"],
-        "description": "Turns an elevated Stage 3 Screening Packet into a human-gated callback invitation (pending_human_review).",
+        "description": "Turns an elevated Screening Packet into a callback draft for human review.",
         "input_hint": "Elevated Screening Packet + showcase terms",
         "default_input": {
             "lead_id": "lead_luna_jinna",
