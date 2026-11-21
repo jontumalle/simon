@@ -29,6 +29,7 @@ from .discovery_ui import (
     REPORTS_HTML,
     TRACES_HTML,
     _NAV_CSS,
+    archive_agent_reports,
     dispatch_discovery_batch,
     get_agent_report,
     list_agent_reports,
@@ -1006,11 +1007,13 @@ def dispatch_http_request(
 
         if parsed.path in ("/api/field-news", "/api/reports"):
             qs = parse_qs(parsed.query)
+            include_archived = (qs.get("include_archived") or ["0"])[0].lower() in ("1", "true", "yes")
             reports = list_agent_reports(
                 store,
                 batch_id=(qs.get("batch_id") or [None])[0],
                 status=(qs.get("status") or [None])[0],
                 stage=(qs.get("stage") or [None])[0],
+                include_archived=include_archived,
                 limit=int((qs.get("limit") or ["50"])[0]),
             )
             return (
@@ -1210,6 +1213,36 @@ def dispatch_http_request(
             HTTPStatus.NOT_FOUND,
             "application/json; charset=utf-8",
             json.dumps({"error": "Not found."}).encode("utf-8"),
+        )
+
+    if method == "POST" and parsed.path == "/api/reports/archive":
+        try:
+            req = json.loads((raw_body or b"{}").decode("utf-8"))
+        except ValueError:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "Invalid JSON request body."}).encode("utf-8"),
+            )
+        report_ids = req.get("report_ids")
+        if report_ids is not None and not isinstance(report_ids, list):
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "Field 'report_ids' must be a list of report IDs."}).encode("utf-8"),
+            )
+        batch_id = req.get("batch_id")
+        archived_flag = True if "archived" not in req else bool(req.get("archived"))
+        result = archive_agent_reports(
+            store,
+            report_ids=report_ids,
+            batch_id=str(batch_id).strip() if batch_id else None,
+            archived=archived_flag,
+        )
+        return (
+            HTTPStatus.OK,
+            "application/json; charset=utf-8",
+            json.dumps(result, ensure_ascii=False).encode("utf-8"),
         )
 
     if method == "POST" and parsed.path == "/api/discovery/dispatch":
