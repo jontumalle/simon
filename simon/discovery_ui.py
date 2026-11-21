@@ -973,6 +973,7 @@ _NAV_CSS = """
   }
   .nav-group.stage-discovery .nav-group-label { color: var(--accent); }
   .nav-group.stage-investigation .nav-group-label { color: var(--teal); }
+  .nav-group.stage-screening .nav-group-label { color: var(--purple, #c084fc); }
   .nav-group a {
     padding: 6px 11px; border-radius: 8px; font-weight: 600; font-size: 0.84rem;
     border: 1px solid transparent; background: transparent; color: var(--muted);
@@ -985,11 +986,14 @@ _NAV_CSS = """
   .nav-group.stage-investigation a.active {
     background: var(--teal-bg); border-color: var(--teal); color: var(--teal);
   }
+  .nav-group.stage-screening a.active {
+    background: var(--purple-bg, rgba(192, 132, 252, 0.15)); border-color: var(--purple, #c084fc); color: var(--purple, #c084fc);
+  }
 """
 
 
 def render_top_nav(active_path: str) -> str:
-    """Render the shared two-section top navigation (Discovery vs Investigation)."""
+    """Render the shared three-section top navigation (Discovery, Investigation, Screening)."""
     def _link(href: str, label: str, elem_id: str = "") -> str:
         cls = ' class="active"' if active_path == href else ""
         id_attr = f' id="{elem_id}"' if elem_id else ""
@@ -1008,6 +1012,7 @@ def render_top_nav(active_path: str) -> str:
             _link("/", "5. Vocal Studio"),
         ]
     )
+    screening_links = _link("/screen", "6. Screening Deck", "screenNavLink")
     return (
         '<nav class="nav-sections" aria-label="Simon Pipeline Navigation">'
         '<div class="nav-group stage-discovery">'
@@ -1018,8 +1023,15 @@ def render_top_nav(active_path: str) -> str:
         '<span class="nav-group-label">Investigation</span>'
         f"{investigation_links}"
         "</div>"
+        '<div class="nav-group stage-screening">'
+        '<span class="nav-group-label">Screening</span>'
+        f"{screening_links}"
+        "</div>"
         "</nav>"
     )
+
+
+_render_top_nav = render_top_nav
 
 
 _SHARED_CSS = (
@@ -1027,9 +1039,10 @@ _SHARED_CSS = (
   :root {
     --bg: #0b0d12; --panel: #131722; --panel-2: #191f2e; --border: #262f45;
     --text: #eef2ff; --muted: #9aa5c4; --accent: #f59e0b; --accent-hover: #fbbf24;
-    --teal: #2dd4bf; --warn: #fb7185; --blue: #60a5fa;
+    --teal: #2dd4bf; --warn: #fb7185; --blue: #60a5fa; --purple: #c084fc;
     --amber-bg: rgba(245, 158, 11, 0.13); --teal-bg: rgba(45, 212, 191, 0.12);
     --warn-bg: rgba(251, 113, 133, 0.14); --blue-bg: rgba(96, 165, 250, 0.14);
+    --purple-bg: rgba(192, 132, 252, 0.15);
     --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
   }
@@ -1062,6 +1075,7 @@ _SHARED_CSS = (
   .pill.warn { color: var(--warn); border-color: rgba(251,113,133,0.4); background: var(--warn-bg); }
   .pill.amber { color: var(--accent); border-color: rgba(245,158,11,0.4); background: var(--amber-bg); }
   .pill.blue { color: var(--blue); border-color: rgba(96,165,250,0.4); background: var(--blue-bg); }
+  .pill.purple { color: var(--purple); border-color: rgba(192,132,252,0.45); background: var(--purple-bg); }
   .card {
     background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
     padding: 18px 20px; margin-bottom: 20px; box-shadow: 0 10px 28px rgba(0,0,0,0.24);
@@ -1829,7 +1843,10 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
     <section class="card">
       <div class="section-head">
         <h2>3. Stored Investigator Dossiers <span id="dossiersCountBadge" class="pill ok">0 dossiers</span></h2>
-        <span class="pill ok">Objective Facts Only · Unranked</span>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <span class="pill ok">Objective Facts Only · Unranked</span>
+          <a class="btn" href="/screen" style="border-color:rgba(192,132,252,0.45); color:var(--purple);">Open Screening Deck →</a>
+        </div>
       </div>
       <div id="dossiersList" style="display:flex; flex-direction:column; gap:16px;">
         <div class="mono">Loading stored investigator dossiers…</div>
