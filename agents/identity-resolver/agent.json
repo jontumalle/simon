@@ -1,9 +1,11 @@
 {
   "id": "simon-identity-resolver",
+  "description": "Stage 2 Phase A anchor: resolves canonical identity, public link graph, MusicBrainz MBID, and PII-safe contact route (1a Generic -> 1b Domain).",
   "base_agent": "antigravity-preview-09-2026",
   "agent_config": {
     "type": "antigravity",
-    "model": "gemini-4-hydrogen"
+    "model": "gemini-4-hydrogen",
+    "max_total_tokens": "64000"
   },
   "system_instruction_file": "SYSTEM.md",
   "tools": [
@@ -12,6 +14,9 @@
     {"type": "code_execution"}
   ],
   "base_environment": {
-    "type": "remote"
+    "type": "remote",
+    "env": {
+      "SIMON_DOMAIN": "music"
+    }
   }
 }
