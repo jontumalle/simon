@@ -17,3 +17,6 @@ base_environment:
     SIMON_DB_URL: https://simon-staging-139550420825.us-east1.run.app
 shared_skills:
   - simon-db
+  - youtube
+  - field-reporting
+  - source-discovery

@@ -19,8 +19,35 @@ ALLOWED_AGENT_COLLECTIONS = frozenset(
         "leads",
         "fleet_runs",
         "agent_runs",
+        "agent_reports",
     }
 )
+
+REPORT_FORBIDDEN_KEYS = frozenset(
+    {
+        "interaction_id",
+        "environment_id",
+        "metadata",
+        "raw_trace",
+        "trace_id",
+    }
+)
+
+VALID_REPORT_STATUSES = frozenset({"starting", "in_motion", "completed", "blocked"})
+VALID_REPORT_PHASES = frozenset({"looking_at", "finding", "analysis", "saved"})
+
+
+def sanitize_agent_report(obj: Any) -> Any:
+    """Recursively strip engineering telemetry keys from human-first agent reports."""
+    if isinstance(obj, dict):
+        return {
+            k: sanitize_agent_report(v)
+            for k, v in obj.items()
+            if k not in REPORT_FORBIDDEN_KEYS
+        }
+    if isinstance(obj, list):
+        return [sanitize_agent_report(item) for item in obj]
+    return obj
 
 VALID_SOURCE_CHANNELS = frozenset(
     {
@@ -140,6 +167,35 @@ def validate_collection_payload(collection: str, payload: Any) -> Tuple[List[str
             if not str(payload.get(field) or "").strip():
                 errors.append(f"Missing required field '{field}'.")
         doc_id = str(payload.get("agent_run_id") or payload.get("doc_id") or "").strip() or None
+
+    elif collection == "agent_reports":
+        for field in ("report_id", "agent_name", "stage", "status"):
+            if not str(payload.get(field) or "").strip():
+                errors.append(f"Missing required field '{field}'.")
+        status = str(payload.get("status") or "").strip()
+        if status and status not in VALID_REPORT_STATUSES:
+            errors.append(f"Invalid status '{status}'. Must be one of: {sorted(VALID_REPORT_STATUSES)}.")
+        for forbidden in sorted(REPORT_FORBIDDEN_KEYS):
+            if forbidden in payload:
+                errors.append(f"Field '{forbidden}' is forbidden in human-first agent_reports.")
+        steps = payload.get("steps")
+        if steps is not None and not isinstance(steps, list):
+            errors.append("Field 'steps' must be a list of human-readable Field News steps.")
+        elif isinstance(steps, list):
+            for idx, step in enumerate(steps):
+                if not isinstance(step, dict):
+                    errors.append(f"steps[{idx}] must be an object.")
+                    continue
+                for forbidden in sorted(REPORT_FORBIDDEN_KEYS):
+                    if forbidden in step:
+                        errors.append(f"steps[{idx}].{forbidden} is forbidden in agent_reports.")
+                phase = str(step.get("phase") or "").strip()
+                if phase and phase not in VALID_REPORT_PHASES:
+                    errors.append(f"steps[{idx}].phase '{phase}' must be one of: {sorted(VALID_REPORT_PHASES)}.")
+        findings = payload.get("findings")
+        if findings is not None and not isinstance(findings, list):
+            errors.append("Field 'findings' must be a list of human-readable findings.")
+        doc_id = str(payload.get("report_id") or payload.get("doc_id") or "").strip() or None
 
     return errors, doc_id
 
