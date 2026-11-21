@@ -27,9 +27,9 @@ Always follow [`.agents/skills/main-sync/SKILL.md`](./.agents/skills/main-sync/S
 - **Track A · Docs & Knowledge Sync (`--docs-only`, Auto-Approved → Direct to `origin/main`)**:
   - Any documentation or knowledge-model file (`*.md`, `PROJECT.md`, `RESOURCES.md`, `governance/**`, `pm/**`, `notes/**`, `ideas/**`, `data/**`, `agents/**`, `.agents/**`) is **auto-approved** on creation/edit (`PreToolUse`) and commits/pushes **straight to `origin/main` immediately** with zero ceremony via `python3 .agents/scripts/sync_main.py --docs-only -m "docs: ..."`.
   - `--docs-only` automatically leaves in-progress `simon/` or `tests/` edits untouched in your working tree (`--rebase --autostash`).
-- **Track B · Code Sync (`--code`, Gated by Tests & Trunk-First GitLab Flow)**:
-  - Runtime code and tests (`simon/**`, `tests/**`, `examples/**`) **never** ride along in background Steward doc syncs.
-  - Follow [governance/git-flow.md](./governance/git-flow.md): land small, contract-safe slices directly on `main` via `python3 .agents/scripts/sync_main.py --code --paths <files...> -m "feat(intake): ..."`, segment multi-step or contract-changing features onto `<domain>/<slug>` (`intake/*`, `decision/*`, `outcome/*`), and fast-forward `production` from verified `main` commits before live demos.
+- **Track B · Code Sync (`--code`, Always on Feature Branches → PR to `main`)**:
+  - Runtime code and tests (`simon/**`, `tests/**`, `examples/**`) **never** commit directly to `main` and **never** ride along in Steward doc syncs.
+  - Follow [governance/git-flow.md](./governance/git-flow.md): run every code/test task on a feature branch (`intake/<slug>`, `decision/<slug>`, `outcome/<slug>`, `feat/<slug>`, `fix/<slug>`) via `python3 .agents/scripts/sync_main.py --code --branch <domain>/<slug> --paths <files...> -m "feat(intake): ..."`, then open a PR to `main` (`gh pr create`).
 
 ## 4. Background Project Manager (Steward) — Every Chat Window
 - In **every chat window**, whenever documents, research, artifacts, plans, architectural findings, decisions, or code milestones are produced, launch a **background `Project Manager (Steward)` subagent** (`invoke_subagent` following `.agents/skills/project-manager/SKILL.md` + `.agents/skills/main-sync/SKILL.md`) to:

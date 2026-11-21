@@ -1,64 +1,58 @@
-# Git Governance — Trunk-First GitLab Flow
+# Git Governance — `main` + Feature Branches
 
-Simon uses a **trunk-first GitLab Flow** model. We keep documentation and small verified slices moving fast on `main`, segment larger or risky features onto track branches, and promote demo-ready builds downstream to `production`.
+Simon uses **`main` plus feature branches for all code work**. Documentation pushes directly to `main`, while **every code or test change runs on its own feature branch** and merges into `main` through a verified PR.
 
 ```mermaid
 flowchart LR
-    subgraph Feature["Segmented Feature Branches (When Needed)"]
+    MAIN_BASE["main (Protected Baseline)\n• Always Runnable & Demo-Safe\n• Live Docs (--docs-only)"]
+
+    subgraph Branches["Feature Branches (Every Code Task)"]
         B1["intake/<slug>"]
         B2["decision/<slug>"]
         B3["outcome/<slug>"]
+        B4["feat/<slug> · fix/<slug>"]
     end
 
-    MAIN["main (Living Trunk)\n• All Docs (--docs-only)\n• Small Verified Code (--code)"]
-    PROD["production (Demo Branch)\nFrozen, Verified Hackathon Build"]
+    PR["Verified Pull Request\nunittest + smoke + ruff pass"]
+    MAIN_NEXT["main (Updated Baseline)"]
 
-    B1 & B2 & B3 -- "Tests + Smoke + Lint Pass\n(PR or Clean Merge)" --> MAIN
-    MAIN -- "Fast-Forward Before Live Demo" --> PROD
+    MAIN_BASE -- "Branch off main" --> B1 & B2 & B3 & B4
+    B1 & B2 & B3 & B4 -- "sync_main.py --code --branch ..." --> PR
+    PR -- "Merge PR" --> MAIN_NEXT
 ```
 
 ---
 
-## 1. What Goes Straight to `main`
+## 1. Branch Naming by Domain
 
-1. **All Documentation & Knowledge (`--docs-only`)**:
-   - Every file in `governance/`, `pm/`, `notes/`, `ideas/`, `data/`, `agents/`, `.agents/`, and root `*.md` pushes straight to `main` with zero ceremony:
+Name every code branch by the pipeline domain it touches:
+
+| Prefix | When to Use |
+| :--- | :--- |
+| **`intake/<slug>`** | Scouting, YouTube/source connectors, media digestion, or evidence store (`simon/youtube.py`, `simon/store.py`) |
+| **`decision/<slug>`** | Decisions API + DSPy triage, critic rubrics, or shortlist synthesis (`simon/scout.py`, `simon/gemini.py`) |
+| **`outcome/<slug>`** | Scouting Studio UI, offer packets, or downstream showcase actions (`simon/web.py`) |
+| **`feat/<slug>` · `fix/<slug>`** | Cross-cutting tooling, hooks, schemas, or bug fixes |
+
+---
+
+## 2. How Code vs. Docs Move
+
+1. **Runtime Code & Tests (`--code` — Always on a Feature Branch)**:
+   - Never commit runtime code (`simon/`, `tests/`, `examples/`) directly onto `main`.
+   - Cut, verify, commit, and push your feature branch with one command, then open a PR:
+     ```bash
+     python3 .agents/scripts/sync_main.py --code \
+       --branch intake/flyer-ocr \
+       --paths simon/youtube.py tests/test_mvp_scout.py \
+       -m "feat(intake): add show flyer parser"
+
+     gh pr create --fill --base main --head intake/flyer-ocr
+     ```
+   - After pushing a feature branch from a shared workspace, switch back to `main` (`git switch main`) unless you are continuing immediately on that branch.
+
+2. **Documentation & Steward Updates (`--docs-only` — Direct to `main`)**:
+   - Files in `governance/`, `pm/`, `notes/`, `ideas/`, `data/`, `agents/`, `.agents/`, and root `*.md` push directly to `main` with zero ceremony:
      ```bash
      python3 .agents/scripts/sync_main.py --docs-only -m "docs: <summary>"
      ```
-2. **Small, Contract-Safe Code Slices (`--code`)**:
-   - If your change stays inside one domain, preserves shared contracts, and passes all checks, push it straight to `main`:
-     ```bash
-     python3 .agents/scripts/sync_main.py --code --paths <files...> -m "feat(intake): <summary>"
-     ```
-
----
-
-## 2. When You Must Cut a Feature Branch
-
-Segment work onto a short-lived branch (`intake/<slug>`, `decision/<slug>`, `outcome/<slug>`, or `feat/<slug>`) when **any** condition below applies:
-
-| Condition | Action |
-| :--- | :--- |
-| You change shared schemas (`data/mvp_contracts.json`, `data/talent_profile_schema.json`, `simon/models.py`) | Cut a branch and coordinate with your partner before merging to `main`. |
-| Your feature spans multiple commits and leaves tests or UI temporarily half-wired | Build on `<domain>/<slug>` (`--branch`) until end-to-end checks pass. |
-| You run an isolated experiment (for example, testing new Outcome mechanics or DSPy rubrics) | Segment onto `outcome/<slug>` or `decision/<slug>` so `main` stays stable. |
-
-Create and verify a segmented branch with one command:
-```bash
-python3 .agents/scripts/sync_main.py --code \
-  --branch intake/flyer-ocr \
-  --paths simon/ tests/ \
-  -m "feat(intake): prototype venue flyer parser"
-```
-
----
-
-## 3. Promoting `main` to `production` (GitLab Flow Downstream)
-
-- Do **not** maintain a separate `dev` branch beside `main`.
-- When `main` reaches a verified, demo-ready milestone, fast-forward `production` from `main`:
-  ```bash
-  git push origin main:production
-  ```
-- During live demos or judging, run from `production` (with `SIMON_AGENT_PREFIX="prod-"`) while active edits continue safely on `main` or feature branches.
