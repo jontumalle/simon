@@ -9,13 +9,21 @@
   },
   "system_instruction_file": "SYSTEM.md",
   "tools": [
-    {"type": "url_context"},
-    {"type": "code_execution"}
+    {
+      "type": "url_context"
+    },
+    {
+      "type": "code_execution"
+    }
   ],
   "base_environment": {
     "type": "remote",
     "env": {
-      "SIMON_DOMAIN": "music"
+      "SIMON_DOMAIN": "music",
+      "SIMON_DB_URL": "https://simon-staging-139550420825.us-east1.run.app"
     }
-  }
+  },
+  "shared_skills": [
+    "simon-db"
+  ]
 }
