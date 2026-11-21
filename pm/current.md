@@ -3,6 +3,10 @@
 *Updated: 2026-11-21*
 
 ## Live Now
+- **Stage 1 Discovery Agent Upgrade, Source Registry Seed & Evals (PR #7, `4414952`)**:
+  - **Two-Layer Discovery Agent (`agents/discovery-scout/`)**: Upgraded to Layer 1 domain-agnostic discovery discipline (`SYSTEM.md`, unranked `N` leads, `simon-db` online persistence) + Layer 2 music skill pack (`skills/music/SKILL.md`) + standalone contract verifier (`skills/music/scripts/verify_handoff.py`) validating `DiscoveryHandoff` v1.0.0.
+  - **Source Registry Data Model & Curated Seed (`data/`)**: Canonical queryable JSON schema in `data/source_registry_schema.json` and 36-source music reference seed in `data/reference/discovery_sources_seed.json` across all 9 `source_channel` enum values.
+  - **Discovery Process Map & Golden Eval Suite (`notes/`, `data/evals/`, `tests/`)**: End-to-end failure mode map in `notes/managed-agents/discovery-process-map.md`, offline golden eval cases in `data/evals/discovery_eval_cases.json`, and comprehensive eval suite in `tests/eval_discovery.py` (**37/37 eval checks** and **32/32 unit tests** passing).
 - **Public Staging App on Cloud Run + Firestore (PR #4, `feat/cloudrun-firestore-cicd`)**:
   - **Public URL**: `https://simon-staging-139550420825.us-east1.run.app` (no auth required, GCP `gemini4nyc26nyc-2203`, `us-east1`).
   - **Verified Live**: HTTP 200 on `/` (Web Studio UI), `/api/health` (`store_backend: firestore`), `/api/status` (`has_api_key: true`), `/api/agents` (all 9 `staging-simon-*` agents), `/api/db/source_registry` (25 seeded NYC sources), and `/api/agent-runs`. Documented in [RESOURCES.md](../RESOURCES.md) and [README.md](../README.md).

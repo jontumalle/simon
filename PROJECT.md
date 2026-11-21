@@ -34,6 +34,7 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 ## Recent sessions
 *Working memory (LRU pointer cache, max 12, most recent first). Maintained by the `project-manager` skill/subagent.*
 
+- 2026-11-21 · discovery agent & evals · upgraded Stage 1 discovery scout (PR #7), source registry seed & 37/37 evals → `agents/discovery-scout/`, `data/`, `notes/managed-agents/`, `tests/`
 - 2026-11-21 · managed-agents deploy & ci · merged PR #2 (deploy CLI, fleet API, Actions CI) & live-deployed 5 staging agents → `pm/log/2026-11-21-managed-agents-deploy-ci.md`, `simon/`, `.github/`
 - 2026-11-21 · leadgen & investigator · aligned 2-stage music pipeline (Lead Gen + Generalist Investigator, objective data, 2-layer skills) → `pm/log/2026-11-21-leadgen-investigator-alignment.md`
 - 2026-11-21 · governance charters · added top-level governance/ (main + feature-branch code flow, Intake/Decision/Outcome domains, safety) → `governance/`, `AGENTS.md`, `.agents/`
@@ -45,4 +46,3 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 - 2026-11-21 · dspy & decisions api · prototyped Part 1 Decisions+DSPy 3.5 triage, 4-table DB & Excalidraw arch → `pm/`, `RESOURCES.md`
 - 2026-11-21 · main-sync & toolchain · split dual-track Docs vs Code sync, auto-approved Steward doc writes, verified hooks → `AGENTS.md`, `.agents/`, `RESOURCES.md`, `tests/`
 - 2026-11-21 · agent-ops permissions · added PreToolUse toolchain auto-approve hook, 34 unit tests, RESOURCES.md docs → `.agents/`, `tests/`, `RESOURCES.md`, `pm/`
-- 2026-11-21 · governance & onboarding · established Life OS knowledge model, skills, RESOURCES.md, distilled kickoff transcript → `PROJECT.md`, `pm/`, `RESOURCES.md`, `.agents/`
