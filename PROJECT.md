@@ -12,7 +12,8 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 | Path | Role | Contents |
 | :--- | :--- | :--- |
 | **[RESOURCES.md](./RESOURCES.md)** | Toolchain Manifest | Running list of CLIs, SDKs, plugins, and env vars for all teammates & agents |
-| **[pm/](./pm/)** | Governance & PM | `current.md`, `scope.md`, `decisions.md`, `log/` (session logs), `process/` (workflow telemetry & improvements), `inbox/` |
+| **[governance/](./governance/README.md)** | Operating Charters | Durable charters: `git-flow.md`, `pipeline-domains.md`, `agent-ops-and-safety.md`, `knowledge-and-stewardship.md` |
+| **[pm/](./pm/)** | Project Management | `current.md`, `scope.md`, `decisions.md`, `log/` (session logs), `process/` (workflow telemetry & improvements), `inbox/` |
 | **[notes/managed-agents/](./notes/managed-agents/README.md)** | How-To & Architecture | Playbooks for Gemini Managed Agents, repo-mounted sandboxes, Credentials/Files APIs, deployment |
 | **[agents/](./agents/README.md)** | Curated Agents | Versioned definitions, prompts, environment specs, and deploy configs for Simon's Managed Agents |
 | **[simon/](./simon/)** | Product Code | Python runtime, multimodal audio listener (`gemini-4-hydrogen`), Managed Agent orchestrator |
@@ -33,6 +34,7 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 ## Recent sessions
 *Working memory (LRU pointer cache, max 12, most recent first). Maintained by the `project-manager` skill/subagent.*
 
+- 2026-11-21 · governance charters · added top-level governance/ (trunk-first GitLab Flow, Intake/Decision/Outcome domains, safety) → `governance/`, `AGENTS.md`, `.agents/`
 - 2026-11-21 · taste-brief youtube mvp · shipped & live-verified 3-unit YouTube vocal scout MVP (`run_881b5370`), SQLite & web studio → `simon/`, `agents/`, `notes/managed-agents/`, `pm/`
 - 2026-11-21 · talent-agency pipeline · designed 4-stage agency data model, JSON schema & dossier research → `data/`, `notes/managed-agents/`, `ideas/`, `pm/`
 - 2026-11-21 · plain-english alignment · added STE-100/Zinsser skill, global rule, and adaptive execution gate → `.agents/skills/plain-english/`, `pm/`

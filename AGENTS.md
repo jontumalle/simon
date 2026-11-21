@@ -11,7 +11,8 @@ This repository uses a **Life OS-inspired knowledge model** to keep governance, 
 - **Established Buckets**:
   - `PROJECT.md` — Root index, Focus, and LRU `Recent sessions` pointer cache (max 12).
   - `RESOURCES.md` — Running manifest of required CLIs, SDKs, plugins, env vars, and install commands for teammates' agents.
-  - `pm/` — Governance & Steward tracking (`current.md`, `scope.md`, `decisions.md`, `log/`, `inbox/`).
+  - `governance/` — Durable operating charters (`git-flow.md`, `pipeline-domains.md` for Intake / Decision Engine / Outcome, `agent-ops-and-safety.md`, `knowledge-and-stewardship.md`).
+  - `pm/` — Live Steward & sprint tracking (`current.md`, `scope.md`, `decisions.md`, `log/`, `process/`, `inbox/`).
   - `notes/managed-agents/` — How-to engineering playbooks and research on building/deploying Managed Agents ("agent as a repo").
   - `agents/` — Curated, deployable task-specific Managed Agents maintained in this repository.
   - `simon/` — Product runtime code and CLI (`python3 -m simon`).
@@ -24,11 +25,11 @@ This repository uses a **Life OS-inspired knowledge model** to keep governance, 
 ## 3. Dual-Track Synchronization (`main-sync` Skill: Docs Sync vs. Code Sync)
 Always follow [`.agents/skills/main-sync/SKILL.md`](./.agents/skills/main-sync/SKILL.md) — documentation and runtime code synchronize differently:
 - **Track A · Docs & Knowledge Sync (`--docs-only`, Auto-Approved → Direct to `origin/main`)**:
-  - Any documentation or knowledge-model file (`*.md`, `PROJECT.md`, `RESOURCES.md`, `pm/**`, `notes/**`, `ideas/**`, `data/**`, `agents/**`, `.agents/**`) is **auto-approved** on creation/edit (`PreToolUse`) and commits/pushes **straight to `origin/main` immediately** with zero ceremony via `python3 .agents/scripts/sync_main.py --docs-only -m "docs: ..."`.
+  - Any documentation or knowledge-model file (`*.md`, `PROJECT.md`, `RESOURCES.md`, `governance/**`, `pm/**`, `notes/**`, `ideas/**`, `data/**`, `agents/**`, `.agents/**`) is **auto-approved** on creation/edit (`PreToolUse`) and commits/pushes **straight to `origin/main` immediately** with zero ceremony via `python3 .agents/scripts/sync_main.py --docs-only -m "docs: ..."`.
   - `--docs-only` automatically leaves in-progress `simon/` or `tests/` edits untouched in your working tree (`--rebase --autostash`).
-- **Track B · Code Sync (`--code`, Gated by Tests & Scoped by `--paths` / `--branch`)**:
+- **Track B · Code Sync (`--code`, Gated by Tests & Trunk-First GitLab Flow)**:
   - Runtime code and tests (`simon/**`, `tests/**`, `examples/**`) **never** ride along in background Steward doc syncs.
-  - Sync code using `python3 .agents/scripts/sync_main.py --code --paths <files...> -m "feat(simon): ..."`, which enforces `unittest` + `python -m simon` smoke + `ruff` verification *before* committing (and supports `--branch feat/<slug>` + `gh pr create` when a change is breaking or needs teammate review before hitting `main`).
+  - Follow [governance/git-flow.md](./governance/git-flow.md): land small, contract-safe slices directly on `main` via `python3 .agents/scripts/sync_main.py --code --paths <files...> -m "feat(intake): ..."`, segment multi-step or contract-changing features onto `<domain>/<slug>` (`intake/*`, `decision/*`, `outcome/*`), and fast-forward `production` from verified `main` commits before live demos.
 
 ## 4. Background Project Manager (Steward) — Every Chat Window
 - In **every chat window**, whenever documents, research, artifacts, plans, architectural findings, decisions, or code milestones are produced, launch a **background `Project Manager (Steward)` subagent** (`invoke_subagent` following `.agents/skills/project-manager/SKILL.md` + `.agents/skills/main-sync/SKILL.md`) to:

@@ -25,7 +25,8 @@ simon/ (repo root)
 ├── PROJECT.md                # Root index + Focus + Recent sessions (LRU max 12)
 ├── AGENTS.md                 # Always-on Antigravity governance rules
 ├── RESOURCES.md              # Shared partner/agent CLI, SDK, plugin & env manifest
-├── pm/                       # Governance & Project Management (Steward layer)
+├── governance/               # Durable charters (git-flow, Intake/Decision/Outcome domains, safety)
+├── pm/                       # Live Project Management (Steward & Process Observer layer)
 │   ├── scope.md              # Guardrails & non-goals
 │   ├── current.md            # Live state, next actions, blockers
 │   ├── decisions.md          # Append-only dated decisions
