@@ -4,6 +4,8 @@
 
   const state = {
     currentRun: null,
+    activeTab: 'review',
+    activeSubtab: 'shortlist',
     selectedLeads: new Set(),
     sources: [],
     filteredSources: [],
@@ -73,8 +75,19 @@
       url.searchParams.set('tab', tabName);
       if (tabName === 'pipeline' && state.activePhaseId) {
         url.searchParams.set('phase', state.activePhaseId);
+        url.searchParams.delete('subtab');
+      } else if (tabName === 'review') {
+        url.searchParams.delete('phase');
+        if (state.activeSubtab && state.activeSubtab !== 'shortlist') {
+          url.searchParams.set('subtab', state.activeSubtab);
+        } else {
+          url.searchParams.delete('subtab');
+        }
       } else {
         url.searchParams.delete('phase');
+        url.searchParams.delete('subtab');
+        url.searchParams.delete('lead');
+        url.searchParams.delete('subject');
       }
       window.history.replaceState({}, '', url.toString());
     } catch (e) {
@@ -83,6 +96,7 @@
   }
 
   function switchTab(tabName, updateUrl = true) {
+    state.activeTab = tabName;
     document.querySelectorAll('.tab-panel').forEach((p) => p.classList.add('hidden'));
     const target = $('tab-' + tabName);
     if (target) target.classList.remove('hidden');
@@ -94,9 +108,11 @@
     if ($('reviewTopbarControls')) {
       $('reviewTopbarControls').classList.toggle('hidden', tabName !== 'review');
     }
+    const label = TAB_LABELS[tabName] || 'Studio';
     if ($('brandSubLabel')) {
-      $('brandSubLabel').textContent = TAB_LABELS[tabName] || 'Studio';
+      $('brandSubLabel').textContent = label;
     }
+    document.title = `Simon · 5. Vocal Studio · ${label}`;
     const moreMenu = $('moreMenu');
     if (moreMenu) moreMenu.removeAttribute('open');
     if (updateUrl) syncUrlState(tabName);
@@ -374,9 +390,14 @@
               <span class="pill ${lead.attribution_status === 'verified' ? 'ok' : ''}" style="margin-left:6px;">${esc(lead.attribution_status || 'lead')}</span>
               ${firstSeed.source_channel ? `<span class="pill" style="margin-left:4px;">${esc(formatLabel(firstSeed.source_channel))}</span>` : ''}
             </div>
-            <button type="button" class="btn btn-primary disc-send-pipeline-btn" data-lidx="${idx}" style="padding:5px 10px; font-size:11.5px;">
-              Investigate in Pipeline →
-            </button>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <a class="btn" href="/investigate?subject=${encodeURIComponent(lead.stage_name || '')}${lead.lead_id ? '&lead=' + encodeURIComponent(lead.lead_id) : ''}" style="padding:5px 10px; font-size:11.5px;">
+                Investigator Desk →
+              </a>
+              <button type="button" class="btn btn-primary disc-send-pipeline-btn" data-lidx="${idx}" style="padding:5px 10px; font-size:11.5px;">
+                Investigate in Pipeline →
+              </button>
+            </div>
           </div>
           ${lead.context_snippet ? `<div class="muted" style="font-size:12px;">${esc(lead.context_snippet.slice(0, 160))}</div>` : ''}
         </div>`;
@@ -455,6 +476,30 @@
       switchTab('pipeline');
     });
 
+    if ($('discClearOldRunsBtn')) {
+      $('discClearOldRunsBtn').addEventListener('click', async () => {
+        const btn = $('discClearOldRunsBtn');
+        btn.disabled = true;
+        setBanner('Archiving previous runs for a clean workspace…', 'info');
+        try {
+          const res = await fetch('/api/demo/reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          });
+          const payload = await res.json();
+          if (!res.ok) throw new Error(payload.error || 'Workspace reset failed');
+          if ($('discPostDispatchBar')) $('discPostDispatchBar').classList.add('hidden');
+          await Promise.all([refreshDiscoveryData(), refreshScreeningPackets()]);
+          setBanner('Workspace cleared — ready for a fresh end-to-end run.', 'info');
+        } catch (err) {
+          setBanner(err.message, 'error');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    }
+
     $('discDispatchBtn').addEventListener('click', async () => {
       if (!state.selectedSourceIds.size) {
         setBanner('Select at least one source from the Discovery Source Registry first.', 'error');
@@ -472,6 +517,7 @@
             agent_count: Number($('discAgentCountInput').value || 1),
             leads_per_agent: Number($('discLeadsPerAgentInput').value || 2),
             live: $('discLiveToggle').checked,
+            reset_previous: $('discResetPrevToggle') ? $('discResetPrevToggle').checked : false,
           }),
         });
         const payload = await res.json();
@@ -643,9 +689,7 @@
       seed_source_url: (clips && clips[0] && clips[0].source_url) || '',
       source_channel: 'youtube_session',
     };
-    state.activePhaseId = '2a_identity';
-    renderPipelineStepper();
-    $('phaseInputJson').value = JSON.stringify(handoff, null, 2);
+    selectPhase('2a_identity', handoff);
     switchTab('pipeline');
   }
 
@@ -800,12 +844,16 @@
   }
 
   // Subtabs in Tab 1 (Shortlist, All Artists, Screened & Elevated)
-  function selectSubtab(target) {
-    document.querySelectorAll('[data-subtab]').forEach((b) => b.classList.toggle('active', b.dataset.subtab === target));
-    $('shortlistContainer').classList.toggle('hidden', target !== 'shortlist');
-    $('allLeadsContainer').classList.toggle('hidden', target !== 'all');
+  function selectSubtab(target, updateUrl = true) {
+    state.activeSubtab = target || 'shortlist';
+    document.querySelectorAll('[data-subtab]').forEach((b) => b.classList.toggle('active', b.dataset.subtab === state.activeSubtab));
+    $('shortlistContainer').classList.toggle('hidden', state.activeSubtab !== 'shortlist');
+    $('allLeadsContainer').classList.toggle('hidden', state.activeSubtab !== 'all');
     if ($('screenedLeadsContainer')) {
-      $('screenedLeadsContainer').classList.toggle('hidden', target !== 'screened');
+      $('screenedLeadsContainer').classList.toggle('hidden', state.activeSubtab !== 'screened');
+    }
+    if (updateUrl && state.activeTab === 'review') {
+      syncUrlState('review');
     }
   }
 
@@ -819,7 +867,58 @@
     return m ? m[1] : '';
   }
 
-  function renderScreenedPackets() {
+  function findScreeningPacket(leadId, stageName) {
+    const packets = state.screeningPackets || [];
+    if (leadId) {
+      const byId = packets.find((p) => p.lead_id === leadId || (p.dossier_snapshot && p.dossier_snapshot.lead_id === leadId));
+      if (byId) return byId;
+    }
+    if (stageName) {
+      const low = String(stageName).toLowerCase();
+      return packets.find((p) => {
+        const ds = p.dossier_snapshot || {};
+        const name = p.stage_name || (ds.identity_and_contact && ds.identity_and_contact.stage_name) || '';
+        return name.toLowerCase() === low;
+      }) || null;
+    }
+    return null;
+  }
+
+  function buildProducerHandoffFromPacket(pkt, fallbackLeadId = '', fallbackStageName = 'Artist') {
+    const ds = (pkt && pkt.dossier_snapshot) || {};
+    const idObj = ds.identity_and_contact || {};
+    const judge = (pkt && pkt.judge_decision) || {};
+    const human = (pkt && pkt.human_review) || null;
+    const verdict = String((human && (human.human_verdict || human.verdict)) || judge.verdict || 'ELEVATE').toUpperCase();
+    const payload = {
+      lead_id: (pkt && pkt.lead_id) || ds.lead_id || fallbackLeadId || '',
+      stage_name: (pkt && pkt.stage_name) || idObj.stage_name || fallbackStageName || 'Artist',
+      screening_verdict: verdict,
+      showcase: 'First Listen NYC',
+      slot_minutes: 20,
+      fee_cap_usd: 500,
+    };
+    if (pkt && pkt.advocate_case) payload.advocate_case = pkt.advocate_case;
+    if (pkt && pkt.skeptic_case) payload.skeptic_case = pkt.skeptic_case;
+    if (pkt && pkt.judge_decision) payload.judge_decision = pkt.judge_decision;
+    if (human) payload.human_review = human;
+    return payload;
+  }
+
+  async function refreshScreeningPackets(focusLeadId = '') {
+    try {
+      const screenRes = await fetch('/api/screening/packets');
+      if (screenRes.ok) {
+        const scData = await screenRes.json();
+        state.screeningPackets = scData.packets || [];
+        renderScreenedPackets(focusLeadId);
+      }
+    } catch (e) {
+      // Ignore refresh error
+    }
+  }
+
+  function renderScreenedPackets(focusLeadId = '') {
     const container = $('screenedLeadsContainer');
     const btn = $('subtabScreenedBtn');
     const packets = state.screeningPackets || [];
@@ -856,10 +955,11 @@
       const score = judge.total_score != null ? `${Number(judge.total_score).toFixed(1)} / 10` : '—';
       const rationale = (human && human.reason) || judge.rationale || judge.summary || 'Screened candidate packet.';
       const media = (ds.source_and_media_queue && ds.source_and_media_queue.media_links) || [];
-      const firstUrl = (media[0] && media[0].url) || (ds.source_and_media_queue && ds.source_and_media_queue.seed_source_url) || '';
+      const firstUrl = (media[0] && (typeof media[0] === 'string' ? media[0] : media[0].url)) || (ds.source_and_media_queue && ds.source_and_media_queue.seed_source_url) || '';
       const ytId = extractYtIdFromUrl(firstUrl);
+      const isFocused = Boolean(focusLeadId && leadId === focusLeadId);
       return `
-        <article class="card artist-card">
+        <article class="card artist-card" data-lead-id="${esc(leadId)}" style="${isFocused ? 'border-color: var(--accent); box-shadow: 0 0 0 2px rgba(217,119,6,0.22);' : ''}">
           <div class="artist-card-top">
             <div>
               <h3 class="artist-name">${esc(stageName)}</h3>
@@ -901,18 +1001,29 @@
       prodBtn.addEventListener('click', () => {
         const pkt = sorted[Number(prodBtn.dataset.sidx)];
         if (!pkt) return;
-        const ds = pkt.dossier_snapshot || {};
-        const stageName = pkt.stage_name || (ds.identity_and_contact && ds.identity_and_contact.stage_name) || pkt.lead_id || 'Artist';
-        selectPhase('4_producer', {
-          lead_id: pkt.lead_id || ds.lead_id || '',
-          stage_name: stageName,
-          showcase: 'First Listen NYC',
-          slot_minutes: 20,
-          fee_cap_usd: 500,
-        });
+        selectPhase('4_producer', buildProducerHandoffFromPacket(pkt));
         switchTab('pipeline');
       });
     });
+
+    if (focusLeadId) {
+      const focusedCard = Array.from(container.querySelectorAll('[data-lead-id]')).find((c) => c.dataset.leadId === focusLeadId);
+      if (focusedCard) {
+        focusedCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const playBtn = focusedCard.querySelector('.screened-play-btn');
+        if (playBtn) {
+          playMoment(
+            `https://www.youtube.com/embed/${encodeURIComponent(playBtn.dataset.yt)}`,
+            playBtn.dataset.url,
+            `${playBtn.dataset.name} · Screened Clip`,
+            playBtn.dataset.name,
+            'Loaded from Stage 3 Screening Deck packet.',
+            false,
+            []
+          );
+        }
+      }
+    }
   }
 
   const promoteBtn = $('promoteToPhase2Btn');
@@ -972,8 +1083,11 @@
       $('phaseSourceBridgeBar').classList.toggle('hidden', phaseId !== '1_discovery');
     }
     if ($('phaseLeadBridgeBar')) {
-      const showLeads = ['2a_identity', '2b_investigators', '2c_dossier'].includes(phaseId);
+      const showLeads = ['2a_identity', '2b_investigators', '2c_dossier', '3_screening', '4_producer'].includes(phaseId);
       $('phaseLeadBridgeBar').classList.toggle('hidden', !showLeads);
+    }
+    if (state.activeTab === 'pipeline') {
+      syncUrlState('pipeline');
     }
   }
 
@@ -986,7 +1100,16 @@
       if (rawIdx === '') return;
       const lead = state.discoveredLeads[Number(rawIdx)];
       if (!lead) return;
-      $('phaseInputJson').value = JSON.stringify(leadToPhase2Handoff(lead), null, 2);
+      let payload;
+      if (state.activePhaseId === '4_producer') {
+        const pkt = findScreeningPacket(lead.lead_id, lead.stage_name);
+        payload = buildProducerHandoffFromPacket(pkt, lead.lead_id, lead.stage_name);
+      } else if (state.activePhaseId === '3_screening') {
+        payload = { lead_id: lead.lead_id || '', stage_name: lead.stage_name || lead.title || 'Unknown Artist' };
+      } else {
+        payload = leadToPhase2Handoff(lead);
+      }
+      $('phaseInputJson').value = JSON.stringify(payload, null, 2);
     });
   }
 
@@ -997,13 +1120,17 @@
       const batchId = result.output && result.output.batch_id;
       const dossierLeadId = result.phase_id === '2c_dossier' && result.output && result.output.lead_id;
       const screenLeadId = result.phase_id === '3_screening' && result.output && result.output.lead_id;
+      const producerLeadId = result.phase_id === '4_producer' && result.output && (result.output.lead_id || (result.input && result.input.lead_id));
       if (batchId) {
         const q = `?batch=${encodeURIComponent(batchId)}`;
-        batchLinks.innerHTML = `<a class="btn" style="padding:3px 8px; font-size:11px;" href="/field-news${q}">Field News →</a><a class="btn" style="padding:3px 8px; font-size:11px;" href="/reports${q}">Reports →</a>`;
+        batchLinks.innerHTML = `<a class="btn" style="padding:3px 8px; font-size:11px;" href="/field-news${q}">Field News →</a><a class="btn" style="padding:3px 8px; font-size:11px;" href="/reports${q}">Reports →</a><a class="btn btn-primary" style="padding:3px 8px; font-size:11px;" href="/investigate?autorun=1">Investigate →</a>`;
         batchLinks.classList.remove('hidden');
       } else if (screenLeadId) {
         const q = `?lead=${encodeURIComponent(screenLeadId)}`;
-        batchLinks.innerHTML = `<a class="btn btn-primary" style="padding:3px 8px; font-size:11px;" href="/screen${q}">Open in Screening Deck →</a>`;
+        batchLinks.innerHTML = `<a class="btn btn-primary" style="padding:3px 8px; font-size:11px;" href="/screen${q}">Open in Screening Deck →</a><a class="btn" style="padding:3px 8px; font-size:11px;" href="/?tab=review&amp;subtab=screened&amp;lead=${encodeURIComponent(screenLeadId)}">Talent Review →</a>`;
+        batchLinks.classList.remove('hidden');
+      } else if (producerLeadId) {
+        batchLinks.innerHTML = `<a class="btn btn-primary" style="padding:3px 8px; font-size:11px;" href="/?tab=review&amp;subtab=screened&amp;lead=${encodeURIComponent(producerLeadId)}">Open in Talent Review →</a><a class="btn" style="padding:3px 8px; font-size:11px;" href="/screen?lead=${encodeURIComponent(producerLeadId)}">Screening Deck →</a>`;
         batchLinks.classList.remove('hidden');
       } else if (dossierLeadId) {
         const q = `?lead=${encodeURIComponent(dossierLeadId)}`;
@@ -1086,9 +1213,7 @@
     list.querySelectorAll('.load-ckpt-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const rec = state.phaseRuns[Number(btn.dataset.cidx)];
-        state.activePhaseId = rec.phase_id;
-        renderPipelineStepper();
-        $('phaseInputJson').value = JSON.stringify(rec.input || {}, null, 2);
+        selectPhase(rec.phase_id, rec.input || {});
         renderPhaseResult(rec);
       });
     });
@@ -1145,6 +1270,8 @@
           const runRes = await fetch('/api/runs?id=' + encodeURIComponent(data.run_id));
           if (runRes.ok) renderRun(await runRes.json());
         }
+      } else if (phaseId === '3_screening') {
+        await refreshScreeningPackets();
       }
 
       if (advanceNext) {
@@ -1499,28 +1626,38 @@
     const reqSubject = params.get('subject');
     if (reqTab === 'review' && reqSubtab) {
       switchTab('review', false);
-      selectSubtab(reqSubtab);
+      selectSubtab(reqSubtab, false);
+      if (reqSubtab === 'screened' && reqLead) {
+        renderScreenedPackets(reqLead);
+      }
     } else if (reqLead || reqSubject) {
       const matched = state.discoveredLeads.find(
         (l) => (reqLead && l.lead_id === reqLead) || (reqSubject && (l.stage_name || '').toLowerCase() === reqSubject.toLowerCase())
       );
       const targetPhase = reqPhase || '2a_identity';
-      const handoff = targetPhase === '4_producer'
-        ? {
-            lead_id: reqLead || (matched && matched.lead_id) || '',
-            stage_name: reqSubject || (matched && matched.stage_name) || 'Artist',
-            showcase: 'First Listen NYC',
-            slot_minutes: 20,
-            fee_cap_usd: 500,
-          }
-        : (matched
+      let handoff;
+      if (targetPhase === '4_producer') {
+        const pkt = findScreeningPacket(reqLead || (matched && matched.lead_id), reqSubject || (matched && matched.stage_name));
+        handoff = buildProducerHandoffFromPacket(
+          pkt,
+          reqLead || (matched && matched.lead_id) || '',
+          reqSubject || (matched && matched.stage_name) || 'Artist'
+        );
+      } else if (targetPhase === '3_screening') {
+        handoff = {
+          lead_id: reqLead || (matched && matched.lead_id) || '',
+          stage_name: reqSubject || (matched && matched.stage_name) || 'Unknown Artist',
+        };
+      } else {
+        handoff = matched
           ? leadToPhase2Handoff(matched)
           : {
               lead_id: reqLead || '',
               stage_name: reqSubject || 'Unknown Artist',
               attribution_status: 'verified',
               source_channel: 'youtube_session',
-            });
+            };
+      }
       selectPhase(targetPhase, handoff);
       switchTab(reqTab || 'pipeline', false);
     } else if (reqPhase) {
