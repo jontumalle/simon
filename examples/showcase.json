@@ -1,0 +1,24 @@
+{
+  "brief": {
+    "event": "First Listen NYC",
+    "slot": "15-minute opening set at a listening-room showcase",
+    "fit": "An emerging vocalist with one original song and a set that works with a simple stage setup",
+    "artist_guarantee_usd": 250
+  },
+  "auditions": [
+    {
+      "id": "a01",
+      "artist": "Demo Singer A",
+      "consent": true,
+      "performance_notes": "Fictional listening notes. At 0:18, an unaccompanied verse builds into a controlled chorus. At 0:33, a sustained phrase resolves softly. The sample is a single take.",
+      "artist_notes": "The submitted song is an original. The artist can bring a guitarist for a 15-minute set."
+    },
+    {
+      "id": "a02",
+      "artist": "Demo Singer B",
+      "consent": true,
+      "performance_notes": "Fictional listening notes. At 0:15, a distinctive harmony enters over the lead. The clip provides strong evidence of arrangement choices and limited evidence of how the arrangement works live.",
+      "artist_notes": "The submitted clip is a layered studio take of an original. The artist has yet to specify a live setup."
+    }
+  ]
+}
