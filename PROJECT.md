@@ -34,6 +34,7 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 ## Recent sessions
 *Working memory (LRU pointer cache, max 12, most recent first). Maintained by the `project-manager` skill/subagent.*
 
+- 2026-11-21 · reporting layer & two-stage ui · merged PRs #13/#14 (`AgentReport` v1.0.0, shared field-reporting/source-discovery skills, 2-stage UI) → `pm/log/2026-11-21-reporting-layer-two-stage-ui.md`, `data/agent_report_schema.json`, `agents/_shared/skills/`
 - 2026-11-21 · discovery vertex evals · 3-layer rubrics, canonical eval_runs schema & Vertex AI eval service integration → `pm/log/2026-11-21-discovery-vertex-evals.md`, `data/evals/`
 - 2026-11-21 · label-signing recall eval · added 10-artist Option C recall benchmark (6 in-map, 4 out-of-map) & registered in data/README.md → `pm/log/2026-11-21-label-signing-recall-eval.md`, `data/evals/label_signing_recall_eval.json`
 - 2026-11-21 · staging fleet smoke test · verified 9/9 staging managed agents live via concurrent /api/fleet/run (0 failures) → `pm/log/2026-11-21-staging-fleet-smoke-test.md`
@@ -45,4 +46,3 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 - 2026-11-21 · governance charters · added top-level governance/ (main + feature-branch code flow, Intake/Decision/Outcome domains, safety) → `governance/`, `AGENTS.md`, `.agents/`
 - 2026-11-21 · taste-brief youtube mvp · shipped & live-verified 3-unit YouTube vocal scout MVP (`run_881b5370`), SQLite & web studio → `simon/`, `agents/`, `notes/managed-agents/`, `pm/`
 - 2026-11-21 · talent-agency pipeline · designed 4-stage agency data model, JSON schema & dossier research → `data/`, `notes/managed-agents/`, `ideas/`, `pm/`
-- 2026-11-21 · plain-english skill · added on-command STE-100, Zinsser, Mermaid, and dialectic alignment skill → `.agents/skills/plain-english/`, `pm/`
