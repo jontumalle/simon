@@ -170,6 +170,336 @@ PHASE_DEFINITIONS: List[Dict[str, Any]] = [
 PHASE_MAP: Dict[str, Dict[str, Any]] = {p["id"]: p for p in PHASE_DEFINITIONS}
 
 
+DEFAULT_IDENTITY_BUNDLE_FIXTURE: Dict[str, Any] = {
+    "lead_id": "lead_luna_jinna",
+    "identity_and_contact": {
+        "stage_name": "Luna Jinna",
+        "aliases": [],
+        "pronouns": "she/her",
+        "project_type": "solo_vocalist",
+        "home_city": "New York, NY",
+        "home_neighborhood": "Brooklyn",
+        "bio_text": "NYC vocalist & pianist. Stripped-back live room arrangements. Booking: public contact form on official site.",
+        "platform_urls": {
+            "youtube": "https://www.youtube.com/@lunajinna",
+            "instagram": "https://www.instagram.com/lunajinna",
+            "bandcamp": "https://lunajinna.bandcamp.com",
+        },
+        "musicbrainz_mbid": None,
+        "has_public_business_contact": True,
+        "contact_route_type": "official_site_form",
+    },
+    "source_and_media_queue": {
+        "source_channel": "youtube_live_session",
+        "seed_source_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "attribution_status": "verified",
+        "media_links": [
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "https://www.youtube.com/watch?v=9bZkp7q19f0",
+        ],
+    },
+}
+
+
+AGENT_INPUT_PRESETS: Dict[str, Dict[str, Any]] = {
+    "discovery-scout": {
+        "input_hint": "Search brief & requested lead count (Stage 1 Discovery)",
+        "default_input": {
+            "search_brief": "Find NYC-based emerging indie vocalists performing stripped-back live sessions",
+            "requested_count": 3,
+            "domain": "music",
+        },
+    },
+    "identity-resolver": {
+        "input_hint": "Single DiscoveryLead from Stage 1 (Phase 2A)",
+        "default_input": {
+            "lead_id": "lead_mira_sol",
+            "stage_name": "Mira Sol",
+            "attribution_status": "verified",
+            "context_snippet": "Performed stripped-back original set at Brooklyn loft session.",
+            "seed_sources": [
+                {
+                    "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                    "source_channel": "youtube_live_session",
+                    "seed_query_or_venue_node": "Sofar Sounds Brooklyn live vocal session",
+                    "discovered_at": "2026-11-21T19:44:00Z",
+                    "notes": "Live acoustic room performance recorded in Brooklyn.",
+                }
+            ],
+        },
+    },
+    "footprint-profiler": {
+        "input_hint": "Resolved IdentityBundle with public artifact URLs (Phase 2B)",
+        "default_input": DEFAULT_IDENTITY_BUNDLE_FIXTURE,
+    },
+    "signal-forensics": {
+        "input_hint": "Resolved IdentityBundle with public pages for comment sampling (Phase 2B)",
+        "default_input": {
+            **DEFAULT_IDENTITY_BUNDLE_FIXTURE,
+            "comment_sampling_targets": [
+                "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "https://www.youtube.com/watch?v=9bZkp7q19f0",
+            ],
+            "max_comments_to_sample": 50,
+        },
+    },
+    "track-record-mapper": {
+        "input_hint": "Resolved IdentityBundle with bio, links & city for milestones (Phase 2B)",
+        "default_input": {
+            **DEFAULT_IDENTITY_BUNDLE_FIXTURE,
+            "focus": ["show_history", "upcoming_shows", "public_team_mentions", "collaborator_credits"],
+        },
+    },
+    "performance-critic": {
+        "input_hint": "Showcase brief + audition performance notes & timestamps",
+        "default_input": {
+            "brief": {
+                "event": "First Listen NYC",
+                "slot": "15-minute opening set at a listening-room showcase",
+                "fit": "An emerging vocalist with one original song and distinctive phrasing",
+            },
+            "auditions": [
+                {
+                    "audition_id": "a01",
+                    "performance_notes": "At 0:18, an unaccompanied verse builds into a controlled chorus. At 0:33, a sustained phrase resolves softly. Single live room take.",
+                },
+                {
+                    "audition_id": "a02",
+                    "performance_notes": "At 0:15, a distinctive harmony enters over the lead. Layered studio take with heavy compression; live execution unverified.",
+                },
+            ],
+        },
+    },
+    "booking-critic": {
+        "input_hint": "Showcase brief + audition setup & stage logistics notes",
+        "default_input": {
+            "brief": {
+                "event": "First Listen NYC",
+                "slot": "15-minute opening set at a listening-room showcase",
+                "stage_constraints": "Vocal mic + 1 acoustic instrument DI; 5-minute changeover",
+                "original_song_required": True,
+                "artist_guarantee_usd": 250,
+            },
+            "auditions": [
+                {
+                    "audition_id": "a01",
+                    "artist_notes": "Submitted song is an original. Bringing one guitarist for a 15-minute stripped set.",
+                },
+                {
+                    "audition_id": "a02",
+                    "artist_notes": "Submitted clip is a layered studio take of an original. Live stage setup not yet specified.",
+                },
+            ],
+        },
+    },
+    "synthesis-scout": {
+        "input_hint": "Taste brief + artist_leads[] + timestamped clip_evidence[]",
+        "default_input": {
+            "brief": {
+                "prompt": DEFAULT_TASTE_BRIEF,
+            },
+            "artist_leads": [
+                {
+                    "lead_id": "lead_luna_jinna",
+                    "stage_name": "Luna Jinna",
+                    "attribution_status": "verified",
+                }
+            ],
+            "clip_evidence": [
+                {
+                    "clip_id": "clip_01",
+                    "lead_id": "lead_luna_jinna",
+                    "title": "Luna Jinna - Stripped Piano Live Session",
+                    "source_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                    "recording_context": "live",
+                    "observations": [
+                        {
+                            "observation_id": "obs_01",
+                            "timestamp": "0:42",
+                            "dimension": "phrasing",
+                            "musical_choice": "Delays the pre-chorus entrance behind the piano pulse, then drops to a whisper on the turnaround.",
+                        }
+                    ],
+                }
+            ],
+        },
+    },
+    "showcase-producer": {
+        "input_hint": "Event brief + performance-critic & booking-critic reports",
+        "default_input": {
+            "brief": {
+                "event": "First Listen NYC",
+                "slot": "15-minute opening set at a listening-room showcase",
+                "artist_guarantee_usd": 250,
+            },
+            "performance_critic_report": [
+                {
+                    "audition_id": "a01",
+                    "distinctive_choice": "Unaccompanied verse at 0:18 builds cleanly into a controlled chorus; soft resolution at 0:33.",
+                    "live_uncertainty": "Single clip only; no second tempo verified.",
+                },
+                {
+                    "audition_id": "a02",
+                    "distinctive_choice": "Distinctive vocal harmony entrance at 0:15.",
+                    "live_uncertainty": "Layered studio take; live vocal projection unverified.",
+                },
+            ],
+            "booking_critic_report": [
+                {
+                    "audition_id": "a01",
+                    "logistics_fit": "Strong fit: original song confirmed, voice + single guitarist matches 5-minute changeover.",
+                    "open_questions": ["Confirm date availability."],
+                },
+                {
+                    "audition_id": "a02",
+                    "logistics_fit": "Incomplete: live stage setup and gear needs not yet specified.",
+                    "open_questions": ["Confirm stripped live arrangement and gear list."],
+                },
+            ],
+        },
+    },
+    "screen-advocate": {
+        "input_hint": "Stage 2 InvestigatorDossier (5 factual blocks) for upside case",
+        "default_input": {
+            "lead_id": "lead_luna_jinna",
+            "dossier": {
+                "lead_id": "lead_luna_jinna",
+                **{k: v for k, v in DEFAULT_IDENTITY_BUNDLE_FIXTURE.items() if k != "lead_id"},
+                "public_footprint": {
+                    "footprint_regime": "early_dsp_inflection",
+                    "public_reach": {"youtube_subscribers": 4200, "bandcamp_supporters": 86},
+                    "top_release_view_share_pct": 56.4,
+                },
+                "comment_forensics": {
+                    "sample_size": 24,
+                    "genuine_praise": 15,
+                    "release_requests": 5,
+                    "live_show_requests": 3,
+                    "jokes_or_spam": 1,
+                    "notable_commenters": [
+                        {
+                            "handle": "@rockwood_booking",
+                            "channel_url": "https://www.youtube.com/@rockwood_booking",
+                            "role_or_context": "NYC venue booker",
+                            "comment_excerpt": "Would love to host this stripped piano set.",
+                        }
+                    ],
+                },
+                "live_history_and_credits": {
+                    "show_history": [
+                        {"venue": "Rockwood Music Hall Stage 2", "city": "New York, NY", "capacity": 180, "date": "2026-09-12"}
+                    ],
+                    "upcoming_shows": [
+                        {"venue": "Baby's All Right", "city": "Brooklyn, NY", "capacity": 280, "date": "2026-10-18"}
+                    ],
+                    "highest_venue_cap_observed": 280,
+                    "public_team_mentions": {"management": None, "booking_agent": None, "label": None},
+                    "collaborator_credits": [],
+                },
+                "missing_fields": ["musicbrainz_mbid"],
+            },
+        },
+    },
+    "screen-skeptic": {
+        "input_hint": "Stage 2 InvestigatorDossier (5 factual blocks) for risk & dealbreaker audit",
+        "default_input": {
+            "lead_id": "lead_luna_jinna",
+            "dossier": {
+                "lead_id": "lead_luna_jinna",
+                **{k: v for k, v in DEFAULT_IDENTITY_BUNDLE_FIXTURE.items() if k != "lead_id"},
+                "public_footprint": {
+                    "footprint_regime": "early_dsp_inflection",
+                    "public_reach": {"youtube_subscribers": 4200, "bandcamp_supporters": 86},
+                    "top_release_view_share_pct": 56.4,
+                },
+                "comment_forensics": {
+                    "sample_size": 24,
+                    "genuine_praise": 15,
+                    "release_requests": 5,
+                    "live_show_requests": 3,
+                    "jokes_or_spam": 1,
+                    "notable_commenters": [],
+                },
+                "live_history_and_credits": {
+                    "show_history": [
+                        {"venue": "Rockwood Music Hall Stage 2", "city": "New York, NY", "capacity": 180, "date": "2026-09-12"}
+                    ],
+                    "upcoming_shows": [],
+                    "highest_venue_cap_observed": 180,
+                    "public_team_mentions": {"management": None, "booking_agent": None, "label": None},
+                    "collaborator_credits": [],
+                },
+                "missing_fields": ["musicbrainz_mbid", "collaborator_credits"],
+            },
+        },
+    },
+    "screening-judge": {
+        "input_hint": "InvestigatorDossier + advocate_case + skeptic_case for 0-10 verdict",
+        "default_input": {
+            "lead_id": "lead_luna_jinna",
+            "dossier": {
+                "lead_id": "lead_luna_jinna",
+                **{k: v for k, v in DEFAULT_IDENTITY_BUNDLE_FIXTURE.items() if k != "lead_id"},
+                "public_footprint": {
+                    "footprint_regime": "early_dsp_inflection",
+                    "top_release_view_share_pct": 56.4,
+                },
+                "comment_forensics": {
+                    "sample_size": 24,
+                    "genuine_praise": 15,
+                    "release_requests": 5,
+                    "live_show_requests": 3,
+                    "jokes_or_spam": 1,
+                    "notable_commenters": [],
+                },
+                "live_history_and_credits": {
+                    "show_history": [
+                        {"venue": "Rockwood Music Hall Stage 2", "city": "New York, NY", "capacity": 180, "date": "2026-09-12"}
+                    ],
+                    "upcoming_shows": [],
+                    "highest_venue_cap_observed": 180,
+                    "public_team_mentions": {"management": None, "booking_agent": None, "label": None},
+                    "collaborator_credits": [],
+                },
+                "missing_fields": ["musicbrainz_mbid"],
+            },
+            "advocate_case": {
+                "standout_hook": "Unsigned NYC vocalist with 2 verified live clips and organic release/show demand.",
+                "pros": [
+                    {"skill": "dossier-media", "claim": "Repeatable live vocal delivery", "evidence": "2 verified YouTube live clips"},
+                    {"skill": "dossier-audience", "claim": "High-intent listener pull", "evidence": "5 release_requests, 3 live_show_requests in 24 comments"},
+                ],
+            },
+            "skeptic_case": {
+                "cons": [
+                    {"skill": "dossier-track-record", "claim": "No upcoming shows listed", "evidence": "upcoming_shows is empty"},
+                ],
+                "missing_evidence_flags": ["musicbrainz_mbid"],
+                "dealbreakers_checked": ["contact_route", "attribution_status", "view_concentration", "major_label_lockup"],
+            },
+        },
+    },
+}
+
+
+def get_agent_input_preset(package_name: str) -> Dict[str, Any]:
+    """Return the tailored default input JSON and hint for an agent package."""
+    preset = AGENT_INPUT_PRESETS.get(package_name)
+    if preset:
+        return {
+            "input_hint": preset["input_hint"],
+            "default_input": json.loads(json.dumps(preset["default_input"])),
+        }
+    return {
+        "input_hint": "JSON object or array for batch fan-out",
+        "default_input": {
+            "lead_id": "lead_luna_jinna",
+            "stage_name": "Luna Jinna",
+            "seed_source_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        },
+    }
+
+
 def evaluate_agent_output(agent_id: str, output_payload: Any) -> Dict[str, Any]:
     """Run fast deterministic contract and safety checks on any agent output."""
     checks: List[Dict[str, Any]] = []

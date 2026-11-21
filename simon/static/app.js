@@ -1021,21 +1021,38 @@
   }
 
   function selectAgent(agent) {
+    const changed = !state.activeAgent || state.activeAgent.package !== agent.package;
     state.activeAgent = agent;
     renderAgentRoster();
     $('labAgentName').textContent = agent.package;
     $('labAgentDeployedId').textContent = agent.deployed_id;
     $('labAgentModel').textContent = agent.model || 'default';
-    $('labInput').value = JSON.stringify(
-      {
-        lead_id: 'lead_luna_jinna',
-        stage_name: 'Luna Jinna',
-        seed_source_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-      },
-      null,
-      2
-    );
+    const hintEl = $('labInputHint');
+    if (hintEl) {
+      hintEl.textContent = agent.input_hint || 'JSON object or array for batch fan-out';
+    }
+    const defaultPayload = agent.default_input || {
+      lead_id: 'lead_luna_jinna',
+      stage_name: 'Luna Jinna',
+      seed_source_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    };
+    $('labInput').value = JSON.stringify(defaultPayload, null, 2);
+    if (changed) {
+      state.lastLabResult = null;
+      $('labLatency').textContent = '—';
+      $('labChecksRow').innerHTML = '';
+      $('labOutputRaw').textContent = '{}';
+      $('labOutputFormatted').innerHTML =
+        '<div class="muted">Run an agent to inspect its response and contract checks.</div>';
+    }
     renderEvalHistory();
+  }
+
+  const labResetBtn = $('labResetInputBtn');
+  if (labResetBtn) {
+    labResetBtn.addEventListener('click', () => {
+      if (state.activeAgent) selectAgent(state.activeAgent);
+    });
   }
 
   function renderEvalHistory() {

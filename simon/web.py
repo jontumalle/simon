@@ -51,6 +51,7 @@ from .phases import (
     PHASE_DEFINITIONS,
     PHASE_RUNS_COLLECTION,
     evaluate_agent_output,
+    get_agent_input_preset,
     run_phase,
 )
 from .registry import (
@@ -581,6 +582,7 @@ def dispatch_http_request(
             items = []
             for pkg_dir in list_agent_packages():
                 compiled = compile_agent_package(pkg_dir, prefix=prefix)
+                preset = get_agent_input_preset(compiled["package"])
                 items.append(
                     {
                         "package": compiled["package"],
@@ -588,6 +590,8 @@ def dispatch_http_request(
                         "sha256": compiled["sha256"],
                         "base_agent": compiled["payload"]["base_agent"],
                         "model": compiled["payload"].get("agent_config", {}).get("model"),
+                        "input_hint": preset["input_hint"],
+                        "default_input": preset["default_input"],
                     }
                 )
             return (
