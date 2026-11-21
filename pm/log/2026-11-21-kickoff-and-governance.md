@@ -11,3 +11,7 @@
 - **Continuous `main` Sync, Hooks & Full Toolchain Completed**:
   - Installed `uv 0.13.9`, `Python 3.12.16`, `gcloud 594.0.0`, `gemini-api 0.5.0`, and `.venv` (`google-genai 3.6.1`, `pydantic`, `pyyaml`, `pytest`, `ruff`); enabled `gemini-api` and `wispr-flow` Antigravity plugins.
   - Built `.agents/scripts/sync_main.py`, `.agents/scripts/stop_doc_sync.py` (`Stop` hook), upgraded `.agents/scripts/session_start.py` (`SessionStart` hook), added `.agents/skills/main-sync/SKILL.md`, and updated `AGENTS.md` + `.agents/skills/project-manager/SKILL.md` for cross-window artifact harvesting and zero-repercussion `main` doc pushing.
+- **Repo-Scoped `PreToolUse` Toolchain Auto-Approval Hook (`486822e`)**:
+  - Owner confirmed adding a repo-scoped Antigravity `PreToolUse` permission hook so both teammates' agents auto-approve safe Simon toolchain commands (`RESOURCES.md`) while keeping destructive, token-exfiltrating, and untrusted commands gated by default policy.
+  - Implemented `.agents/scripts/auto_approve_toolchain.py` and wired `"simon-toolchain-permissions"` (`matcher: "run_command"`) in `.agents/hooks.json`.
+  - Added 34 unit test cases + CLI contract check in `tests/test_auto_approve_hook.py` (all passing under macOS system Python 3.9 via `python3 -m unittest discover -s tests -v`), and documented repo-scoped hooks in Section 6 of `RESOURCES.md`.
