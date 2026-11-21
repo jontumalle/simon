@@ -82,16 +82,7 @@ jobs:
           else
             if [ -n "${SIMON_AGENT_DB_TOKEN:-}" ]; then
               echo "Syncing simon-db-token credential on /v1beta/credentials..."
-              python3 -c '
-import os, json
-from simon.deploy import sync_env_credential
-res = sync_env_credential(
-    credential_id="simon-db-token",
-    value=os.environ["SIMON_AGENT_DB_TOKEN"],
-    trusted_domains=["simon-staging-139550420825.us-east1.run.app"],
-)
-print(json.dumps(res))
-'
+              python3 -c 'import json, os; from simon.deploy import sync_env_credential; print(json.dumps(sync_env_credential("simon-db-token", os.environ["SIMON_AGENT_DB_TOKEN"], ["simon-staging-139550420825.us-east1.run.app"])))'
             fi
             echo "Deploying Managed Agents live to /v1beta/agents (prefix=$PREFIX)..."
           fi
