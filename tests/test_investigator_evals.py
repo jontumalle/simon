@@ -37,11 +37,11 @@ CONTRACT_PATH = REPO_ROOT / "data" / "discovery_investigator_contract.json"
 
 def build_demo_music_pack() -> MusicDomainPack:
     """Deterministic offline MusicDomainPack fixture matching examples/discovery_handoff_demo.json."""
-    mira_seed = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-    mira_clip2 = "https://www.youtube.com/watch?v=9bZkp7q19f0"
+    mira_seed = "https://www.youtube.com/watch?v=3-K26i1go0s"
+    mira_clip2 = "https://www.youtube.com/watch?v=BcQnHzrc24Y"
     mira_linktree = "https://linktr.ee/mirasolmusic"
     mira_bandcamp = "https://mirasol.bandcamp.com"
-    devon_seed = "https://www.youtube.com/watch?v=M7lc1UVf-VE"
+    devon_seed = "https://www.youtube.com/watch?v=RXwE1G7_U9M"
 
     return MusicDomainPack(
         page_fixtures={

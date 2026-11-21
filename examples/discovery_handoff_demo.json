@@ -10,11 +10,11 @@
       "stage_name": "Mira Sol",
       "seed_sources": [
         {
-          "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+          "url": "https://www.youtube.com/watch?v=3-K26i1go0s",
           "source_channel": "youtube_live_session",
-          "seed_query_or_venue_node": "Sofar Sounds Brooklyn live vocal session",
+          "seed_query_or_venue_node": "Mahogany Session live vocal session",
           "discovered_at": "2026-11-21T19:44:00Z",
-          "notes": "Live acoustic room performance recorded in Brooklyn."
+          "notes": "Live stripped-back vocal session."
         }
       ],
       "attribution_status": "verified",
@@ -25,11 +25,11 @@
       "stage_name": "Devon K",
       "seed_sources": [
         {
-          "url": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
+          "url": "https://www.youtube.com/watch?v=RXwE1G7_U9M",
           "source_channel": "open_mic_lineup",
-          "seed_query_or_venue_node": "Pete's Candy Store open mic",
+          "seed_query_or_venue_node": "Sofar NYC live room session",
           "discovered_at": "2026-11-21T19:44:30Z",
-          "notes": "Open mic clip; no DSP links listed."
+          "notes": "Live NYC room clip; sparse public metadata fixture."
         }
       ],
       "attribution_status": "uncertain",
