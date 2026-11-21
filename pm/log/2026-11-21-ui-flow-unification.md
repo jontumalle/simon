@@ -1,6 +1,12 @@
-# 2026-11-21 — UI Drift, Discovery Sub-Flow & Plain-English Pass (PRs #30 & #31)
+# 2026-11-21 — UI Drift, Discovery Sub-Flow & Plain-English Overhaul (PRs #30, #31 & #32)
 
 ## What Happened
+- **Management-Facing Plain-English UI Copy Overhaul (`76cf37f`, PR #32 — 6-agent swarm)**:
+  - **`/taste-profile` (`simon/taste_profile_ui.py`)**: Replaced `policy_v*`, `0-output-token gemini-decision-1`, `dspy.BootstrapFewShot`, `questions_config`, `demos[]`, `screening_labels`, `human_override`, `simon-*`, `pros[]/cons[]/missing_fields`, and snake_case reviewer/metric keys with plain A&R management copy and display formatters.
+  - **`/screen` (`simon/screening_ui.py`)**: Replaced `DSPy`, `gemini-decision-1 · 0 tok`, `P(elevate)`, `questions_config`, `gemini-4-neon`, `policy_v1`, and raw `lead_id:` labels with management-facing buttons, pills, and formatters.
+  - **`/discovery`, `/field-news`, `/reports`, `/investigate`, `/evals` (`simon/discovery_ui.py`)**: Replaced `simon-discovery-scout`, `stage=investigator`, `DiscoveryHandoff v1.0.0`, raw `lead_id:` lines, and snake_case fields with readable Title Case.
+  - **Agency Studio `/` & Pipeline Stepper (`simon/static/index.html`, `simon/static/app.js`, `simon/phases.py`)**: Replaced `simon-discovery-scout`, raw `lead_id:` / `interaction_id:` / `phase_run_id`, and `DiscoveryHandoff v1.0.0 Valid` with plain English.
+  - **Verification**: **113/113** unit tests passing.
 - **Discovery Sub-Flow Strip & Plain-English Pass (`b1ae6b8`, PR #31)**:
   - Added a persistent **Discovery Sub-Flow Strip** (`1. Sources & Dispatch -> 2. Field News -> 3. Scouting Reports | Next: Investigate ->`) across `/?tab=discovery`, `/discovery`, `/field-news`, and `/reports` with automatic `?batch=` query sync.
   - Applied `/plain-english` (STE-100 + Zinsser) rules to UI states, headers, phase descriptions, and Field News step copy across `simon/discovery_ui.py`, `simon/phases.py`, `simon/screening_ui.py`, `simon/taste_profile_ui.py`, and `simon/static/index.html`.
