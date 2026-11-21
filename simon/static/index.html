@@ -327,8 +327,12 @@
         </div>
 
         <div style="display:flex; flex-direction:column; gap:6px;">
-          <label for="labInput" style="font-size:12px; font-weight:700;">Assignment Payload (JSON object or array for batch fan-out)</label>
-          <textarea id="labInput" class="code-area" style="min-height:170px;"></textarea>
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+            <label for="labInput" style="font-size:12px; font-weight:700;">Assignment Payload (JSON object or array for batch fan-out)</label>
+            <button id="labResetInputBtn" class="btn" type="button" style="padding:3px 8px; font-size:11.5px;">Reset Sample</button>
+          </div>
+          <div id="labInputHint" class="muted" style="font-size:11.5px;">Select an agent to load its expected input contract.</div>
+          <textarea id="labInput" class="code-area" style="min-height:220px;"></textarea>
         </div>
 
         <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">

@@ -163,6 +163,41 @@ class TestAgencyStudioUIAndPhases(unittest.TestCase):
             self.assertEqual(code, 200)
             self.assertIn(expected, html)
 
+    def test_agents_endpoint_returns_tailored_default_inputs(self) -> None:
+        code, _, body = dispatch_http_request(self.store, "GET", "/api/agents")
+        self.assertEqual(code, 200)
+        agents = {a["package"]: a for a in json.loads(body)["agents"]}
+
+        expected_keys = {
+            "discovery-scout": {"search_brief", "requested_count"},
+            "identity-resolver": {"lead_id", "stage_name", "seed_sources"},
+            "footprint-profiler": {"lead_id", "identity_and_contact", "source_and_media_queue"},
+            "signal-forensics": {"lead_id", "identity_and_contact", "comment_sampling_targets"},
+            "track-record-mapper": {"lead_id", "identity_and_contact", "focus"},
+            "performance-critic": {"brief", "auditions"},
+            "booking-critic": {"brief", "auditions"},
+            "synthesis-scout": {"brief", "artist_leads", "clip_evidence"},
+            "showcase-producer": {"brief", "performance_critic_report", "booking_critic_report"},
+            "screen-advocate": {"lead_id", "dossier"},
+            "screen-skeptic": {"lead_id", "dossier"},
+            "screening-judge": {"lead_id", "dossier", "advocate_case", "skeptic_case"},
+        }
+        for pkg, req_keys in expected_keys.items():
+            self.assertIn(pkg, agents, f"Missing agent package {pkg} in /api/agents")
+            self.assertTrue(agents[pkg].get("input_hint"), f"Missing input_hint for {pkg}")
+            default_input = agents[pkg].get("default_input")
+            self.assertIsInstance(default_input, dict, f"default_input must be a dict for {pkg}")
+            self.assertTrue(
+                req_keys.issubset(set(default_input.keys())),
+                f"{pkg} default_input missing keys {req_keys - set(default_input.keys())}",
+            )
+
+        # Verify frontend uses agent.default_input instead of a single hardcoded payload
+        code, _, js = dispatch_http_request(self.store, "GET", "/static/app.js")
+        self.assertEqual(code, 200)
+        self.assertIn(b"agent.default_input", js)
+        self.assertIn(b"agent.input_hint", js)
+
 
 if __name__ == "__main__":
     unittest.main()
