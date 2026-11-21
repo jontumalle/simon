@@ -19,6 +19,7 @@ import time
 from typing import Any, Dict, List, Optional
 import uuid
 
+from .db_tools import save_agent_document
 from .deploy import compile_agent_package, list_agent_packages
 from .discovery_ui import (
     DEFAULT_DISCOVERY_BRIEF,
@@ -840,9 +841,30 @@ def run_phase(
 
         dossier = assemble_dossier(bundle, fp, sf, tr)
         proc_eval = evaluate_dossier_process(dossier)
+        dossier_saved = False
+        if store is not None and hasattr(store, "save_document"):
+            try:
+                dossier_doc = dict(dossier)
+                if not dossier_doc.get("stage_name"):
+                    dossier_doc["stage_name"] = dossier["identity_and_contact"].get("stage_name") or str(dossier.get("lead_id") or "Unknown")
+                save_agent_document(
+                    store,
+                    "investigator_dossiers",
+                    dossier_doc,
+                    doc_id=str(dossier.get("lead_id") or "") or None,
+                )
+                dossier_saved = True
+            except ValueError:
+                dossier_saved = False
         checks_run = int(proc_eval.get("checks_run", 7))
         failures = proc_eval.get("failures") or []
-        output_data = {"profile": dossier, "process_eval": proc_eval}
+        output_data = {
+            "lead_id": dossier.get("lead_id"),
+            "stage_name": dossier["identity_and_contact"].get("stage_name"),
+            "dossier_saved": dossier_saved,
+            "profile": dossier,
+            "process_eval": proc_eval,
+        }
         cards.append(
             {
                 "agent": "dossier-assembler",

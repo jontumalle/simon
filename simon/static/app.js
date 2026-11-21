@@ -11,6 +11,7 @@
     sourcesExpanded: false,
     discoveryBatches: [],
     discoveredLeads: [],
+    screeningPackets: [],
     phases: [],
     phaseRuns: [],
     activePhaseId: '1_discovery',
@@ -58,16 +59,49 @@
     applyTheme(cur === 'dark' ? 'light' : 'dark');
   });
 
-  // --- TOP TABS ---
-  function switchTab(tabName) {
+  // --- TOP TABS & URL STATE SYNC ---
+  const TAB_LABELS = {
+    discovery: 'Discovery',
+    review: 'Talent Review',
+    pipeline: 'Pipeline Stepper',
+    lab: 'Agent Lab',
+  };
+
+  function syncUrlState(tabName) {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', tabName);
+      if (tabName === 'pipeline' && state.activePhaseId) {
+        url.searchParams.set('phase', state.activePhaseId);
+      } else {
+        url.searchParams.delete('phase');
+      }
+      window.history.replaceState({}, '', url.toString());
+    } catch (e) {
+      // Ignore history errors in restricted frames
+    }
+  }
+
+  function switchTab(tabName, updateUrl = true) {
     document.querySelectorAll('.tab-panel').forEach((p) => p.classList.add('hidden'));
     const target = $('tab-' + tabName);
     if (target) target.classList.remove('hidden');
-    document.querySelectorAll('.nav-tab[data-tab]').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.tab === tabName);
+    document.querySelectorAll('[data-tab]').forEach((btn) => {
+      if (btn.classList.contains('nav-tab')) {
+        btn.classList.toggle('active', btn.dataset.tab === tabName);
+      }
     });
+    if ($('reviewTopbarControls')) {
+      $('reviewTopbarControls').classList.toggle('hidden', tabName !== 'review');
+    }
+    if ($('brandSubLabel')) {
+      $('brandSubLabel').textContent = TAB_LABELS[tabName] || 'Studio';
+    }
+    const moreMenu = $('moreMenu');
+    if (moreMenu) moreMenu.removeAttribute('open');
+    if (updateUrl) syncUrlState(tabName);
   }
-  document.querySelectorAll('.nav-tab[data-tab]').forEach((btn) => {
+  document.querySelectorAll('[data-tab]').forEach((btn) => {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
 
@@ -765,15 +799,121 @@
       .join('');
   }
 
-  // Subtabs in Tab 1
+  // Subtabs in Tab 1 (Shortlist, All Artists, Screened & Elevated)
+  function selectSubtab(target) {
+    document.querySelectorAll('[data-subtab]').forEach((b) => b.classList.toggle('active', b.dataset.subtab === target));
+    $('shortlistContainer').classList.toggle('hidden', target !== 'shortlist');
+    $('allLeadsContainer').classList.toggle('hidden', target !== 'all');
+    if ($('screenedLeadsContainer')) {
+      $('screenedLeadsContainer').classList.toggle('hidden', target !== 'screened');
+    }
+  }
+
   document.querySelectorAll('[data-subtab]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const target = btn.dataset.subtab;
-      document.querySelectorAll('[data-subtab]').forEach((b) => b.classList.toggle('active', b.dataset.subtab === target));
-      $('shortlistContainer').classList.toggle('hidden', target !== 'shortlist');
-      $('allLeadsContainer').classList.toggle('hidden', target !== 'all');
-    });
+    btn.addEventListener('click', () => selectSubtab(btn.dataset.subtab));
   });
+
+  function extractYtIdFromUrl(url) {
+    if (!url) return '';
+    const m = String(url).match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([A-Za-z0-9_-]{11})/);
+    return m ? m[1] : '';
+  }
+
+  function renderScreenedPackets() {
+    const container = $('screenedLeadsContainer');
+    const btn = $('subtabScreenedBtn');
+    const packets = state.screeningPackets || [];
+    const rank = { ELEVATE: 0, WATCH: 1, PASS: 2 };
+    const sorted = packets.slice().sort((a, b) => {
+      const va = String((a.human_review && a.human_review.human_verdict) || (a.judge_decision && a.judge_decision.verdict) || 'WATCH').toUpperCase();
+      const vb = String((b.human_review && b.human_review.human_verdict) || (b.judge_decision && b.judge_decision.verdict) || 'WATCH').toUpperCase();
+      return (rank[va] ?? 9) - (rank[vb] ?? 9);
+    });
+    const elevatedCount = sorted.filter((p) => {
+      const v = String((p.human_review && p.human_review.human_verdict) || (p.judge_decision && p.judge_decision.verdict) || '').toUpperCase();
+      return v === 'ELEVATE';
+    }).length;
+    if (btn) {
+      btn.textContent = `Screened & Elevated (${elevatedCount || sorted.length})`;
+    }
+    if (!container) return;
+    if (!sorted.length) {
+      container.innerHTML = `
+        <div class="card artist-card">
+          <div class="muted" style="font-size:13px;">No Screening Deck packets yet. Run Screening from <a href="/investigate">Investigate</a> or <a href="/screen">Screening</a> to surface elevated artists here.</div>
+        </div>`;
+      return;
+    }
+    container.innerHTML = sorted.map((pkt, idx) => {
+      const ds = pkt.dossier_snapshot || {};
+      const idObj = ds.identity_and_contact || {};
+      const stageName = pkt.stage_name || idObj.stage_name || pkt.lead_id || 'Unnamed Artist';
+      const leadId = pkt.lead_id || ds.lead_id || '';
+      const judge = pkt.judge_decision || {};
+      const human = pkt.human_review || null;
+      const verdict = String((human && human.human_verdict) || judge.verdict || 'WATCH').toUpperCase();
+      const verdictCls = verdict === 'ELEVATE' ? 'ok' : (verdict === 'PASS' ? 'warn' : 'accent');
+      const score = judge.total_score != null ? `${Number(judge.total_score).toFixed(1)} / 10` : '—';
+      const rationale = (human && human.reason) || judge.rationale || judge.summary || 'Screened candidate packet.';
+      const media = (ds.source_and_media_queue && ds.source_and_media_queue.media_links) || [];
+      const firstUrl = (media[0] && media[0].url) || (ds.source_and_media_queue && ds.source_and_media_queue.seed_source_url) || '';
+      const ytId = extractYtIdFromUrl(firstUrl);
+      return `
+        <article class="card artist-card">
+          <div class="artist-card-top">
+            <div>
+              <h3 class="artist-name">${esc(stageName)}</h3>
+              <div class="badges">
+                <span class="pill ${verdictCls}">${esc(verdict)}</span>
+                <span class="pill">${esc(score)}</span>
+                ${human ? '<span class="pill ok">Human Verified</span>' : '<span class="pill">Judge Verdict</span>'}
+              </div>
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              ${ytId ? `<button type="button" class="btn screened-play-btn" data-yt="${esc(ytId)}" data-url="${esc(firstUrl)}" data-name="${esc(stageName)}">▶ Play Clip</button>` : ''}
+              <a class="btn" href="/screen?lead=${encodeURIComponent(leadId)}">Screening Deck ↗</a>
+            </div>
+          </div>
+          <p class="artist-fit">${esc(rationale)}</p>
+          <div class="artist-footer">
+            <div class="artist-next mono">lead_id: ${esc(leadId || '—')}</div>
+            <button type="button" class="btn btn-primary screened-producer-btn" data-sidx="${idx}">Draft Callback (Phase 4) →</button>
+          </div>
+        </article>`;
+    }).join('');
+
+    container.querySelectorAll('.screened-play-btn').forEach((playBtn) => {
+      playBtn.addEventListener('click', () => {
+        const yt = playBtn.dataset.yt;
+        playMoment(
+          `https://www.youtube.com/embed/${encodeURIComponent(yt)}`,
+          playBtn.dataset.url,
+          `${playBtn.dataset.name} · Screened Clip`,
+          playBtn.dataset.name,
+          'Loaded from Stage 3 Screening Deck packet.',
+          true,
+          []
+        );
+      });
+    });
+
+    container.querySelectorAll('.screened-producer-btn').forEach((prodBtn) => {
+      prodBtn.addEventListener('click', () => {
+        const pkt = sorted[Number(prodBtn.dataset.sidx)];
+        if (!pkt) return;
+        const ds = pkt.dossier_snapshot || {};
+        const stageName = pkt.stage_name || (ds.identity_and_contact && ds.identity_and_contact.stage_name) || pkt.lead_id || 'Artist';
+        selectPhase('4_producer', {
+          lead_id: pkt.lead_id || ds.lead_id || '',
+          stage_name: stageName,
+          showcase: 'First Listen NYC',
+          slot_minutes: 20,
+          fee_cap_usd: 500,
+        });
+        switchTab('pipeline');
+      });
+    });
+  }
 
   const promoteBtn = $('promoteToPhase2Btn');
   if (promoteBtn) {
@@ -855,10 +995,39 @@
     const batchLinks = $('phaseBatchLinks');
     if (batchLinks) {
       const batchId = result.output && result.output.batch_id;
+      const dossierLeadId = result.phase_id === '2c_dossier' && result.output && result.output.lead_id;
       if (batchId) {
         const q = `?batch=${encodeURIComponent(batchId)}`;
         batchLinks.innerHTML = `<a class="btn" style="padding:3px 8px; font-size:11px;" href="/field-news${q}">Field News →</a><a class="btn" style="padding:3px 8px; font-size:11px;" href="/reports${q}">Reports →</a>`;
         batchLinks.classList.remove('hidden');
+      } else if (dossierLeadId) {
+        const q = `?lead=${encodeURIComponent(dossierLeadId)}`;
+        batchLinks.innerHTML = `<button id="phaseSendToScreeningBtn" type="button" class="btn btn-primary" style="padding:3px 8px; font-size:11px;">Run Screening →</button><a class="btn" style="padding:3px 8px; font-size:11px;" href="/investigate${q}">Investigator Desk →</a>`;
+        batchLinks.classList.remove('hidden');
+        const scrBtn = $('phaseSendToScreeningBtn');
+        if (scrBtn) {
+          scrBtn.addEventListener('click', async () => {
+            scrBtn.disabled = true;
+            scrBtn.textContent = 'Running Screening…';
+            try {
+              const sRes = await fetch('/api/screening/run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lead_id: dossierLeadId, dossier: result.output.profile || null, live: false }),
+              });
+              if (sRes.ok) {
+                window.location.href = `/screen${q}`;
+                return;
+              }
+              setBanner('Screening run failed.', 'error');
+            } catch (err) {
+              setBanner('Network error running screening: ' + err.message, 'error');
+            } finally {
+              scrBtn.disabled = false;
+              scrBtn.textContent = 'Run Screening →';
+            }
+          });
+        }
       } else {
         batchLinks.innerHTML = '';
         batchLinks.classList.add('hidden');
@@ -1249,12 +1418,13 @@
   // INITIALIZE ALL 4 TABS
   // =========================================================
   async function init() {
-    const [statusRes, phasesRes, agentsRes, evalsRes, sourcesRes] = await Promise.all([
+    const [statusRes, phasesRes, agentsRes, evalsRes, sourcesRes, screenRes] = await Promise.all([
       fetch('/api/status'),
       fetch('/api/phases'),
       fetch('/api/agents'),
       fetch('/api/evals'),
       fetch('/api/sources'),
+      fetch('/api/screening/packets').catch(() => null),
     ]);
 
     const status = await statusRes.json();
@@ -1309,31 +1479,50 @@
       renderEvalHistory();
     }
 
-    // Apply URL deep links (?tab=discovery|review|pipeline|lab&phase=...&lead=...&subject=...)
+    if (screenRes && screenRes.ok) {
+      const scData = await screenRes.json();
+      state.screeningPackets = scData.packets || [];
+      renderScreenedPackets();
+    }
+
+    // Apply URL deep links (?tab=discovery|review|pipeline|lab&phase=...&subtab=...&lead=...&subject=...)
     const params = new URLSearchParams(window.location.search);
     const reqTab = params.get('tab');
     const reqPhase = params.get('phase');
+    const reqSubtab = params.get('subtab');
     const reqLead = params.get('lead');
     const reqSubject = params.get('subject');
-    if (reqLead || reqSubject) {
+    if (reqTab === 'review' && reqSubtab) {
+      switchTab('review', false);
+      selectSubtab(reqSubtab);
+    } else if (reqLead || reqSubject) {
       const matched = state.discoveredLeads.find(
         (l) => (reqLead && l.lead_id === reqLead) || (reqSubject && (l.stage_name || '').toLowerCase() === reqSubject.toLowerCase())
       );
-      const handoff = matched
-        ? leadToPhase2Handoff(matched)
-        : {
-            lead_id: reqLead || '',
-            stage_name: reqSubject || 'Unknown Artist',
-            attribution_status: 'verified',
-            source_channel: 'youtube_session',
-          };
-      selectPhase(reqPhase || '2a_identity', handoff);
-      switchTab(reqTab || 'pipeline');
+      const targetPhase = reqPhase || '2a_identity';
+      const handoff = targetPhase === '4_producer'
+        ? {
+            lead_id: reqLead || (matched && matched.lead_id) || '',
+            stage_name: reqSubject || (matched && matched.stage_name) || 'Artist',
+            showcase: 'First Listen NYC',
+            slot_minutes: 20,
+            fee_cap_usd: 500,
+          }
+        : (matched
+          ? leadToPhase2Handoff(matched)
+          : {
+              lead_id: reqLead || '',
+              stage_name: reqSubject || 'Unknown Artist',
+              attribution_status: 'verified',
+              source_channel: 'youtube_session',
+            });
+      selectPhase(targetPhase, handoff);
+      switchTab(reqTab || 'pipeline', false);
     } else if (reqPhase) {
       selectPhase(reqPhase);
-      switchTab(reqTab || 'pipeline');
+      switchTab(reqTab || 'pipeline', false);
     } else if (reqTab) {
-      switchTab(reqTab);
+      switchTab(reqTab, false);
     }
 
     // Load newest saved run or seed demo
