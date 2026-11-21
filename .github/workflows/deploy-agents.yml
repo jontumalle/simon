@@ -1,0 +1,85 @@
+name: Deploy Managed Agents
+
+on:
+  push:
+    branches:
+      - main
+      - prod
+    paths:
+      - "agents/**"
+      - "simon/deploy.py"
+      - ".github/workflows/deploy-agents.yml"
+  pull_request:
+    branches:
+      - main
+      - prod
+    paths:
+      - "agents/**"
+      - "simon/deploy.py"
+  workflow_dispatch:
+    inputs:
+      agent:
+        description: "Specific agent folder under agents/ (leave blank for all)"
+        required: false
+        default: ""
+      prefix:
+        description: "Override SIMON_AGENT_PREFIX (e.g. staging-, prod-, kevin-)"
+        required: false
+        default: ""
+      dry_run:
+        description: "Validate and compile offline without calling /v1beta/agents"
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-agents:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run unit tests
+        run: python3 -m unittest discover -s tests
+
+      - name: Compile and deploy Managed Agents
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SIMON_AGENT_MODEL_OVERRIDE: ${{ vars.SIMON_AGENT_MODEL_OVERRIDE }}
+        run: |
+          set -euo pipefail
+
+          # Choose prefix by branch: prod -> prod-, main -> staging-
+          PREFIX="${{ github.event.inputs.prefix }}"
+          if [ -z "$PREFIX" ]; then
+            if [ "${{ github.ref_name }}" = "prod" ]; then
+              PREFIX="prod-"
+            else
+              PREFIX="staging-"
+            fi
+          fi
+
+          ARGS=(--prefix "$PREFIX")
+          if [ -n "${{ github.event.inputs.agent }}" ]; then
+            ARGS+=(--agent "${{ github.event.inputs.agent }}")
+          else
+            ARGS+=(--all)
+          fi
+
+          # Always dry-run on pull requests, manual dry_run, or if GEMINI_API_KEY is unset/placeholder
+          if [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ github.event.inputs.dry_run }}" = "true" ] || [ -z "${GEMINI_API_KEY:-}" ] || [ "${GEMINI_API_KEY:-}" = "REPLACE_ME" ]; then
+            echo "Running offline --dry-run validation (prefix=$PREFIX)..."
+            ARGS+=(--dry-run --out-dir build/agents)
+          else
+            echo "Deploying Managed Agents live to /v1beta/agents (prefix=$PREFIX)..."
+          fi
+
+          python3 -m simon deploy "${ARGS[@]}"
