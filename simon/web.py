@@ -10,8 +10,9 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
+import uuid
 
 from .db_tools import (
     ALLOWED_AGENT_COLLECTIONS,
@@ -23,7 +24,7 @@ from .db_tools import (
 from .deploy import compile_agent_package, list_agent_packages
 from .fleet import dispatch_fleet
 from .scout import DEFAULT_TASTE_BRIEF, load_dotenv_if_present, run_scout
-from .store import SimonStore
+from .store import SimonStore, create_store
 
 
 INDEX_HTML = """<!DOCTYPE html>
@@ -716,17 +717,37 @@ def dispatch_http_request(
         if parsed.path == "/":
             return (HTTPStatus.OK, "text/html; charset=utf-8", INDEX_HTML.encode("utf-8"))
 
+        if parsed.path in ("/healthz", "/api/health"):
+            payload = {
+                "ok": True,
+                "store_backend": getattr(store, "backend", "sqlite"),
+            }
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            )
+
         if parsed.path == "/api/status":
             load_dotenv_if_present()
             payload = {
                 "ok": True,
                 "has_api_key": bool(os.environ.get("GEMINI_API_KEY")),
                 "default_brief": DEFAULT_TASTE_BRIEF,
+                "store_backend": getattr(store, "backend", "sqlite"),
             }
             return (
                 HTTPStatus.OK,
                 "application/json; charset=utf-8",
                 json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            )
+
+        if parsed.path == "/api/fleet/runs":
+            runs = store.list_documents("fleet_runs", limit=20) if hasattr(store, "list_documents") else []
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps({"fleet_runs": runs}, ensure_ascii=False).encode("utf-8"),
             )
 
         if parsed.path == "/api/agents":
@@ -821,6 +842,10 @@ def dispatch_http_request(
                 "application/json; charset=utf-8",
                 json.dumps({"error": str(exc)}).encode("utf-8"),
             )
+        fleet_run_id = f"fleet_{uuid.uuid4().hex[:10]}"
+        summary["fleet_run_id"] = fleet_run_id
+        if hasattr(store, "save_document"):
+            store.save_document("fleet_runs", fleet_run_id, summary)
         http_status = HTTPStatus.OK if (wait or dry_run) else HTTPStatus.ACCEPTED
         return (
             http_status,
@@ -891,11 +916,11 @@ def create_handler(store: SimonStore):
     return SimonHTTPHandler
 
 
-def serve_web(host: str = "127.0.0.1", port: int = 8765, store: Optional[SimonStore] = None) -> None:
+def serve_web(host: str = "127.0.0.1", port: int = 8765, store: Optional[Any] = None) -> None:
     load_dotenv_if_present()
-    active_store = store or SimonStore()
+    active_store = store or create_store()
     server = ThreadingHTTPServer((host, port), create_handler(active_store))
-    print(f"Simon Taste-Brief Vocal Scout running at http://{host}:{port}")
+    print(f"Simon platform running at http://{host}:{port} (store={getattr(active_store, 'backend', 'sqlite')})")
     print("Press Ctrl+C to stop.")
     try:
         server.serve_forever()
