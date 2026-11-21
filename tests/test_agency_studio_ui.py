@@ -17,6 +17,9 @@ class TestAgencyStudioUIAndPhases(unittest.TestCase):
         code, ctype, html = dispatch_http_request(self.store, "GET", "/")
         self.assertEqual(code, 200)
         self.assertIn("text/html", ctype)
+        self.assertIn(b"Discovery", html)
+        self.assertIn(b'id="tab-discovery"', html)
+        self.assertIn(b'id="phaseLeadSelect"', html)
         self.assertIn(b"Talent Review", html)
         self.assertIn(b"Pipeline Runner", html)
         self.assertIn(b"Agent Lab", html)
@@ -113,6 +116,52 @@ class TestAgencyStudioUIAndPhases(unittest.TestCase):
         evals = json.loads(body)["evals"]
         self.assertEqual(len(evals), 1)
         self.assertEqual(evals[0]["note"], "Clean intent buckets and zero ranking drift")
+
+    def test_phase_1_discovery_links_source_registry_and_standalone_bridges(self) -> None:
+        code, _, resp = dispatch_http_request(
+            self.store,
+            "POST",
+            "/api/phases/run",
+            json.dumps(
+                {
+                    "phase_id": "1_discovery",
+                    "payload": {
+                        "brief": "NYC live soul vocalists",
+                        "source_ids": ["yt_sofar_sounds", "nyc_babys_all_right"],
+                        "agent_count": 2,
+                        "leads_per_agent": 2,
+                    },
+                    "live": False,
+                }
+            ).encode("utf-8"),
+        )
+        self.assertEqual(code, 200, f"Phase 1 discovery failed: {resp}")
+        rec = json.loads(resp)
+        self.assertTrue(rec["passed"])
+        out = rec["output"]
+        self.assertTrue(out.get("batch_id", "").startswith("disc_"))
+        self.assertEqual(out.get("selected_source_ids"), ["yt_sofar_sounds", "nyc_babys_all_right"])
+        self.assertGreaterEqual(len(out.get("artist_leads", [])), 2)
+
+        # Discovery batch & leads must be visible to the shared Discovery/Leads endpoints
+        code, _, batches_body = dispatch_http_request(self.store, "GET", "/api/discovery/batches")
+        self.assertEqual(code, 200)
+        batch_ids = [b["batch_id"] for b in json.loads(batches_body)["batches"]]
+        self.assertIn(out["batch_id"], batch_ids)
+
+        code, _, leads_body = dispatch_http_request(self.store, "GET", "/api/leads")
+        self.assertEqual(code, 200)
+        self.assertGreaterEqual(json.loads(leads_body)["count"], 2)
+
+        # Standalone pages link back into the unified Studio
+        for route, expected in [
+            ("/discovery", b"/?tab=discovery"),
+            ("/reports", b"/?tab=pipeline&amp;phase=2a_identity"),
+            ("/investigate", b"/?tab=pipeline&amp;phase=2a_identity"),
+        ]:
+            code, _, html = dispatch_http_request(self.store, "GET", route)
+            self.assertEqual(code, 200)
+            self.assertIn(expected, html)
 
 
 if __name__ == "__main__":

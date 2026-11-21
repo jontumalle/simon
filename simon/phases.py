@@ -20,6 +20,11 @@ from typing import Any, Dict, List, Optional
 import uuid
 
 from .deploy import compile_agent_package, list_agent_packages
+from .discovery_ui import (
+    DEFAULT_DISCOVERY_BRIEF,
+    dispatch_discovery_batch,
+    load_source_registry,
+)
 from .fleet import dispatch_fleet
 from .investigator import (
     _find_forbidden_keys,
@@ -85,13 +90,15 @@ PHASE_DEFINITIONS: List[Dict[str, Any]] = [
         "id": "1_discovery",
         "code": "1",
         "name": "Discovery",
-        "domain": "Intake · Discovery Scout",
+        "domain": "Intake · Discovery Scout Fleet",
         "agents": ["discovery-scout"],
-        "description": "Scouts public YouTube sessions from a brief and groups verified clips by artist.",
-        "input_hint": "Taste brief prompt",
+        "description": "Dispatches Discovery Scout agents across curated Source Registry channels to return verified, unranked leads.",
+        "input_hint": "Search brief + Source Registry IDs (or pick in Discovery tab)",
         "default_input": {
-            "brief": DEFAULT_TASTE_BRIEF,
-            "max_leads": 4,
+            "brief": DEFAULT_DISCOVERY_BRIEF,
+            "source_ids": ["yt_sofar_sounds", "nyc_babys_all_right", "bc_brooklyn_soul_rnb"],
+            "agent_count": 3,
+            "leads_per_agent": 2,
         },
     },
     {
@@ -277,39 +284,101 @@ def run_phase(
     next_handoff: Dict[str, Any] = {}
 
     if phase_id == "1_discovery":
-        brief = str(inp.get("brief") or DEFAULT_TASTE_BRIEF).strip()
-        scout_run = run_scout(brief_prompt=brief, live=live, store=store, api_key=api_key)
-        run_dict = scout_run.to_dict()
-        run_id = run_dict["run_id"]
-        leads = run_dict.get("artist_leads", [])
-        clips = run_dict.get("clip_evidence", [])
-        output_data = {
-            "run_id": run_id,
-            "mode": run_dict.get("mode"),
-            "artist_leads": leads,
-            "clip_count": len(clips),
-            "shortlist_count": len(run_dict.get("shortlist", [])),
-        }
-        cards.append(
-            {
-                "agent": "discovery-scout",
-                "status": "completed",
-                "summary": f"Found {len(leads)} artist leads and {len(clips)} verified clips (run {run_id}).",
-            }
+        brief = str(inp.get("brief") or DEFAULT_DISCOVERY_BRIEF).strip()
+        registry = load_source_registry(store)
+        valid_ids = {s["source_id"] for s in registry.get("sources", [])}
+        raw_source_ids = inp.get("source_ids")
+        if isinstance(raw_source_ids, list):
+            source_ids = [str(sid) for sid in raw_source_ids if str(sid) in valid_ids]
+        else:
+            source_ids = []
+        if not source_ids:
+            defaults = ["yt_sofar_sounds", "nyc_babys_all_right", "bc_brooklyn_soul_rnb"]
+            source_ids = [sid for sid in defaults if sid in valid_ids]
+        if not source_ids:
+            source_ids = [s["source_id"] for s in registry.get("sources", [])[:3]]
+
+        agent_count = int(inp.get("agent_count") or min(len(source_ids), 3) or 1)
+        leads_per_agent = int(inp.get("leads_per_agent") or inp.get("max_leads") or 2)
+
+        batch_doc = dispatch_discovery_batch(
+            store,
+            source_ids=source_ids,
+            brief=brief,
+            leads_per_agent=leads_per_agent,
+            agent_count=agent_count,
+            live=live,
+            api_key=api_key,
         )
-        checks = [
-            {"name": "leads_found", "label": f"{len(leads)} Leads Found", "passed": len(leads) > 0},
-            {"name": "clips_verified", "label": f"{len(clips)} Clips Verified", "passed": len(clips) > 0},
-            {"name": "attribution_checked", "label": "Attribution Checked", "passed": True},
-        ]
+        batch_id = batch_doc["batch_id"]
+        workers = batch_doc.get("workers") or []
+        leads: List[Dict[str, Any]] = []
+        for w in workers:
+            out_json = w.get("output_json")
+            if isinstance(out_json, dict) and isinstance(out_json.get("leads"), list):
+                for lead in out_json["leads"]:
+                    if isinstance(lead, dict):
+                        leads.append(lead)
+            src_names = ", ".join(s.get("name", "source") for s in (w.get("assigned_sources") or [])[:2])
+            lead_count = int(w.get("lead_count") or 0)
+            cards.append(
+                {
+                    "agent": f"discovery-scout ({w.get('worker_id', 'agent')})",
+                    "status": str(w.get("status") or "completed"),
+                    "summary": (
+                        f"Scanned {src_names or 'assigned sources'} → {lead_count} lead(s) "
+                        f"({'valid' if w.get('contract_valid') else w.get('status')})."
+                    ),
+                }
+            )
+
+        output_data = {
+            "batch_id": batch_id,
+            "mode": batch_doc.get("mode"),
+            "agent_id": batch_doc.get("agent_id"),
+            "selected_source_ids": batch_doc.get("selected_source_ids") or [],
+            "agent_count": batch_doc.get("agent_count", len(workers)),
+            "lead_count": len(leads),
+            "artist_leads": leads,
+            "workers": [
+                {
+                    "worker_id": w.get("worker_id"),
+                    "report_id": w.get("report_id"),
+                    "status": w.get("status"),
+                    "lead_count": w.get("lead_count", 0),
+                    "contract_valid": w.get("contract_valid"),
+                    "assigned_sources": [s.get("name") for s in (w.get("assigned_sources") or [])],
+                }
+                for w in workers
+            ],
+        }
+
+        if live:
+            checks = [
+                {"name": "sources_targeted", "label": f"{len(source_ids)} Sources Targeted", "passed": len(source_ids) > 0},
+                {"name": "workers_dispatched", "label": f"{len(workers)} Live Scouts Dispatched", "passed": len(workers) > 0},
+                {"name": "field_news_linked", "label": f"Batch {batch_id}", "passed": bool(batch_id)},
+            ]
+        else:
+            all_valid = all(bool(w.get("contract_valid")) for w in workers) if workers else False
+            checks = [
+                {"name": "sources_targeted", "label": f"{len(source_ids)} Sources Targeted", "passed": len(source_ids) > 0},
+                {"name": "leads_found", "label": f"{len(leads)} Leads Found", "passed": len(leads) > 0},
+                {"name": "handoff_contract", "label": "DiscoveryHandoff v1.0.0 Valid", "passed": all_valid},
+            ]
+
         if leads:
             first_lead = leads[0]
+            seeds = first_lead.get("seed_sources") or []
+            first_seed = seeds[0] if seeds and isinstance(seeds[0], dict) else {}
             next_handoff = {
                 "lead_id": first_lead.get("lead_id"),
                 "stage_name": first_lead.get("stage_name"),
                 "attribution_status": first_lead.get("attribution_status", "verified"),
-                "seed_source_url": (clips[0].get("source_url") if clips else DEFAULT_LEAD_FIXTURE["seed_source_url"]),
-                "source_channel": "youtube_session",
+                "seed_source_url": first_seed.get("url") or DEFAULT_LEAD_FIXTURE["seed_source_url"],
+                "source_channel": first_seed.get("source_channel") or "youtube_session",
+                "context_snippet": first_lead.get("context_snippet") or "",
+                "seed_sources": seeds,
             }
         else:
             next_handoff = DEFAULT_LEAD_FIXTURE

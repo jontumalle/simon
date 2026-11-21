@@ -5,6 +5,12 @@
   const state = {
     currentRun: null,
     selectedLeads: new Set(),
+    sources: [],
+    filteredSources: [],
+    selectedSourceIds: new Set(),
+    sourcesExpanded: false,
+    discoveryBatches: [],
+    discoveredLeads: [],
     phases: [],
     phaseRuns: [],
     activePhaseId: '1_discovery',
@@ -18,6 +24,10 @@
   };
 
   const $ = (id) => document.getElementById(id);
+
+  function formatLabel(val) {
+    return String(val || '').replace(/_/g, ' ');
+  }
 
   function esc(str) {
     const div = document.createElement('div');
@@ -79,6 +89,370 @@
     if (m) m.removeAttribute('open');
     $('traceDrawer').classList.remove('hidden');
   });
+
+  // =========================================================
+  // TAB 0: DISCOVERY (SOURCE REGISTRY + FLEET + LEADS BRIDGE)
+  // =========================================================
+  function leadToPhase2Handoff(lead) {
+    const seeds = Array.isArray(lead.seed_sources) ? lead.seed_sources : [];
+    const firstSeed = (seeds[0] && typeof seeds[0] === 'object') ? seeds[0] : {};
+    return {
+      lead_id: lead.lead_id || '',
+      stage_name: lead.stage_name || lead.title || 'Unknown Artist',
+      attribution_status: lead.attribution_status || 'verified',
+      seed_source_url: lead.seed_source_url || firstSeed.url || '',
+      source_channel: lead.source_channel || firstSeed.source_channel || 'youtube_session',
+      context_snippet: lead.context_snippet || '',
+      seed_sources: seeds,
+    };
+  }
+
+  function syncDiscoveryBatchLinks(batchId, summaryMsg = '') {
+    if (!batchId) return;
+    const q = `?batch=${encodeURIComponent(batchId)}`;
+    if ($('tracesNavLink')) $('tracesNavLink').href = `/field-news${q}`;
+    if ($('reportsNavLink')) $('reportsNavLink').href = `/reports${q}`;
+    if ($('discTopFieldNewsLink')) $('discTopFieldNewsLink').href = `/field-news${q}`;
+    if ($('discTopReportsLink')) $('discTopReportsLink').href = `/reports${q}`;
+    if ($('discFollowFieldNewsBtn')) $('discFollowFieldNewsBtn').href = `/field-news${q}`;
+    if ($('discOpenReportsBtn')) $('discOpenReportsBtn').href = `/reports${q}`;
+    if (summaryMsg && $('discPostDispatchBar')) {
+      $('discPostDispatchMsg').textContent = summaryMsg;
+      $('discPostDispatchBar').classList.remove('hidden');
+    }
+  }
+
+  function renderDiscChannelChips() {
+    const el = $('discChannelChips');
+    if (!el) return;
+    const activeChannel = $('discChannelFilter').value;
+    const counts = new Map();
+    state.sources.forEach((s) => {
+      const ch = s.source_channel || 'other';
+      counts.set(ch, (counts.get(ch) || 0) + 1);
+    });
+    const chips = [
+      `<button type="button" class="chip-btn ${activeChannel === '' ? 'active' : ''}" data-channel="">All (${state.sources.length})</button>`,
+    ];
+    Array.from(counts.keys()).sort().forEach((ch) => {
+      chips.push(
+        `<button type="button" class="chip-btn ${activeChannel === ch ? 'active' : ''}" data-channel="${esc(ch)}">${esc(formatLabel(ch))} (${counts.get(ch)})</button>`
+      );
+    });
+    el.innerHTML = chips.join('');
+    el.querySelectorAll('.chip-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        $('discChannelFilter').value = btn.dataset.channel || '';
+        renderDiscSources();
+      });
+    });
+  }
+
+  function renderDiscSelectedTray() {
+    const tray = $('discSelectedTray');
+    if (!tray) return;
+    if (!state.selectedSourceIds.size) {
+      tray.classList.add('hidden');
+      tray.innerHTML = '';
+      return;
+    }
+    const byId = new Map(state.sources.map((s) => [s.source_id, s]));
+    const items = Array.from(state.selectedSourceIds).map((id) => {
+      const src = byId.get(id);
+      const name = src ? src.name : id;
+      return `<button type="button" class="sel-chip" data-remove-id="${esc(id)}" title="Remove source">${esc(name)} ×</button>`;
+    });
+    tray.innerHTML = `<span class="muted" style="font-weight:700;">Selected:</span>` + items.join('');
+    tray.classList.remove('hidden');
+    tray.querySelectorAll('.sel-chip').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.selectedSourceIds.delete(btn.dataset.removeId);
+        renderDiscSources();
+      });
+    });
+  }
+
+  function resetDiscFilters() {
+    $('discSearchInput').value = '';
+    $('discChannelFilter').value = '';
+    $('discCityFilter').value = '';
+    $('discTierFilter').value = '';
+    $('discGenreFilter').value = '';
+    renderDiscSources();
+  }
+
+  function renderDiscSources() {
+    const grid = $('discSourceGrid');
+    if (!grid) return;
+    const q = ($('discSearchInput').value || '').trim().toLowerCase();
+    const ch = $('discChannelFilter').value;
+    const city = $('discCityFilter').value;
+    const tier = $('discTierFilter').value;
+    const genre = $('discGenreFilter').value;
+
+    state.filteredSources = state.sources.filter((s) => {
+      const loc = s.location || {};
+      const sCity = loc.city || 'Global';
+      const tags = Array.isArray(s.genre_tags) ? s.genre_tags : [];
+      if (ch && s.source_channel !== ch) return false;
+      if (city && sCity !== city) return false;
+      if (tier && s.career_tier !== tier) return false;
+      if (genre && !tags.includes(genre)) return false;
+      if (q) {
+        const hay = [
+          s.name,
+          s.why_useful,
+          s.notes,
+          s.source_channel,
+          sCity,
+          loc.area,
+          tags.join(' '),
+        ].filter(Boolean).join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+
+    renderDiscChannelChips();
+    renderDiscSelectedTray();
+
+    $('discSelectedBadge').textContent = `${state.selectedSourceIds.size} selected`;
+    $('discShowingBadge').textContent = `${state.filteredSources.length} / ${state.sources.length} shown`;
+
+    if (!state.filteredSources.length) {
+      grid.innerHTML = `
+        <div style="grid-column:1/-1; padding:32px 16px; text-align:center;" class="muted">
+          <div style="font-weight:700; margin-bottom:8px;">No sources match the active filters.</div>
+          <button type="button" class="btn" id="discResetFiltersBtn">Reset Filters</button>
+        </div>`;
+      if ($('discResetFiltersBtn')) $('discResetFiltersBtn').addEventListener('click', resetDiscFilters);
+      return;
+    }
+
+    grid.innerHTML = state.filteredSources.map((s) => {
+      const isSel = state.selectedSourceIds.has(s.source_id);
+      const loc = s.location || {};
+      const sCity = loc.city || 'Global';
+      const locLabel = loc.area ? `${loc.area} · ${sCity}` : sCity;
+      const statusCls = s.status === 'active' ? 'ok' : 'warn';
+      const tags = (Array.isArray(s.genre_tags) ? s.genre_tags : []).filter((g) => g && g !== 'all').slice(0, 5);
+      const tagsHtml = tags.length
+        ? `<div class="source-genres">${tags.map((g) => `<span class="genre-tag">${esc(g)}</span>`).join('')}</div>`
+        : '';
+      const noteHtml = s.notes ? `<div class="source-note">Note: ${esc(s.notes)}</div>` : '';
+      const extHtml = s.url
+        ? `<a class="source-ext" href="${esc(s.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Open ↗</a>`
+        : '';
+
+      return `
+        <div class="source-item ${isSel ? 'selected' : ''}" data-source-id="${esc(s.source_id)}">
+          <div class="source-title">
+            <span style="display:flex; align-items:flex-start; gap:8px;">
+              <span class="source-check">${isSel ? '✓' : ''}</span>
+              <span>${esc(s.name)}</span>
+            </span>
+            <span style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+              ${extHtml}
+              <span class="pill ${statusCls}">${esc(s.status)}</span>
+            </span>
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <span class="pill accent">${esc(formatLabel(s.source_channel))}</span>
+            <span class="pill">${esc(locLabel)}</span>
+            <span class="pill">${esc(formatLabel(s.career_tier))}</span>
+          </div>
+          <div class="source-why">${esc(s.why_useful)}</div>
+          ${noteHtml}
+          ${tagsHtml}
+        </div>`;
+    }).join('');
+
+    grid.querySelectorAll('.source-item').forEach((node) => {
+      node.addEventListener('click', () => {
+        const id = node.dataset.sourceId;
+        if (state.selectedSourceIds.has(id)) state.selectedSourceIds.delete(id);
+        else state.selectedSourceIds.add(id);
+        if (state.selectedSourceIds.size > 0) {
+          $('discAgentCountInput').value = Math.min(state.selectedSourceIds.size, 10);
+        }
+        renderDiscSources();
+      });
+    });
+  }
+
+  function renderDiscBatches() {
+    const list = $('discBatchesList');
+    if (!list) return;
+    $('discBatchCountBadge').textContent = String(state.discoveryBatches.length);
+    if (!state.discoveryBatches.length) {
+      list.innerHTML = `<div class="muted" style="font-size:12.5px;">No discovery batches dispatched yet. Select sources above and click <strong>Send Discovery Agents</strong>.</div>`;
+      return;
+    }
+    list.innerHTML = state.discoveryBatches.slice(0, 6).map((b) => {
+      const workers = b.workers || [];
+      const leadSum = workers.reduce((acc, w) => acc + Number(w.lead_count || 0), 0);
+      const q = `?batch=${encodeURIComponent(b.batch_id)}`;
+      return `
+        <div class="lead-row">
+          <div class="lead-row-top">
+            <div>
+              <strong class="mono" style="font-size:12px;">${esc(b.batch_id)}</strong>
+              <span class="pill ${b.mode === 'live' ? 'ok' : 'accent'}" style="margin-left:6px;">${esc(b.mode || 'simulated')}</span>
+            </div>
+            <span class="muted" style="font-size:11.5px;">${workers.length} scouts · ${leadSum} leads</span>
+          </div>
+          <div class="muted" style="font-size:12px;">${esc((b.search_brief || '').slice(0, 110))}</div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <a class="btn" style="padding:4px 9px; font-size:11.5px;" href="/field-news${q}">Field News →</a>
+            <a class="btn" style="padding:4px 9px; font-size:11.5px;" href="/reports${q}">Reports →</a>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function renderDiscLeads() {
+    const list = $('discLeadsList');
+    const select = $('phaseLeadSelect');
+    if ($('discLeadCountBadge')) $('discLeadCountBadge').textContent = String(state.discoveredLeads.length);
+
+    if (select) {
+      const opts = [`<option value="">Choose a lead from Discovery (${state.discoveredLeads.length})…</option>`];
+      state.discoveredLeads.forEach((lead, idx) => {
+        opts.push(`<option value="${idx}">${esc(lead.stage_name || lead.lead_id)} (${esc(lead.attribution_status || 'unverified')})</option>`);
+      });
+      select.innerHTML = opts.join('');
+    }
+
+    if (!list) return;
+    if (!state.discoveredLeads.length) {
+      list.innerHTML = `<div class="muted" style="font-size:12.5px;">No discovered leads stored yet. Run a Discovery batch or Phase 1 to populate this queue.</div>`;
+      return;
+    }
+
+    list.innerHTML = state.discoveredLeads.slice(0, 16).map((lead, idx) => {
+      const seeds = Array.isArray(lead.seed_sources) ? lead.seed_sources : [];
+      const firstSeed = seeds[0] || {};
+      return `
+        <div class="lead-row">
+          <div class="lead-row-top">
+            <div>
+              <strong style="font-size:13.5px;">${esc(lead.stage_name || lead.lead_id)}</strong>
+              <span class="pill ${lead.attribution_status === 'verified' ? 'ok' : ''}" style="margin-left:6px;">${esc(lead.attribution_status || 'lead')}</span>
+              ${firstSeed.source_channel ? `<span class="pill" style="margin-left:4px;">${esc(formatLabel(firstSeed.source_channel))}</span>` : ''}
+            </div>
+            <button type="button" class="btn btn-primary disc-send-pipeline-btn" data-lidx="${idx}" style="padding:5px 10px; font-size:11.5px;">
+              Investigate in Pipeline →
+            </button>
+          </div>
+          ${lead.context_snippet ? `<div class="muted" style="font-size:12px;">${esc(lead.context_snippet.slice(0, 160))}</div>` : ''}
+        </div>`;
+    }).join('');
+
+    list.querySelectorAll('.disc-send-pipeline-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const lead = state.discoveredLeads[Number(btn.dataset.lidx)];
+        if (!lead) return;
+        selectPhase('2a_identity', leadToPhase2Handoff(lead));
+        switchTab('pipeline');
+      });
+    });
+  }
+
+  async function refreshDiscoveryData() {
+    const [bRes, lRes] = await Promise.all([
+      fetch('/api/discovery/batches').catch(() => null),
+      fetch('/api/leads').catch(() => null),
+    ]);
+    if (bRes && bRes.ok) {
+      const bData = await bRes.json();
+      state.discoveryBatches = bData.batches || [];
+      if (state.discoveryBatches.length) {
+        syncDiscoveryBatchLinks(state.discoveryBatches[0].batch_id);
+      }
+      renderDiscBatches();
+    }
+    if (lRes && lRes.ok) {
+      const lData = await lRes.json();
+      state.discoveredLeads = lData.leads || [];
+      renderDiscLeads();
+    }
+  }
+
+  if ($('discSearchInput')) {
+    $('discSearchInput').addEventListener('input', renderDiscSources);
+    ['discChannelFilter', 'discCityFilter', 'discTierFilter', 'discGenreFilter'].forEach((id) => {
+      $(id).addEventListener('change', renderDiscSources);
+    });
+    $('discSelectQuickBtn').addEventListener('click', () => {
+      state.selectedSourceIds.clear();
+      state.sources
+        .filter((s) => s.status === 'active' && s.location && s.location.city === 'New York')
+        .slice(0, 3)
+        .forEach((s) => state.selectedSourceIds.add(s.source_id));
+      $('discAgentCountInput').value = Math.max(1, state.selectedSourceIds.size);
+      renderDiscSources();
+    });
+    $('discSelectFilteredBtn').addEventListener('click', () => {
+      state.filteredSources.forEach((s) => state.selectedSourceIds.add(s.source_id));
+      if (state.selectedSourceIds.size > 0) {
+        $('discAgentCountInput').value = Math.min(state.selectedSourceIds.size, 10);
+      }
+      renderDiscSources();
+    });
+    $('discClearSelBtn').addEventListener('click', () => {
+      state.selectedSourceIds.clear();
+      renderDiscSources();
+    });
+    $('discToggleExpandBtn').addEventListener('click', () => {
+      state.sourcesExpanded = !state.sourcesExpanded;
+      $('discSourceGrid').classList.toggle('expanded', state.sourcesExpanded);
+      $('discToggleExpandBtn').textContent = state.sourcesExpanded ? 'Collapse List' : 'Expand Full List';
+    });
+    $('discRefreshDataBtn').addEventListener('click', refreshDiscoveryData);
+
+    $('discSyncToPipelineBtn').addEventListener('click', () => {
+      const payload = {
+        brief: $('discBriefInput').value.trim(),
+        source_ids: Array.from(state.selectedSourceIds),
+        agent_count: Number($('discAgentCountInput').value || 1),
+        leads_per_agent: Number($('discLeadsPerAgentInput').value || 2),
+      };
+      selectPhase('1_discovery', payload);
+      switchTab('pipeline');
+    });
+
+    $('discDispatchBtn').addEventListener('click', async () => {
+      if (!state.selectedSourceIds.size) {
+        setBanner('Select at least one source from the Discovery Source Registry first.', 'error');
+        return;
+      }
+      setBanner('Dispatching discovery agents…', 'info');
+      $('discDispatchBtn').disabled = true;
+      try {
+        const res = await fetch('/api/discovery/dispatch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source_ids: Array.from(state.selectedSourceIds),
+            brief: $('discBriefInput').value,
+            agent_count: Number($('discAgentCountInput').value || 1),
+            leads_per_agent: Number($('discLeadsPerAgentInput').value || 2),
+            live: $('discLiveToggle').checked,
+          }),
+        });
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload.error || 'Discovery dispatch failed');
+        const msg = `Dispatched ${payload.agent_count} scout(s) in ${payload.mode} mode (${payload.batch_id}).`;
+        setBanner(msg, 'info');
+        syncDiscoveryBatchLinks(payload.batch_id, msg);
+        await refreshDiscoveryData();
+      } catch (err) {
+        setBanner(err.message, 'error');
+      } finally {
+        $('discDispatchBtn').disabled = false;
+      }
+    });
+  }
 
   // =========================================================
   // TAB 1: TALENT REVIEW
@@ -454,10 +828,42 @@
     if (cur) {
       $('phaseInputJson').value = JSON.stringify(customInput || cur.default_input, null, 2);
     }
+    if ($('phaseSourceBridgeBar')) {
+      $('phaseSourceBridgeBar').classList.toggle('hidden', phaseId !== '1_discovery');
+    }
+    if ($('phaseLeadBridgeBar')) {
+      const showLeads = ['2a_identity', '2b_investigators', '2c_dossier'].includes(phaseId);
+      $('phaseLeadBridgeBar').classList.toggle('hidden', !showLeads);
+    }
+  }
+
+  if ($('phaseOpenDiscoveryBtn')) {
+    $('phaseOpenDiscoveryBtn').addEventListener('click', () => switchTab('discovery'));
+  }
+  if ($('phaseLeadSelect')) {
+    $('phaseLeadSelect').addEventListener('change', () => {
+      const rawIdx = $('phaseLeadSelect').value;
+      if (rawIdx === '') return;
+      const lead = state.discoveredLeads[Number(rawIdx)];
+      if (!lead) return;
+      $('phaseInputJson').value = JSON.stringify(leadToPhase2Handoff(lead), null, 2);
+    });
   }
 
   function renderPhaseResult(result) {
     $('phaseRunMeta').textContent = `${result.mode.toUpperCase()} · ${result.duration_ms} ms · ${result.phase_run_id}`;
+    const batchLinks = $('phaseBatchLinks');
+    if (batchLinks) {
+      const batchId = result.output && result.output.batch_id;
+      if (batchId) {
+        const q = `?batch=${encodeURIComponent(batchId)}`;
+        batchLinks.innerHTML = `<a class="btn" style="padding:3px 8px; font-size:11px;" href="/field-news${q}">Field News →</a><a class="btn" style="padding:3px 8px; font-size:11px;" href="/reports${q}">Reports →</a>`;
+        batchLinks.classList.remove('hidden');
+      } else {
+        batchLinks.innerHTML = '';
+        batchLinks.classList.add('hidden');
+      }
+    }
     $('phaseChecks').innerHTML = (result.checks || [])
       .map(
         (c) => `<span class="pill ${c.passed ? 'ok' : 'warn'}">${c.passed ? '✓' : '✕'} ${esc(c.label || c.name)}</span>`
@@ -554,11 +960,17 @@
       renderPhaseResult(data);
       renderCheckpoints();
 
-      // If Phase 1 ran, refresh Talent Review runs
-      if (phaseId === '1_discovery' && data.run_id) {
-        await refreshHistory();
-        const runRes = await fetch('/api/runs?id=' + encodeURIComponent(data.run_id));
-        if (runRes.ok) renderRun(await runRes.json());
+      // If Phase 1 ran, refresh Discovery batches/leads & Talent Review runs
+      if (phaseId === '1_discovery') {
+        await refreshDiscoveryData();
+        if (data.output && data.output.batch_id) {
+          syncDiscoveryBatchLinks(data.output.batch_id);
+        }
+        if (data.run_id) {
+          await refreshHistory();
+          const runRes = await fetch('/api/runs?id=' + encodeURIComponent(data.run_id));
+          if (runRes.ok) renderRun(await runRes.json());
+        }
       }
 
       if (advanceNext) {
@@ -817,14 +1229,15 @@
   $('scoutBtn').addEventListener('click', () => triggerScout($('liveToggle').checked));
 
   // =========================================================
-  // INITIALIZE ALL 3 TABS
+  // INITIALIZE ALL 4 TABS
   // =========================================================
   async function init() {
-    const [statusRes, phasesRes, agentsRes, evalsRes] = await Promise.all([
+    const [statusRes, phasesRes, agentsRes, evalsRes, sourcesRes] = await Promise.all([
       fetch('/api/status'),
       fetch('/api/phases'),
       fetch('/api/agents'),
       fetch('/api/evals'),
+      fetch('/api/sources'),
     ]);
 
     const status = await statusRes.json();
@@ -837,6 +1250,27 @@
       keyBadge.innerHTML = `<span class="dot accent"></span><span>Demo Mode</span>`;
       $('liveToggle').checked = false;
     }
+
+    if (sourcesRes && sourcesRes.ok) {
+      const sData = await sourcesRes.json();
+      state.sources = sData.sources || [];
+      if ($('discChannelFilter')) {
+        (sData.channels || []).forEach((c) => $('discChannelFilter').add(new Option(formatLabel(c), c)));
+        (sData.cities || []).forEach((c) => $('discCityFilter').add(new Option(c, c)));
+        (sData.tiers || []).forEach((t) => $('discTierFilter').add(new Option(formatLabel(t), t)));
+        const genres = (sData.genres && sData.genres.length)
+          ? sData.genres
+          : Array.from(new Set(state.sources.flatMap((s) => Array.isArray(s.genre_tags) ? s.genre_tags : []).filter((g) => g && g !== 'all'))).sort();
+        genres.forEach((g) => $('discGenreFilter').add(new Option(g, g)));
+        ['yt_sofar_sounds', 'nyc_babys_all_right', 'bc_brooklyn_soul_rnb'].forEach((id) => {
+          if (state.sources.some((s) => s.source_id === id)) state.selectedSourceIds.add(id);
+        });
+        $('discAgentCountInput').value = Math.max(1, state.selectedSourceIds.size);
+        renderDiscSources();
+      }
+    }
+
+    await refreshDiscoveryData();
 
     if (phasesRes.ok) {
       const pData = await phasesRes.json();
@@ -856,6 +1290,33 @@
       const eData = await evalsRes.json();
       state.evals = eData.evals || [];
       renderEvalHistory();
+    }
+
+    // Apply URL deep links (?tab=discovery|review|pipeline|lab&phase=...&lead=...&subject=...)
+    const params = new URLSearchParams(window.location.search);
+    const reqTab = params.get('tab');
+    const reqPhase = params.get('phase');
+    const reqLead = params.get('lead');
+    const reqSubject = params.get('subject');
+    if (reqLead || reqSubject) {
+      const matched = state.discoveredLeads.find(
+        (l) => (reqLead && l.lead_id === reqLead) || (reqSubject && (l.stage_name || '').toLowerCase() === reqSubject.toLowerCase())
+      );
+      const handoff = matched
+        ? leadToPhase2Handoff(matched)
+        : {
+            lead_id: reqLead || '',
+            stage_name: reqSubject || 'Unknown Artist',
+            attribution_status: 'verified',
+            source_channel: 'youtube_session',
+          };
+      selectPhase(reqPhase || '2a_identity', handoff);
+      switchTab(reqTab || 'pipeline');
+    } else if (reqPhase) {
+      selectPhase(reqPhase);
+      switchTab(reqTab || 'pipeline');
+    } else if (reqTab) {
+      switchTab(reqTab);
     }
 
     // Load newest saved run or seed demo
