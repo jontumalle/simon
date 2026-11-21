@@ -37,7 +37,7 @@ from urllib import error as urlerror
 from urllib import request as urlrequest
 import uuid
 
-from .db_tools import REPORT_FORBIDDEN_KEYS, list_agent_documents, save_agent_document
+from .db_tools import REPORT_FORBIDDEN_KEYS, get_agent_document, list_agent_documents, save_agent_document
 from .store import SimonStore, create_store
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -221,6 +221,153 @@ def _load_golden_samples(agent: str = "discovery-scout") -> List[Dict[str, Any]]
     return samples
 
 
+def _parse_json_output_text(raw: Any) -> Dict[str, Any]:
+    """Parse a dict or JSON/fenced-JSON string from an agent trace output."""
+    if isinstance(raw, dict):
+        return raw
+    if not isinstance(raw, str) or not raw.strip():
+        return {}
+    s = raw.strip()
+    if s.startswith("```"):
+        parts = s.split("\n", 1)
+        if len(parts) == 2:
+            s = parts[1].rsplit("```", 1)[0].strip()
+    try:
+        parsed = json.loads(s)
+        return parsed if isinstance(parsed, dict) else {}
+    except ValueError:
+        return {}
+
+
+def _trace_matches_agent(slug: str, doc: Dict[str, Any]) -> bool:
+    """Return True if an agent_run or agent_report belongs to the normalized agent slug."""
+    if not slug:
+        return True
+    agent_id = str(doc.get("agent_id") or doc.get("agent_name") or "").lower()
+    stage = str(doc.get("stage") or "").lower()
+    if slug in agent_id or slug.replace("-", " ") in agent_id:
+        return True
+    if slug == "discovery-scout" and stage == "discovery":
+        return True
+    return False
+
+
+def list_evaluable_traces(
+    store: Optional[SimonStore],
+    agent: Optional[str] = None,
+    limit: int = 30,
+) -> List[Dict[str, Any]]:
+    """List real recorded traces (`agent_runs` and `agent_reports`) selectable in `/evals`."""
+    if store is None:
+        return []
+    slug = _normalize_agent_slug(agent) if agent else ""
+    traces: List[Dict[str, Any]] = []
+    seen: set = set()
+
+    for coll in ("agent_runs", "agent_reports"):
+        rows = list_agent_documents(store, coll, limit=max(limit, 50))
+        for row in rows:
+            doc = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else row
+            if not isinstance(doc, dict):
+                continue
+            if slug and not _trace_matches_agent(slug, doc):
+                continue
+            tid = str(
+                doc.get("agent_run_id")
+                or doc.get("report_id")
+                or row.get("doc_id")
+                or doc.get("_doc_id")
+                or ""
+            ).strip()
+            if not tid or (coll, tid) in seen:
+                continue
+            seen.add((coll, tid))
+            steps = doc.get("steps") or doc.get("trace") or []
+            status = str(doc.get("status") or "unknown")
+            brief = str(
+                doc.get("assignment")
+                or doc.get("target")
+                or doc.get("brief")
+                or doc.get("headline")
+                or ""
+            ).strip()
+            output_obj = _parse_json_output_text(doc.get("output") or doc.get("output_text"))
+            created_at = str(doc.get("created_at") or doc.get("updated_at") or row.get("updated_at") or "")
+            label_brief = (brief[:68] + "…") if len(brief) > 68 else (brief or tid)
+            traces.append(
+                {
+                    "trace_id": tid,
+                    "collection": coll,
+                    "agent_id": str(doc.get("agent_id") or doc.get("agent_name") or slug or "unknown"),
+                    "status": status,
+                    "step_count": len(steps) if isinstance(steps, list) else 0,
+                    "has_output": bool(output_obj),
+                    "brief": brief,
+                    "created_at": created_at,
+                    "label": f"[{coll[:-1]}] {tid} · {status} · {len(steps) if isinstance(steps, list) else 0} steps · {label_brief}",
+                }
+            )
+
+    traces.sort(key=lambda t: t.get("created_at") or "", reverse=True)
+    return traces[:limit]
+
+
+def _load_single_trace_sample(
+    store: Optional[SimonStore],
+    trace_id: str,
+    trace_collection: Optional[str] = None,
+    agent: str = "discovery-scout",
+) -> List[Dict[str, Any]]:
+    """Load one specific recorded trace (`agent_runs` or `agent_reports`) as an eval sample."""
+    if store is None:
+        raise ValueError("A store is required to evaluate a specific trace_id.")
+    slug = _normalize_agent_slug(agent)
+    collections = (
+        [trace_collection]
+        if trace_collection in ("agent_runs", "agent_reports")
+        else ["agent_runs", "agent_reports"]
+    )
+    found_doc: Optional[Dict[str, Any]] = None
+    found_coll: str = ""
+    for coll in collections:
+        row = get_agent_document(store, coll, trace_id)
+        if isinstance(row, dict):
+            found_doc = row.get("data") if isinstance(row.get("data"), dict) else row
+            found_coll = coll
+            break
+    if not found_doc:
+        raise ValueError(f"Trace '{trace_id}' not found in {', '.join(collections)}.")
+
+    steps = found_doc.get("steps") or found_doc.get("trace") or []
+    output_obj = _parse_json_output_text(found_doc.get("output") or found_doc.get("output_text"))
+    steps_summary = "\n".join(
+        f"[{s.get('index', idx + 1)}:{s.get('phase') or s.get('type') or 'step'}] "
+        f"{s.get('title') or ''} {s.get('preview') or s.get('finding') or ''}"
+        for idx, s in enumerate(steps)
+        if isinstance(s, dict)
+    )
+    return [
+        {
+            "case_id": trace_id,
+            "source": f"trace:{found_coll}:{trace_id}",
+            "brief": str(
+                found_doc.get("assignment")
+                or found_doc.get("target")
+                or found_doc.get("brief")
+                or output_obj.get("search_brief")
+                or f"Trace {trace_id}"
+            ),
+            "output": output_obj,
+            "handoff": output_obj if slug == "discovery-scout" else None,
+            "report": found_doc if found_coll == "agent_reports" else None,
+            "trace_status": str(found_doc.get("status") or ""),
+            "trace_steps": steps if isinstance(steps, list) else [],
+            "expected_valid": True,
+            "context": steps_summary or f"Recorded {found_coll} trace {trace_id}.",
+        }
+    ]
+
+
 def _load_live_report_samples(
     store: Optional[SimonStore],
     agent: str = "discovery-scout",
@@ -303,10 +450,14 @@ def _evaluate_deterministic_gates(
     for s in valid_samples:
         output = s.get("output") or s.get("handoff") or {}
         report = s.get("report")
+        trace_status = str(s.get("trace_status") or "").lower()
         case_failures: List[str] = []
 
         # Discovery-specific contract check vs generic non-empty JSON object check
-        if slug == "discovery-scout":
+        if trace_status in ("incomplete", "failed", "error"):
+            contract_ok = False
+            contract_err = f"Trace did not complete (status={trace_status})"
+        elif slug == "discovery-scout":
             cleaned, errors = clean_and_dedupe_handoff(output, verify_oembed=False)
             contract_ok = len(errors) == 0 and bool(cleaned.get("leads"))
             contract_err = "; ".join(errors[:2]) if errors else ""
@@ -439,13 +590,30 @@ def _evaluate_offline_rubrics(
                     violated = bool(RANKING_PRAISE_RE.search(out_str + " " + headline))
                     accum += 0.0 if violated else max_s
                 elif "db" in rid:
-                    accum += max_s if (output or "simon-db" in ctx) else max_s * 0.5
+                    if "simon_db.py list" in ctx or "discovered_sources" in ctx:
+                        accum += max_s
+                    elif "simon-db" in ctx or "simon_db" in ctx:
+                        accum += max_s * 0.5
+                    else:
+                        accum += 0.0
+                elif "yt_quota" in rid or "youtube" in rid:
+                    if "channel-videos" in ctx or "youtube_api.py video" in ctx:
+                        accum += max_s
+                    elif "youtube_api.py search" in ctx:
+                        accum += max_s * 0.5
+                    else:
+                        accum += 0.0
                 else:
-                    accum += max_s if isinstance(output, dict) and len(output) > 0 else 0.0
+                    # Do NOT award fake 100% for LLM-judge rubrics in offline mode.
+                    accum += 0.0
 
             avg_raw = round(accum / total, 3)
             norm = round(min(1.0, max(0.0, avg_raw / max_s)), 4)
             threshold = float(layer.get("pass_threshold") or 0.75)
+            is_llm_only = not any(
+                tok in rid
+                for tok in ("field_news", "report", "channel_mix", "new_sources", "zero_ranking", "db", "yt_quota", "youtube")
+            )
             dims.append(
                 {
                     "rubric_id": rid,
@@ -456,8 +624,12 @@ def _evaluate_offline_rubrics(
                     "score": norm,
                     "raw_score": avg_raw,
                     "max_score": max_s,
-                    "passed": norm >= threshold,
-                    "detail": f"Offline heuristic avg {avg_raw}/{max_s:g} across {total} sample(s).",
+                    "passed": False if is_llm_only else (norm >= threshold),
+                    "detail": (
+                        "Requires Vertex AI LLM judge (--mode vertex); not auto-passed offline."
+                        if is_llm_only
+                        else f"Offline deterministic check avg {avg_raw}/{max_s:g} across {total} sample(s)."
+                    ),
                 }
             )
     return dims
@@ -591,15 +763,27 @@ def run_agent_eval(
     region: Optional[str] = None,
     trigger: str = "cli",
     git_sha: Optional[str] = None,
+    trace_id: Optional[str] = None,
+    trace_collection: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Execute the 3-layer eval for any Simon agent and return a canonical SimonEvalRun dict."""
     slug = _normalize_agent_slug(agent)
     rubrics_spec = load_agent_rubrics(slug)
     samples: List[Dict[str, Any]] = []
-    if sample_source in ("live_reports", "mixed"):
-        samples.extend(_load_live_report_samples(store, agent=slug, limit=10))
-    if sample_source in ("golden_dataset", "mixed") or not samples:
-        samples.extend(_load_golden_samples(agent=slug))
+    effective_sample_source = sample_source
+    if trace_id:
+        samples = _load_single_trace_sample(
+            store=store,
+            trace_id=trace_id,
+            trace_collection=trace_collection,
+            agent=slug,
+        )
+        effective_sample_source = f"trace:{trace_id}"
+    else:
+        if sample_source in ("live_reports", "mixed"):
+            samples.extend(_load_live_report_samples(store, agent=slug, limit=10))
+        if sample_source in ("golden_dataset", "mixed") or not samples:
+            samples.extend(_load_golden_samples(agent=slug))
 
     gate_dims, case_results = _evaluate_deterministic_gates(slug, rubrics_spec, samples)
     passed_gates = all(d["passed"] for d in gate_dims)
@@ -651,7 +835,7 @@ def run_agent_eval(
         "overall_score": overall,
         "passed_gates": passed_gates,
         "sample_count": len(samples),
-        "sample_source": sample_source,
+        "sample_source": effective_sample_source,
         "git_sha": git_sha or os.environ.get("GITHUB_SHA"),
         "gcp_project": gcp_project,
         "gcp_region": gcp_region,

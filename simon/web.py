@@ -43,7 +43,7 @@ from .discovery_ui import (
     refresh_discovery_batch,
     render_top_nav,
 )
-from .vertex_eval import list_available_eval_agents, load_agent_rubrics, run_agent_eval
+from .vertex_eval import list_available_eval_agents, list_evaluable_traces, load_agent_rubrics, run_agent_eval
 from .fleet import dispatch_fleet
 from .phases import (
     AGENT_EVALS_COLLECTION,
@@ -273,6 +273,17 @@ def dispatch_http_request(
                 HTTPStatus.OK,
                 "application/json; charset=utf-8",
                 json.dumps(spec, ensure_ascii=False).encode("utf-8"),
+            )
+
+        if parsed.path == "/api/evals/traces":
+            qs = parse_qs(parsed.query)
+            agent = (qs.get("agent") or [None])[0]
+            limit = int((qs.get("limit") or ["30"])[0])
+            traces = list_evaluable_traces(store, agent=agent, limit=limit)
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps({"count": len(traces), "traces": traces}, ensure_ascii=False).encode("utf-8"),
             )
 
         if parsed.path == "/api/eval-runs":
@@ -671,6 +682,8 @@ def dispatch_http_request(
         sample_source = str(req.get("sample_source") or "mixed").strip()
         all_agents = bool(req.get("all_agents", False))
         agent = str(req.get("agent") or "discovery-scout").strip()
+        trace_id = str(req.get("trace_id") or "").strip() or None
+        trace_collection = str(req.get("trace_collection") or "").strip() or None
         try:
             if all_agents:
                 results = []
@@ -695,6 +708,8 @@ def dispatch_http_request(
                 sample_source=sample_source,
                 store=store,
                 trigger="platform_ui",
+                trace_id=trace_id,
+                trace_collection=trace_collection,
             )
             save_agent_document(store, "eval_runs", eval_run)
         except Exception as exc:

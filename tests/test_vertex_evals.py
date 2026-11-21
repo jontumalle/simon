@@ -46,7 +46,11 @@ class VertexEvalTests(unittest.TestCase):
             trigger="unittest",
         )
         self.assertTrue(result["passed_gates"])
-        self.assertGreaterEqual(result["overall_score"], 0.8)
+        # Offline mode must not award fake 100% on LLM-only rubrics.
+        self.assertLess(result["overall_score"], 1.0)
+        llm_only = [d for d in result["dimensions"] if "Requires Vertex AI LLM judge" in d.get("detail", "")]
+        self.assertGreaterEqual(len(llm_only), 1)
+        self.assertTrue(all(not d["passed"] and d["score"] == 0.0 for d in llm_only))
         self.assertEqual(result["runner"], "offline_baseline")
         self.assertGreaterEqual(len(result["dimensions"]), 10)
 
@@ -107,6 +111,45 @@ class VertexEvalTests(unittest.TestCase):
         ids = {r["eval_run_id"] for r in listed["eval_runs"]}
         self.assertIn("eval_vertex_ci_01", ids)
         self.assertIn(created["eval_run_id"], ids)
+
+    def test_trace_selection_endpoint_and_incomplete_trace_fails_gates(self) -> None:
+        # Seed one incomplete agent_run trace (simulating a 64k-token truncation)
+        self.store.save_document(
+            "agent_runs",
+            "run_incomplete_01",
+            {
+                "agent_run_id": "run_incomplete_01",
+                "agent_id": "staging-simon-discovery-scout",
+                "stage": "discovery",
+                "status": "incomplete",
+                "assignment": "Emerging NYC indie acts",
+                "output_text": "",
+                "steps": [{"index": 1, "type": "thought", "preview": "Reading skills"}],
+                "created_at": "2026-11-21T22:25:00Z",
+            },
+        )
+        # 1. GET /api/evals/traces?agent=discovery-scout lists the trace
+        status, _, body = dispatch_http_request(self.store, "GET", "/api/evals/traces?agent=discovery-scout")
+        self.assertEqual(status, HTTPStatus.OK)
+        tdata = json.loads(body.decode("utf-8"))
+        self.assertEqual(tdata["count"], 1)
+        self.assertEqual(tdata["traces"][0]["trace_id"], "run_incomplete_01")
+
+        # 2. POST /api/eval-runs/run targeting that exact trace fails Layer 1 gates honestly
+        req = json.dumps(
+            {
+                "agent": "discovery-scout",
+                "mode": "offline",
+                "trace_id": "run_incomplete_01",
+                "trace_collection": "agent_runs",
+            }
+        ).encode("utf-8")
+        status, _, body = dispatch_http_request(self.store, "POST", "/api/eval-runs/run", req)
+        self.assertEqual(status, HTTPStatus.CREATED)
+        ev = json.loads(body.decode("utf-8"))
+        self.assertEqual(ev["sample_source"], "trace:run_incomplete_01")
+        self.assertFalse(ev["passed_gates"])
+        self.assertEqual(ev["status"], "failed")
 
 
 if __name__ == "__main__":
