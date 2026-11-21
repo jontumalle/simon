@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://simon.local/schemas/agent_report_schema.json",
+  "title": "Simon Human-First Agent Report Contract (Field News & Scouting Reports)",
+  "description": "Human-first reporting layer for Simon Managed Agents. Stores live in-motion process updates (looking_at, finding, analysis), human-readable findings, and the agent's final structured output. Deliberately excludes raw telemetry such as interaction_id, environment_id, and system metadata.",
+  "type": "object",
+  "required": [
+    "contract_version",
+    "report_id",
+    "agent_name",
+    "stage",
+    "brief",
+    "status",
+    "steps",
+    "findings"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "report_id": {
+      "type": "string",
+      "description": "Stable human-facing report identifier (e.g. rep_disc_a1b2c3_w1)."
+    },
+    "batch_id": {
+      "type": ["string", "null"],
+      "description": "Optional discovery or pipeline batch ID grouping parallel scouts."
+    },
+    "agent_name": {
+      "type": "string",
+      "description": "Plain human-readable agent label (e.g. Discovery Scout 01)."
+    },
+    "stage": {
+      "type": "string",
+      "enum": ["discovery", "investigator", "critic", "synthesis", "custom"]
+    },
+    "brief": {
+      "type": "string",
+      "description": "Plain-language assignment or scouting brief the agent is working on."
+    },
+    "assigned_sources": {
+      "type": "array",
+      "description": "Sources this agent was asked to inspect.",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "source_id": { "type": "string" },
+          "name": { "type": "string" },
+          "url": { "type": "string" },
+          "source_channel": { "type": "string" },
+          "city": { "type": "string" }
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["starting", "in_motion", "completed", "blocked"]
+    },
+    "headline": {
+      "type": "string",
+      "description": "One-sentence human summary of what the agent found or is currently doing."
+    },
+    "current_focus": {
+      "type": "string",
+      "description": "What the agent is actively looking at right now."
+    },
+    "steps": {
+      "type": "array",
+      "description": "Ordered human-readable Field News entries tracking what the agent looked at, found, and analyzed.",
+      "items": {
+        "$ref": "#/$defs/FieldStep"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "Scannable list of concrete subjects, leads, or facts discovered by the agent.",
+      "items": {
+        "$ref": "#/$defs/FindingItem"
+      }
+    },
+    "output": {
+      "description": "The agent's full stored domain output payload (e.g., DiscoveryHandoff v1.0.0 or InvestigatorDossier)."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "FieldStep": {
+      "type": "object",
+      "required": ["step_number", "phase", "title", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "step_number": { "type": "integer", "minimum": 1 },
+        "phase": {
+          "type": "string",
+          "enum": ["looking_at", "finding", "analysis", "saved"]
+        },
+        "title": { "type": "string" },
+        "looking_at": { "type": "string" },
+        "finding": { "type": "string" },
+        "analysis": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["active", "done", "blocked"]
+        },
+        "updated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "FindingItem": {
+      "type": "object",
+      "required": ["title", "summary"],
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string" },
+        "summary": { "type": "string" },
+        "source_name": { "type": "string" },
+        "source_channel": { "type": "string" },
+        "url": { "type": "string" },
+        "attribution_status": { "type": "string" }
+      }
+    }
+  }
+}

@@ -24,8 +24,12 @@ from .db_tools import (
 from .deploy import compile_agent_package, list_agent_packages
 from .discovery_ui import (
     DISCOVERY_HTML,
+    FIELD_NEWS_HTML,
+    REPORTS_HTML,
     TRACES_HTML,
     dispatch_discovery_batch,
+    get_agent_report,
+    list_agent_reports,
     list_discovery_batches,
     load_source_registry,
     refresh_discovery_batch,
@@ -238,8 +242,9 @@ INDEX_HTML = """<!DOCTYPE html>
         <p>Enter a taste brief to scout public YouTube vocal performances, extract timestamped musical choices with <strong>Gemini 4 Hydrogen</strong>, and synthesize a human-verifiable listening shortlist via <strong>Gemini Managed Agents</strong>.</p>
       </div>
       <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-        <a href="/discovery" class="pill amber" style="text-decoration:none;">1. Discovery &amp; Sources</a>
-        <a href="/traces" class="pill live" style="text-decoration:none;">2. Agent Traces</a>
+        <a href="/discovery" class="pill amber" style="text-decoration:none;">1. Discovery Dashboard</a>
+        <a href="/field-news" class="pill live" style="text-decoration:none;">2. Field News</a>
+        <a href="/reports" class="pill" style="text-decoration:none;">3. Scouting Reports</a>
         <span id="serverKeyBadge" class="pill">Checking API status…</span>
         <select id="historySelect" class="key-input" style="width:auto;" title="Saved SQLite Scout Runs">
           <option value="">Recent saved runs…</option>
@@ -959,8 +964,41 @@ def dispatch_http_request(
         if parsed.path in ("/discovery", "/scouting"):
             return (HTTPStatus.OK, "text/html; charset=utf-8", DISCOVERY_HTML.encode("utf-8"))
 
-        if parsed.path == "/traces":
-            return (HTTPStatus.OK, "text/html; charset=utf-8", TRACES_HTML.encode("utf-8"))
+        if parsed.path in ("/field-news", "/traces"):
+            return (HTTPStatus.OK, "text/html; charset=utf-8", FIELD_NEWS_HTML.encode("utf-8"))
+
+        if parsed.path == "/reports":
+            return (HTTPStatus.OK, "text/html; charset=utf-8", REPORTS_HTML.encode("utf-8"))
+
+        if parsed.path in ("/api/field-news", "/api/reports"):
+            qs = parse_qs(parsed.query)
+            reports = list_agent_reports(
+                store,
+                batch_id=(qs.get("batch_id") or [None])[0],
+                status=(qs.get("status") or [None])[0],
+                stage=(qs.get("stage") or [None])[0],
+                limit=int((qs.get("limit") or ["50"])[0]),
+            )
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps({"count": len(reports), "reports": reports}, ensure_ascii=False).encode("utf-8"),
+            )
+
+        if parsed.path.startswith("/api/reports/"):
+            report_id = parsed.path[len("/api/reports/"):].strip("/")
+            report = get_agent_report(store, report_id)
+            if report is None:
+                return (
+                    HTTPStatus.NOT_FOUND,
+                    "application/json; charset=utf-8",
+                    json.dumps({"error": f"Report '{report_id}' not found."}).encode("utf-8"),
+                )
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps(report, ensure_ascii=False).encode("utf-8"),
+            )
 
         if parsed.path in ("/healthz", "/api/health"):
             payload = {

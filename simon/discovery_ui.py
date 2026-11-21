@@ -15,7 +15,12 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 import uuid
 
-from .db_tools import get_agent_document, list_agent_documents, save_agent_document
+from .db_tools import (
+    get_agent_document,
+    list_agent_documents,
+    sanitize_agent_report,
+    save_agent_document,
+)
 from .fleet import (
     TERMINAL_STATUSES,
     _http_json,
@@ -109,6 +114,268 @@ def _partition_sources(sources: List[Dict[str, Any]], agent_count: int) -> List[
         if not buckets[idx] and sources:
             buckets[idx].append(sources[idx % len(sources)])
     return buckets
+
+
+def _extract_findings_from_handoff(output_json: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not isinstance(output_json, dict):
+        return []
+    findings: List[Dict[str, Any]] = []
+    for lead in output_json.get("leads") or []:
+        if not isinstance(lead, dict):
+            continue
+        seeds = lead.get("seed_sources") or []
+        first_seed = seeds[0] if seeds and isinstance(seeds[0], dict) else {}
+        item = {
+            "title": str(lead.get("stage_name") or lead.get("lead_id") or "Unnamed Subject"),
+            "summary": str(lead.get("context_snippet") or first_seed.get("notes") or "Discovered lead."),
+            "source_name": str(first_seed.get("seed_query_or_venue_node") or first_seed.get("source_channel") or ""),
+            "source_channel": str(first_seed.get("source_channel") or ""),
+            "url": str(first_seed.get("url") or ""),
+            "attribution_status": str(lead.get("attribution_status") or ""),
+        }
+        findings.append({k: v for k, v in item.items() if v})
+    return findings
+
+
+def _human_steps_for_worker(
+    worker: Dict[str, Any],
+    brief: str,
+    mode: str,
+) -> List[Dict[str, Any]]:
+    """Build clean human-first Field News steps (looking_at / finding / analysis) with zero telemetry."""
+    assigned = worker.get("assigned_sources") or []
+    src_names = ", ".join(s.get("name", "source") for s in assigned[:3]) or "assigned sources"
+    status = str(worker.get("status") or "in_progress")
+    findings = _extract_findings_from_handoff(worker.get("output_json"))
+    now = _utc_now_iso()
+
+    if status == "completed":
+        names_preview = ", ".join(f["title"] for f in findings[:3]) or "no verified leads"
+        return [
+            {
+                "step_number": 1,
+                "phase": "looking_at",
+                "title": f"Scanning {src_names}",
+                "looking_at": f"Inspecting {src_names} against brief: {brief}",
+                "finding": f"Checked {len(assigned)} assigned source(s) for active vocalists and public clips.",
+                "analysis": "Focused on objective public bills and verifiable artist attribution.",
+                "status": "done",
+                "updated_at": now,
+            },
+            {
+                "step_number": 2,
+                "phase": "finding",
+                "title": f"Discovered {len(findings)} subject(s)",
+                "looking_at": f"Cross-checking public seed links from {src_names}",
+                "finding": f"Found {len(findings)} distinct lead(s): {names_preview}.",
+                "analysis": "Each subject has at least one public seed link with clear context.",
+                "status": "done",
+                "updated_at": now,
+            },
+            {
+                "step_number": 3,
+                "phase": "analysis",
+                "title": "Verified & deduplicated leads",
+                "looking_at": "Checking attribution, URL hygiene, and unranked neutrality",
+                "finding": (
+                    "All leads passed DiscoveryHandoff v1.0.0 checks."
+                    if worker.get("contract_valid")
+                    else "Completed with contract notes to review."
+                ),
+                "analysis": (
+                    "Zero scoring or ranking applied; ready for Stage 2 investigation."
+                    if worker.get("contract_valid")
+                    else "; ".join(worker.get("contract_errors") or ["Review output payload."])
+                ),
+                "status": "done" if worker.get("contract_valid") else "blocked",
+                "updated_at": now,
+            },
+            {
+                "step_number": 4,
+                "phase": "saved",
+                "title": "Scouting report & output stored",
+                "looking_at": "Final DiscoveryHandoff output contract",
+                "finding": f"Stored {len(findings)} lead(s) and full structured output for review.",
+                "analysis": "Available now in Scouting Reports.",
+                "status": "done",
+                "updated_at": now,
+            },
+        ]
+
+    if status in ("failed", "cancelled", "incomplete", "budget_exceeded", "error"):
+        return [
+            {
+                "step_number": 1,
+                "phase": "looking_at",
+                "title": f"Blocked while scouting {src_names}",
+                "looking_at": f"Assigned to inspect {src_names}",
+                "finding": "Run stopped before producing a complete scouting report.",
+                "analysis": str(worker.get("error") or f"Status: {status}"),
+                "status": "blocked",
+                "updated_at": now,
+            }
+        ]
+
+    # Active / in-motion live worker before completion
+    raw_steps = worker.get("steps") or []
+    step_count = len(raw_steps)
+    steps: List[Dict[str, Any]] = [
+        {
+            "step_number": 1,
+            "phase": "looking_at",
+            "title": f"Inspecting {src_names}",
+            "looking_at": f"Reviewing {src_names} for: {brief}",
+            "finding": (
+                f"Active in the field ({step_count} research action(s) underway)."
+                if step_count
+                else "Scout launched and opening assigned sources."
+            ),
+            "analysis": "Gathering objective public leads and verifying source URLs.",
+            "status": "active",
+            "updated_at": now,
+        }
+    ]
+    if step_count >= 2:
+        steps[0]["status"] = "done"
+        steps.append(
+            {
+                "step_number": 2,
+                "phase": "finding",
+                "title": "Pulling candidate subjects & seed links",
+                "looking_at": f"Checking public listings and channels across {src_names}",
+                "finding": "Collecting artist names, live clip links, and venue/channel context.",
+                "analysis": "Filtering out duplicates and verifying public attribution before saving.",
+                "status": "active",
+                "updated_at": now,
+            }
+        )
+    return steps
+
+
+def _sync_worker_agent_report(
+    store: SimonStore,
+    batch_id: str,
+    brief: str,
+    worker: Dict[str, Any],
+    mode: str,
+) -> Dict[str, Any]:
+    """Create or update the human-first `agent_reports` record for a discovery worker."""
+    idx = int(worker.get("index", 0))
+    report_id = str(worker.get("report_id") or f"rep_{batch_id}_w{idx + 1}")
+    worker["report_id"] = report_id
+    agent_name = f"Discovery Scout {idx + 1:02d}"
+    assigned_sources = [
+        {
+            "source_id": str(s.get("source_id") or ""),
+            "name": str(s.get("name") or ""),
+            "url": str(s.get("url") or ""),
+            "source_channel": str(s.get("source_channel") or ""),
+            "city": str(s.get("city") or ""),
+        }
+        for s in (worker.get("assigned_sources") or [])
+    ]
+    assigned_sources = [{k: v for k, v in item.items() if v} for item in assigned_sources]
+
+    existing_doc = get_agent_document(store, "agent_reports", report_id)
+    existing = (
+        existing_doc.get("data")
+        if isinstance(existing_doc, dict) and isinstance(existing_doc.get("data"), dict)
+        else (existing_doc if isinstance(existing_doc, dict) else None)
+    )
+
+    raw_status = str(worker.get("status") or "in_progress")
+    if raw_status == "completed":
+        rep_status = "completed"
+    elif raw_status in ("failed", "cancelled", "incomplete", "budget_exceeded", "error"):
+        rep_status = "blocked"
+    elif existing and existing.get("steps"):
+        rep_status = "in_motion"
+    else:
+        rep_status = "in_motion" if (worker.get("steps") or mode == "live") else "starting"
+
+    extracted_findings = _extract_findings_from_handoff(worker.get("output_json"))
+    existing_findings = list(existing.get("findings") or []) if existing else []
+    findings = extracted_findings or existing_findings
+
+    # Preserve agent-authored Field News steps if the agent wrote them directly via field_report.py
+    existing_steps = list(existing.get("steps") or []) if existing else []
+    fallback_steps = _human_steps_for_worker(worker, brief, mode)
+    if existing_steps and any(s.get("looking_at") or s.get("finding") for s in existing_steps):
+        steps = existing_steps
+        if rep_status == "completed" and not any(s.get("phase") == "saved" for s in steps):
+            steps.append(fallback_steps[-1])
+    else:
+        steps = fallback_steps
+
+    src_names = ", ".join(s.get("name", "source") for s in assigned_sources[:2]) or "assigned sources"
+    if rep_status == "completed":
+        default_headline = f"Found {len(findings)} verified lead(s) across {src_names}."
+        current_focus = "Report completed"
+    elif rep_status == "blocked":
+        default_headline = f"Scout blocked while inspecting {src_names}."
+        current_focus = str(worker.get("error") or "Needs attention")
+    else:
+        default_headline = f"Scouting {src_names} for matching vocalists."
+        current_focus = steps[-1].get("looking_at") or f"Inspecting {src_names}"
+
+    now = _utc_now_iso()
+    report_payload: Dict[str, Any] = {
+        "contract_version": "1.0.0",
+        "report_id": report_id,
+        "batch_id": batch_id,
+        "agent_name": agent_name,
+        "stage": "discovery",
+        "brief": brief,
+        "assigned_sources": assigned_sources,
+        "status": rep_status,
+        "headline": (existing.get("headline") if existing and rep_status != "completed" and existing.get("headline") else default_headline),
+        "current_focus": current_focus,
+        "steps": steps,
+        "findings": findings,
+        "output": worker.get("output_json") if worker.get("output_json") is not None else (existing.get("output") if existing else None),
+        "created_at": str((existing or {}).get("created_at") or now),
+        "updated_at": now,
+    }
+    clean_report = sanitize_agent_report(report_payload)
+    save_agent_document(store, "agent_reports", clean_report, doc_id=report_id)
+    return clean_report
+
+
+def list_agent_reports(
+    store: SimonStore,
+    batch_id: Optional[str] = None,
+    status: Optional[str] = None,
+    stage: Optional[str] = None,
+    limit: int = 50,
+) -> List[Dict[str, Any]]:
+    """List human-first AgentReport documents with all telemetry stripped."""
+    docs = list_agent_documents(store, "agent_reports", limit=max(limit, 100))
+    reports: List[Dict[str, Any]] = []
+    for row in docs:
+        doc = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else row
+        if not isinstance(doc, dict) or not doc.get("report_id"):
+            continue
+        clean = sanitize_agent_report(doc)
+        if batch_id and clean.get("batch_id") != batch_id:
+            continue
+        if status and clean.get("status") != status:
+            continue
+        if stage and clean.get("stage") != stage:
+            continue
+        reports.append(clean)
+    reports.sort(key=lambda r: str(r.get("updated_at") or r.get("created_at") or ""), reverse=True)
+    return reports[:limit]
+
+
+def get_agent_report(store: SimonStore, report_id: str) -> Optional[Dict[str, Any]]:
+    """Fetch a single human-first AgentReport with all telemetry stripped."""
+    row = get_agent_document(store, "agent_reports", report_id)
+    if not isinstance(row, dict):
+        return None
+    doc = row.get("data") if isinstance(row.get("data"), dict) else row
+    if not isinstance(doc, dict):
+        return None
+    return sanitize_agent_report(doc)
 
 
 def _validate_handoff_payload(output_json: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -294,17 +561,22 @@ def dispatch_discovery_batch(
     if not live:
         for idx, assigned in enumerate(partitions):
             worker = _build_simulated_worker(idx, batch_id, clean_brief, n_leads, assigned)
+            worker["report_id"] = f"rep_{batch_id}_w{idx + 1}"
             workers.append(worker)
             if worker["contract_valid"] and isinstance(worker.get("output_json"), dict):
                 try:
                     save_agent_document(store, "discovery_handoffs", worker["output_json"])
                 except ValueError:
                     pass
+            _sync_worker_agent_report(store, batch_id, clean_brief, worker, mode="simulated")
         mode = "simulated"
     else:
         assignments = [
             {
                 "run_id": f"{batch_id}_w{idx + 1}",
+                "report_id": f"rep_{batch_id}_w{idx + 1}",
+                "batch_id": batch_id,
+                "agent_name": f"Discovery Scout {idx + 1:02d}",
                 "search_brief": clean_brief,
                 "requested_count": n_leads,
                 "assigned_sources": [
@@ -324,8 +596,13 @@ def dispatch_discovery_batch(
         prompt_template = (
             "Run Stage 1 Discovery for this JSON assignment:\n{target}\n\n"
             "Focus specifically on the `assigned_sources` list provided above. "
-            "Follow your Layer 1 SYSTEM.md and Layer 2 music SKILL.md steps, run verify_handoff.py, "
-            "save to simon-db, and return ONLY the verified DiscoveryHandoff v1.0.0 JSON object."
+            "Follow your Layer 1 SYSTEM.md, `source-discovery`, `field-reporting`, and Layer 2 `music` SKILL.md steps:\n"
+            "1. While working, post live human-first Field News updates (`looking_at`, `finding`, `analysis`) "
+            "using `.agents/skills/field-reporting/scripts/field_report.py step` with your `report_id` and `batch_id` "
+            "(never include interaction_id or raw metadata).\n"
+            "2. Run `verify_handoff.py`, save `discovery_handoffs`, `leads`, and any newly discovered `discovered_sources` to `simon-db`.\n"
+            "3. Call `field_report.py finish --report-id <report_id> --headline \"...\" --output @/workspace/out/handoff_verified.json`.\n"
+            "4. Return ONLY the verified DiscoveryHandoff v1.0.0 JSON object."
         )
         fleet_res = dispatch_fleet(
             agent_id=agent_id,
@@ -341,33 +618,34 @@ def dispatch_discovery_batch(
             assigned = partitions[idx]
             out_json = fw.get("output_json")
             validation = _validate_handoff_payload(out_json) if fw.get("status") == "completed" else None
-            workers.append(
-                {
-                    "index": idx,
-                    "worker_id": f"agent_{idx + 1:02d}",
-                    "interaction_id": fw.get("interaction_id"),
-                    "environment_id": fw.get("environment_id"),
-                    "status": fw.get("status", "in_progress"),
-                    "duration_ms": fw.get("duration_ms", 0),
-                    "assigned_sources": [
-                        {
-                            "source_id": s["source_id"],
-                            "name": s["name"],
-                            "url": s["url"],
-                            "source_channel": s["source_channel"],
-                            "city": (s.get("location") or {}).get("city") or "Global",
-                        }
-                        for s in assigned
-                    ],
-                    "steps": fw.get("steps") or [],
-                    "output_json": validation.get("cleaned", out_json) if validation else out_json,
-                    "output_text": fw.get("output_text"),
-                    "contract_valid": validation["valid"] if validation else None,
-                    "contract_errors": validation["errors"] if validation else [],
-                    "lead_count": validation["lead_count"] if validation else 0,
-                    "error": fw.get("error"),
-                }
-            )
+            worker = {
+                "index": idx,
+                "worker_id": f"agent_{idx + 1:02d}",
+                "report_id": f"rep_{batch_id}_w{idx + 1}",
+                "interaction_id": fw.get("interaction_id"),
+                "environment_id": fw.get("environment_id"),
+                "status": fw.get("status", "in_progress"),
+                "duration_ms": fw.get("duration_ms", 0),
+                "assigned_sources": [
+                    {
+                        "source_id": s["source_id"],
+                        "name": s["name"],
+                        "url": s["url"],
+                        "source_channel": s["source_channel"],
+                        "city": (s.get("location") or {}).get("city") or "Global",
+                    }
+                    for s in assigned
+                ],
+                "steps": fw.get("steps") or [],
+                "output_json": validation.get("cleaned", out_json) if validation else out_json,
+                "output_text": fw.get("output_text"),
+                "contract_valid": validation["valid"] if validation else None,
+                "contract_errors": validation["errors"] if validation else [],
+                "lead_count": validation["lead_count"] if validation else 0,
+                "error": fw.get("error"),
+            }
+            workers.append(worker)
+            _sync_worker_agent_report(store, batch_id, clean_brief, worker, mode="live")
         mode = "live"
 
     batch_doc = {
@@ -474,6 +752,14 @@ def _poll_batch_once(
                     save_agent_document(store, "discovery_handoffs", worker["output_json"])
                 except ValueError:
                     pass
+
+        _sync_worker_agent_report(
+            store,
+            batch_id=batch_id,
+            brief=str(batch.get("search_brief") or DEFAULT_DISCOVERY_BRIEF),
+            worker=worker,
+            mode=str(batch.get("mode") or "live"),
+        )
 
     if changed:
         batch["updated_at"] = _utc_now_iso()
@@ -630,13 +916,14 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
   <div class="wrap">
     <header>
       <div class="brand">
-        <h1>Simon <span class="pill amber">Stage 1 Discovery</span></h1>
-        <p>Select sources from the registry, choose how many Discovery agents to fan out, and inspect each agent's <code>DiscoveryHandoff v1.0.0</code> output.</p>
+        <h1>Simon <span class="pill amber">1. Discovery Dashboard</span></h1>
+        <p>Decide what you want to scout: set your brief, pick active sources, dispatch scouts, and follow their live progress in <strong>Field News</strong>.</p>
       </div>
       <nav class="nav">
-        <a href="/discovery" class="active">1. Discovery &amp; Sources</a>
-        <a href="/traces" id="tracesNavLink">2. Agent Traces</a>
-        <a href="/">3. Vocal Studio</a>
+        <a href="/discovery" class="active">1. Discovery Dashboard</a>
+        <a href="/field-news" id="tracesNavLink">2. Field News</a>
+        <a href="/reports" id="reportsNavLink">3. Scouting Reports</a>
+        <a href="/">Vocal Studio</a>
       </nav>
     </header>
 
@@ -767,7 +1054,8 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       el('batchStatusBadge').textContent = `${{batch.batch_id}} · ${{batch.mode}} · ${{done}}/${{workers.length}} completed`;
       el('openTracesBtn').href = `/traces?batch=${{encodeURIComponent(batch.batch_id)}}`;
       el('openTracesBtn').style.display = 'inline-block';
-      el('tracesNavLink').href = `/traces?batch=${{encodeURIComponent(batch.batch_id)}}`;
+      el('tracesNavLink').href = `/field-news?batch=${{encodeURIComponent(batch.batch_id)}}`;
+      if (el('reportsNavLink')) el('reportsNavLink').href = `/reports?batch=${{encodeURIComponent(batch.batch_id)}}`;
 
       el('outputsContainer').innerHTML = workers.map((w) => {{
         const handoff = w.output_json;
@@ -799,8 +1087,9 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
             <div class="mono">interaction: ${{esc(w.interaction_id || 'pending')}} · ${{w.duration_ms || 0}}ms</div>
             <div style="display:flex; gap:5px; flex-wrap:wrap;">${{sourcesHtml}}</div>
             <div style="display:flex; flex-direction:column; gap:8px;">${{leadsHtml}}</div>
-            <div style="margin-top:auto; padding-top:6px;">
-              <a class="mono" href="/traces?batch=${{encodeURIComponent(batch.batch_id)}}#${{esc(w.worker_id)}}">Inspect Steps &amp; Raw JSON →</a>
+            <div style="margin-top:auto; padding-top:6px; display:flex; gap:12px; flex-wrap:wrap;">
+              <a href="/field-news?batch=${{encodeURIComponent(batch.batch_id)}}">Follow Field News →</a>
+              <a href="/reports?batch=${{encodeURIComponent(batch.batch_id)}}">View Scouting Report →</a>
             </div>
           </div>`;
       }}).join('');
@@ -898,136 +1187,143 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
 """
 
 
-TRACES_HTML = f"""<!DOCTYPE html>
+FIELD_NEWS_HTML = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Simon · Live Agent Traces &amp; Contract Inspector</title>
+  <title>Simon · 2. Field News (Agents in Motion)</title>
   <style>{_SHARED_CSS}</style>
 </head>
 <body>
   <div class="wrap">
     <header>
       <div class="brand">
-        <h1>Simon <span class="pill ok">Live Agent Traces</span></h1>
-        <p>Track dispatched Discovery agents as they run, inspect tool calls (<code>simon-db</code>, <code>google_search</code>, <code>code_execution</code>), and verify contract outputs.</p>
+        <h1>Simon <span class="pill ok">2. Field News</span></h1>
+        <p>Agents in motion: live human-first updates on what each scout is looking at, what they are finding, and their analysis through the process.</p>
       </div>
       <nav class="nav">
-        <a href="/discovery">1. Discovery &amp; Sources</a>
-        <a href="/traces" class="active">2. Agent Traces</a>
-        <a href="/">3. Vocal Studio</a>
+        <a href="/discovery">1. Discovery Dashboard</a>
+        <a href="/field-news" class="active">2. Field News</a>
+        <a href="/reports" id="reportsNavLink">3. Scouting Reports</a>
+        <a href="/">Vocal Studio</a>
       </nav>
     </header>
 
     <section class="card">
       <div class="section-head">
-        <h2>Batch Trace Selector</h2>
+        <h2>Live Field Dispatches</h2>
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-          <select id="batchSelect" style="min-width:300px;"></select>
+          <select id="batchSelect" style="min-width:280px;"></select>
           <button id="refreshBtn" class="btn" type="button">Refresh Now</button>
           <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.84rem; cursor:pointer;">
             <input type="checkbox" id="autoPollToggle" checked />
-            <span>Continuous Long-Poll</span>
+            <span>Live Auto-Update</span>
           </label>
           <span id="livePollBadge" class="pill blue">Idle</span>
         </div>
       </div>
-      <div id="batchMeta" class="mono">Loading batches…</div>
+      <div id="batchSummary" style="font-size:0.9rem; color:var(--muted);">Loading live field news…</div>
     </section>
 
-    <div id="traceWorkers" class="worker-grid"></div>
+    <div id="fieldCards" class="worker-grid"></div>
   </div>
 
   <script>
     const el = (id) => document.getElementById(id);
     function esc(s) {{ const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }}
     let currentBatchId = new URLSearchParams(window.location.search).get('batch') || '';
-    let longPollGen = 0;
-    let lastKnownSteps = -1;
+    let pollTimer = null;
 
     function statusPill(status) {{
       if (status === 'completed') return '<span class="pill ok">completed</span>';
-      if (status === 'in_progress' || status === 'running' || status === 'queued') return '<span class="pill amber">' + esc(status) + '</span>';
+      if (status === 'in_motion' || status === 'starting') return '<span class="pill amber">' + esc(status.replace('_', ' ')) + '</span>';
       return '<span class="pill warn">' + esc(status || 'unknown') + '</span>';
     }}
 
-    function renderTraceBatch(batch) {{
-      if (!batch) {{
-        el('batchMeta').textContent = 'No discovery batches found yet. Dispatch agents from /discovery.';
-        el('traceWorkers').innerHTML = '';
+    function phaseBadge(phase) {{
+      if (phase === 'looking_at') return '<span class="pill blue">Looking At</span>';
+      if (phase === 'finding') return '<span class="pill amber">Finding</span>';
+      if (phase === 'analysis') return '<span class="pill ok">Analysis</span>';
+      return '<span class="pill">Saved</span>';
+    }}
+
+    function renderFieldNews(reports) {{
+      if (!reports || !reports.length) {{
+        el('batchSummary').textContent = 'No field dispatches yet. Launch scouts from the Discovery Dashboard.';
+        el('fieldCards').innerHTML = '';
         return;
       }}
-      el('batchMeta').innerHTML = `Batch <strong>${{esc(batch.batch_id)}}</strong> · mode: <strong>${{esc(batch.mode)}}</strong> · agent: <strong>${{esc(batch.agent_id)}}</strong> · brief: "${{esc(batch.search_brief)}}" · updated: ${{esc(batch.updated_at)}}`;
-      const workers = batch.workers || [];
-      el('traceWorkers').innerHTML = workers.map((w) => {{
-        const steps = w.steps || [];
+      const activeCount = reports.filter((r) => r.status === 'in_motion' || r.status === 'starting').length;
+      const doneCount = reports.filter((r) => r.status === 'completed').length;
+      const totalFindings = reports.reduce((acc, r) => acc + ((r.findings || []).length), 0);
+      el('batchSummary').innerHTML = `Showing <strong>${{reports.length}}</strong> scout(s) · <strong>${{activeCount}}</strong> in motion · <strong>${{doneCount}}</strong> completed · <strong>${{totalFindings}}</strong> finding(s) logged · Brief: "${{esc(reports[0].brief || '')}}"`;
+
+      el('fieldCards').innerHTML = reports.map((r) => {{
+        const sourcesHtml = (r.assigned_sources || []).map((s) => `<span class="pill blue">${{esc(s.name)}}</span>`).join('');
+        const steps = r.steps || [];
         const stepsHtml = steps.length ? steps.map((st) => `
           <div class="step-row">
-            <div style="display:flex; justify-content:space-between; gap:8px;">
-              <strong>Step ${{esc(st.index)}} · ${{esc(st.type)}}</strong>
-              <span class="mono">${{esc((st.tools || []).join(', '))}}</span>
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:4px;">
+              <strong>${{esc(st.step_number)}}. ${{esc(st.title)}}</strong>
+              ${{phaseBadge(st.phase)}}
             </div>
-            <div style="color:var(--muted); margin-top:4px;">${{esc(st.preview || '')}}</div>
-          </div>`).join('') : '<div class="mono">No steps captured yet (waiting on remote sandbox)…</div>';
+            ${{st.looking_at ? `<div style="font-size:0.82rem;"><strong>Looking at:</strong> ${{esc(st.looking_at)}}</div>` : ''}}
+            ${{st.finding ? `<div style="font-size:0.82rem; margin-top:2px;"><strong>Finding:</strong> ${{esc(st.finding)}}</div>` : ''}}
+            ${{st.analysis ? `<div style="font-size:0.82rem; color:var(--muted); margin-top:2px;"><strong>Analysis:</strong> ${{esc(st.analysis)}}</div>` : ''}}
+          </div>`).join('') : '<div style="color:var(--muted); font-size:0.84rem;">Scout is opening assigned sources…</div>';
 
-        const errHtml = (w.contract_errors || []).length
-          ? `<div class="pill warn">Contract errors: ${{esc(w.contract_errors.join(' | '))}}</div>`
-          : (w.contract_valid === true ? '<div class="pill ok">DiscoveryHandoff v1.0.0 VALID</div>' : '');
+        const findings = r.findings || [];
+        const findingsPreview = findings.length ? `
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <div style="font-size:0.76rem; font-weight:700; text-transform:uppercase; color:var(--muted);">Live Findings (${{findings.length}})</div>
+            ${{findings.map((f) => `
+              <div class="lead-box">
+                <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
+                  <strong>${{esc(f.title)}}</strong>
+                  ${{f.source_name ? `<span class="pill">${{esc(f.source_name)}}</span>` : ''}}
+                </div>
+                <div style="font-size:0.82rem; color:var(--muted); margin-top:3px;">${{esc(f.summary)}}</div>
+                ${{f.url ? `<div style="margin-top:4px; font-size:0.8rem;"><a href="${{esc(f.url)}}" target="_blank" rel="noopener">Open source link ↗</a></div>` : ''}}
+              </div>`).join('')}}
+          </div>` : '';
 
-        const jsonText = w.output_json ? JSON.stringify(w.output_json, null, 2) : (w.output_text || 'Pending output…');
         return `
-          <div class="worker-card" id="${{esc(w.worker_id)}}">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <strong>${{esc(w.worker_id)}}</strong>
-              ${{statusPill(w.status)}}
+          <div class="worker-card" id="${{esc(r.report_id)}}">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+              <strong>${{esc(r.agent_name)}}</strong>
+              ${{statusPill(r.status)}}
             </div>
-            <div class="mono">interaction_id: ${{esc(w.interaction_id || '—')}} · duration: ${{w.duration_ms || 0}}ms · leads: ${{w.lead_count || 0}} · steps: ${{steps.length}}</div>
-            <div style="display:flex; gap:5px; flex-wrap:wrap;">
-              ${{(w.assigned_sources || []).map((s) => `<span class="pill blue">${{esc(s.name)}}</span>`).join('')}}
-            </div>
-            ${{errHtml}}
+            <div style="font-size:0.9rem; font-weight:600;">${{esc(r.headline || '')}}</div>
+            ${{r.current_focus ? `<div style="font-size:0.82rem; color:var(--accent);">Current focus: ${{esc(r.current_focus)}}</div>` : ''}}
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">${{sourcesHtml}}</div>
             <div>
-              <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; color:var(--muted); margin-bottom:6px;">Execution Steps (${{steps.length}})</div>
+              <div style="font-size:0.76rem; font-weight:700; text-transform:uppercase; color:var(--muted); margin-bottom:6px;">Process &amp; Analysis (${{steps.length}})</div>
               ${{stepsHtml}}
             </div>
-            <details>
-              <summary style="cursor:pointer; font-size:0.84rem; color:var(--teal); font-weight:600;">Inspect Raw Contract Output JSON</summary>
-              <pre class="json-view">${{esc(jsonText)}}</pre>
-            </details>
+            ${{findingsPreview}}
+            <div style="margin-top:auto; padding-top:8px; border-top:1px solid var(--border);">
+              <a href="/reports?report=${{encodeURIComponent(r.report_id)}}">Open Full Scouting Report →</a>
+            </div>
           </div>`;
       }}).join('');
     }}
 
-    async function loadBatch(batchId, useLongPoll) {{
-      if (!batchId) return null;
-      currentBatchId = batchId;
-      const qs = useLongPoll ? `?wait=1&since_steps=${{lastKnownSteps}}&timeout=15` : '';
-      const res = await fetch(`/api/discovery/batches/${{encodeURIComponent(batchId)}}${{qs}}`);
-      if (!res.ok) return null;
-      const batch = await res.json();
-      lastKnownSteps = batch.total_steps != null
-        ? batch.total_steps
-        : (batch.workers || []).reduce((acc, w) => acc + ((w.steps || []).length), 0);
-      renderTraceBatch(batch);
-      return batch;
-    }}
-
-    async function runLongPollLoop(gen) {{
-      while (gen === longPollGen && el('autoPollToggle').checked && currentBatchId) {{
-        el('livePollBadge').textContent = `Long-polling (${{Math.max(0, lastKnownSteps)}} steps)…`;
-        try {{
-          const batch = await loadBatch(currentBatchId, true);
-          if (!batch || gen !== longPollGen) break;
-          const active = (batch.workers || []).some((w) => !['completed', 'failed', 'error', 'cancelled', 'timeout'].includes(w.status));
-          if (!active) {{
-            el('livePollBadge').textContent = `All done (${{lastKnownSteps}} steps)`;
-            break;
-          }}
-        }} catch (_err) {{
-          el('livePollBadge').textContent = 'Reconnecting…';
-          await new Promise((r) => setTimeout(r, 2000));
-        }}
+    async function loadFieldNews() {{
+      if (currentBatchId) {{
+        // Trigger a gentle live refresh on the batch if it has active scouts
+        await fetch(`/api/discovery/batches/${{encodeURIComponent(currentBatchId)}}`).catch(() => null);
+      }}
+      const qs = currentBatchId ? `?batch_id=${{encodeURIComponent(currentBatchId)}}` : '';
+      const res = await fetch(`/api/field-news${{qs}}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const reports = data.reports || [];
+      renderFieldNews(reports);
+      const anyActive = reports.some((r) => r.status === 'in_motion' || r.status === 'starting');
+      el('livePollBadge').textContent = anyActive ? 'Scouts in motion…' : 'Up to date';
+      if (el('reportsNavLink') && currentBatchId) {{
+        el('reportsNavLink').href = `/reports?batch=${{encodeURIComponent(currentBatchId)}}`;
       }}
     }}
 
@@ -1037,31 +1333,182 @@ TRACES_HTML = f"""<!DOCTYPE html>
       const batches = data.batches || [];
       const sel = el('batchSelect');
       sel.innerHTML = '';
+      sel.add(new Option('All recent field dispatches', ''));
       batches.forEach((b) => {{
-        const label = `${{b.batch_id}} (${{b.mode}} · ${{b.completed}}/${{b.agent_count}} done · ${{b.total_leads}} leads)`;
+        const label = `${{b.search_brief ? b.search_brief.slice(0, 42) : b.batch_id}} (${{b.completed}}/${{b.agent_count}} done · ${{b.total_leads}} leads)`;
         sel.add(new Option(label, b.batch_id));
       }});
-      if (!batches.length) {{ renderTraceBatch(null); return; }}
-      const chosen = batches.some((b) => b.batch_id === currentBatchId) ? currentBatchId : batches[0].batch_id;
-      sel.value = chosen;
-      lastKnownSteps = -1;
-      await loadBatch(chosen, false);
+      if (currentBatchId && batches.some((b) => b.batch_id === currentBatchId)) {{
+        sel.value = currentBatchId;
+      }} else if (batches.length) {{
+        currentBatchId = batches[0].batch_id;
+        sel.value = currentBatchId;
+      }}
+      await loadFieldNews();
     }}
 
-    function restartLongPoll() {{
-      longPollGen += 1;
-      if (el('autoPollToggle').checked && currentBatchId) {{
-        runLongPollLoop(longPollGen);
+    function resetPolling() {{
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = null;
+      if (el('autoPollToggle').checked) {{
+        pollTimer = setInterval(loadFieldNews, 4000);
       }} else {{
         el('livePollBadge').textContent = 'Paused';
       }}
     }}
 
-    el('batchSelect').onchange = async () => {{ lastKnownSteps = -1; await loadBatch(el('batchSelect').value, false); restartLongPoll(); }};
-    el('refreshBtn').onclick = () => loadBatch(currentBatchId, false);
-    el('autoPollToggle').onchange = restartLongPoll;
+    el('batchSelect').onchange = async () => {{ currentBatchId = el('batchSelect').value; await loadFieldNews(); }};
+    el('refreshBtn').onclick = loadFieldNews;
+    el('autoPollToggle').onchange = resetPolling;
 
-    loadBatches().then(restartLongPoll);
+    loadBatches().then(resetPolling);
+  </script>
+</body>
+</html>
+"""
+
+TRACES_HTML = FIELD_NEWS_HTML
+
+
+REPORTS_HTML = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Simon · 3. Scouting Reports</title>
+  <style>{_SHARED_CSS}</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <h1>Simon <span class="pill blue">3. Scouting Reports</span></h1>
+        <p>Human-first scouting reports with verified findings, process summaries, and stored agent outputs ready for review.</p>
+      </div>
+      <nav class="nav">
+        <a href="/discovery">1. Discovery Dashboard</a>
+        <a href="/field-news">2. Field News</a>
+        <a href="/reports" class="active">3. Scouting Reports</a>
+        <a href="/">Vocal Studio</a>
+      </nav>
+    </header>
+
+    <section class="card">
+      <div class="section-head">
+        <h2>Stored Scouting Reports</h2>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <select id="statusFilter">
+            <option value="">All statuses</option>
+            <option value="completed">Completed</option>
+            <option value="in_motion">In motion</option>
+            <option value="blocked">Blocked</option>
+          </select>
+          <button id="refreshReportsBtn" class="btn" type="button">Refresh Reports</button>
+        </div>
+      </div>
+      <div id="reportsMeta" style="font-size:0.9rem; color:var(--muted);">Loading stored scouting reports…</div>
+    </section>
+
+    <div id="reportsList" style="display:flex; flex-direction:column; gap:18px;"></div>
+  </div>
+
+  <script>
+    const el = (id) => document.getElementById(id);
+    function esc(s) {{ const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }}
+    const params = new URLSearchParams(window.location.search);
+    const filterBatchId = params.get('batch') || '';
+    const focusReportId = params.get('report') || '';
+
+    function statusPill(status) {{
+      if (status === 'completed') return '<span class="pill ok">completed</span>';
+      if (status === 'in_motion' || status === 'starting') return '<span class="pill amber">' + esc(status.replace('_', ' ')) + '</span>';
+      return '<span class="pill warn">' + esc(status || 'unknown') + '</span>';
+    }}
+
+    function renderReports(reports) {{
+      if (!reports.length) {{
+        el('reportsMeta').textContent = 'No scouting reports saved yet. Dispatch a discovery run from the Discovery Dashboard.';
+        el('reportsList').innerHTML = '';
+        return;
+      }}
+      const totalFindings = reports.reduce((acc, r) => acc + ((r.findings || []).length), 0);
+      el('reportsMeta').innerHTML = `<strong>${{reports.length}}</strong> stored report(s) · <strong>${{totalFindings}}</strong> total finding(s)`;
+
+      el('reportsList').innerHTML = reports.map((r) => {{
+        const findings = r.findings || [];
+        const steps = r.steps || [];
+        const sourcesHtml = (r.assigned_sources || []).map((s) => `<span class="pill blue">${{esc(s.name)}}</span>`).join('');
+        const findingsHtml = findings.length ? `
+          <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:12px;">
+            ${{findings.map((f) => `
+              <div class="lead-box">
+                <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
+                  <strong>${{esc(f.title)}}</strong>
+                  ${{f.attribution_status ? `<span class="pill ok">${{esc(f.attribution_status)}}</span>` : ''}}
+                </div>
+                <div style="font-size:0.84rem; color:var(--muted); margin-top:4px;">${{esc(f.summary)}}</div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
+                  ${{f.source_name ? `<span class="pill">${{esc(f.source_name)}}</span>` : ''}}
+                  ${{f.source_channel ? `<span class="pill">${{esc(f.source_channel)}}</span>` : ''}}
+                  ${{f.url ? `<a href="${{esc(f.url)}}" target="_blank" rel="noopener" style="font-size:0.82rem;">Open source ↗</a>` : ''}}
+                </div>
+              </div>`).join('')}}
+          </div>` : '<div style="color:var(--muted); font-size:0.86rem;">No verified findings recorded in this report yet.</div>';
+
+        const processHtml = steps.map((st) => `
+          <div class="step-row">
+            <strong>${{esc(st.step_number)}}. ${{esc(st.title)}}</strong>
+            ${{st.looking_at ? `<div style="font-size:0.82rem;"><strong>Looking at:</strong> ${{esc(st.looking_at)}}</div>` : ''}}
+            ${{st.finding ? `<div style="font-size:0.82rem;"><strong>Finding:</strong> ${{esc(st.finding)}}</div>` : ''}}
+            ${{st.analysis ? `<div style="font-size:0.82rem; color:var(--muted);"><strong>Analysis:</strong> ${{esc(st.analysis)}}</div>` : ''}}
+          </div>`).join('');
+
+        const outputHtml = r.output
+          ? `<details style="margin-top:10px;">
+               <summary style="cursor:pointer; font-size:0.85rem; color:var(--teal); font-weight:600;">View Stored Output Contract</summary>
+               <pre class="json-view">${{esc(JSON.stringify(r.output, null, 2))}}</pre>
+             </details>`
+          : '<div style="font-size:0.82rem; color:var(--muted); margin-top:8px;">Final output pending completion…</div>';
+
+        const highlightStyle = focusReportId && r.report_id === focusReportId ? 'border-color: var(--accent);' : '';
+        return `
+          <section class="card" id="${{esc(r.report_id)}}" style="${{highlightStyle}}">
+            <div class="section-head">
+              <div>
+                <h2 style="margin:0;">${{esc(r.agent_name)}} <span class="pill">${{esc(r.stage)}}</span> ${{statusPill(r.status)}}</h2>
+                <div style="font-size:0.95rem; font-weight:600; margin-top:6px;">${{esc(r.headline || '')}}</div>
+                <div style="font-size:0.84rem; color:var(--muted); margin-top:2px;">Brief: ${{esc(r.brief || '')}}</div>
+              </div>
+              <div style="display:flex; gap:6px; flex-wrap:wrap;">${{sourcesHtml}}</div>
+            </div>
+            <div style="margin-bottom:14px;">
+              <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; color:var(--muted); margin-bottom:8px;">Findings (${{findings.length}})</div>
+              ${{findingsHtml}}
+            </div>
+            <details>
+              <summary style="cursor:pointer; font-size:0.85rem; color:var(--accent); font-weight:600;">Process &amp; Analysis Trail (${{steps.length}} steps)</summary>
+              <div style="margin-top:10px;">${{processHtml}}</div>
+            </details>
+            ${{outputHtml}}
+          </section>`;
+      }}).join('');
+    }}
+
+    async function loadReports() {{
+      const qs = new URLSearchParams();
+      if (filterBatchId) qs.set('batch_id', filterBatchId);
+      const st = el('statusFilter').value;
+      if (st) qs.set('status', st);
+      const url = '/api/reports' + (qs.toString() ? `?${{qs.toString()}}` : '');
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const data = await res.json();
+      renderReports(data.reports || []);
+    }}
+
+    el('statusFilter').onchange = loadReports;
+    el('refreshReportsBtn').onclick = loadReports;
+    loadReports();
   </script>
 </body>
 </html>

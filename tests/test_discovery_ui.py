@@ -24,13 +24,26 @@ class TestDiscoveryUIAndTraces(unittest.TestCase):
         code, ctype, html = dispatch_http_request(store, "GET", "/discovery")
         self.assertEqual(code, 200)
         self.assertIn("text/html", ctype)
-        self.assertIn(b"Stage 1 Discovery", html)
-        self.assertIn(b"DiscoveryHandoff v1.0.0", html)
+        self.assertIn(b"1. Discovery Dashboard", html)
+        self.assertIn(b"2. Field News", html)
+        self.assertIn(b"3. Scouting Reports", html)
 
-        code2, ctype2, html2 = dispatch_http_request(store, "GET", "/traces")
+        code2, ctype2, html2 = dispatch_http_request(store, "GET", "/field-news")
         self.assertEqual(code2, 200)
         self.assertIn("text/html", ctype2)
-        self.assertIn(b"Live Agent Traces", html2)
+        self.assertIn(b"2. Field News", html2)
+        self.assertNotIn(b"interaction_id", html2)
+
+        # /traces remains a compatible alias to Field News
+        code_alias, _, html_alias = dispatch_http_request(store, "GET", "/traces")
+        self.assertEqual(code_alias, 200)
+        self.assertIn(b"2. Field News", html_alias)
+
+        code3, ctype3, html3 = dispatch_http_request(store, "GET", "/reports")
+        self.assertEqual(code3, 200)
+        self.assertIn("text/html", ctype3)
+        self.assertIn(b"3. Scouting Reports", html3)
+        self.assertNotIn(b"interaction_id", html3)
 
     def test_api_sources_merges_seed_and_db_discovered_sources(self) -> None:
         store = self.store
@@ -171,6 +184,64 @@ class TestDiscoveryUIAndTraces(unittest.TestCase):
         self.assertEqual(w0["lead_count"], 1)
         self.assertEqual(len(w0["steps"]), 2)
         self.assertEqual(w0["output_json"]["leads"][0]["stage_name"], "Clara Reyes")
+
+        # Verify human-first Field News & Scouting Reports API stored output without telemetry
+        code_fn, _, body_fn = dispatch_http_request(
+            store, "GET", f"/api/field-news?batch_id={batch['batch_id']}"
+        )
+        self.assertEqual(code_fn, 200)
+        fn_payload = json.loads(body_fn)
+        self.assertEqual(fn_payload["count"], 1)
+        rep = fn_payload["reports"][0]
+        self.assertEqual(rep["status"], "completed")
+        self.assertNotIn("interaction_id", rep)
+        self.assertNotIn("environment_id", rep)
+        self.assertNotIn("metadata", rep)
+        self.assertEqual(rep["findings"][0]["title"], "Clara Reyes")
+        self.assertEqual(rep["output"]["leads"][0]["stage_name"], "Clara Reyes")
+        for st in rep["steps"]:
+            self.assertNotIn("interaction_id", st)
+            self.assertNotIn("metadata", st)
+            self.assertIn(st["phase"], {"looking_at", "finding", "analysis", "saved"})
+
+        # Verify /api/reports/<report_id> returns the same sanitized report
+        code_rep, _, body_rep = dispatch_http_request(
+            store, "GET", f"/api/reports/{rep['report_id']}"
+        )
+        self.assertEqual(code_rep, 200)
+        rep_detail = json.loads(body_rep)
+        self.assertEqual(rep_detail["report_id"], rep["report_id"])
+        self.assertNotIn("interaction_id", rep_detail)
+
+    def test_agent_reports_rejects_interaction_id_and_metadata(self) -> None:
+        store = self.store
+        with self.assertRaises(ValueError) as ctx:
+            save_agent_document(
+                store,
+                "agent_reports",
+                {
+                    "report_id": "rep_bad_01",
+                    "agent_name": "Discovery Scout 01",
+                    "stage": "discovery",
+                    "status": "in_motion",
+                    "interaction_id": "int_should_fail",
+                    "metadata": {"raw": True},
+                    "steps": [],
+                    "findings": [],
+                },
+            )
+        self.assertIn("interaction_id", str(ctx.exception))
+        self.assertIn("metadata", str(ctx.exception))
+
+    def test_discovery_scout_bundles_field_reporting_and_source_discovery_skills(self) -> None:
+        from simon.deploy import compile_agent_package
+
+        pkg = compile_agent_package(Path("agents/discovery-scout"))
+        sources = pkg["payload"]["base_environment"]["sources"]
+        targets = {s.get("target") for s in sources}
+        self.assertIn(".agents/skills/field-reporting/SKILL.md", targets)
+        self.assertIn(".agents/skills/field-reporting/scripts/field_report.py", targets)
+        self.assertIn(".agents/skills/source-discovery/SKILL.md", targets)
 
 
 if __name__ == "__main__":

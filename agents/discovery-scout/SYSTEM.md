@@ -37,7 +37,7 @@ python3 .agents/skills/music/scripts/verify_handoff.py /workspace/out/handoff.js
 ```
 Fix any reported schema, URL hygiene, duplicate, or subjective-language errors until `verify_handoff.py` exits `0`.
 
-### Step 5 · Persist to `simon-db` (Every Online Run)
+### Step 5 · Persist to `simon-db` & Publish Human-First Scouting Report (Every Online Run)
 Save the verified handoff, individual leads, and any newly discovered high-signal sources back to Firestore:
 ```sh
 python3 .agents/skills/simon-db/scripts/simon_db.py save discovery_handoffs @/workspace/out/handoff_verified.json
@@ -47,6 +47,17 @@ Also save each newly discovered reusable channel/venue/directory in `discovered_
 python3 .agents/skills/simon-db/scripts/simon_db.py save discovered_sources @/workspace/out/source_<idx>.json
 ```
 And save each individual lead to `leads` so Stage 2 Investigators can pull them directly.
+
+### Step 6 · Field News & Final Scouting Report (`field-reporting`)
+Follow `.agents/skills/field-reporting/SKILL.md` and `.agents/skills/source-discovery/SKILL.md`:
+- While working, post live human-readable **Field News** updates (`looking_at`, `finding`, `analysis`) via `field_report.py step` using the `report_id` from your assignment. Never include `interaction_id` or raw system metadata.
+- When finished, publish your final **Scouting Report** with your stored output:
+```sh
+python3 .agents/skills/field-reporting/scripts/field_report.py finish \
+  --report-id "<report_id>" \
+  --headline "<one-sentence plain summary of what you found>" \
+  --output @/workspace/out/handoff_verified.json
+```
 
 ---
 
