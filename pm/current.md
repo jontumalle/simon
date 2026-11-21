@@ -17,10 +17,8 @@
   - Researched 2-phase compile + inference architecture pairing DSPy (`Signatures`, `Modules`, `MIPROv2` / `BootstrapFewShot` compiled JSON rubrics) with `v1beta` `client.decisions.create` (`gemini-decision-1` calibrated `noul` / `choice` / `score` judgments at 0 output tokens); distilled in [pm/log/2026-11-21-dspy-decisions-and-excalidraw.md](./log/2026-11-21-dspy-decisions-and-excalidraw.md).
 
 ## Next Up
-1. Accept collaborator invite from `jontumalle` on `github.com/jontumalle/simon` so `sync_main.py` pushes queued local `main` commits to `origin/main`.
-2. Run `gcloud auth login && gcloud auth application-default login` in terminal (optional unless mounting GCS buckets) and export `GEMINI_API_KEY` + `SIMON_AGENT_PREFIX="kevin-"`.
-3. Implement `simon` agent sync & runtime orchestration against `/v1beta/agents`, `/v1beta/environments`, and `/v1beta/interactions`.
+1. Run `gcloud auth login && gcloud auth application-default login` in terminal (optional unless mounting GCS buckets) and export `GEMINI_API_KEY` + `SIMON_AGENT_PREFIX="kevin-"`.
+2. Implement `simon` agent sync & runtime orchestration against `/v1beta/agents`, `/v1beta/environments`, and `/v1beta/interactions`.
 
 ## Blockers / Open Items
-- GitHub push access (`403` for `kvn-quisp` on `jontumalle/simon.git`) pending collaborator invite from JT.
 - **Bucket Placement Question (Setup-Stage Guardrail)**: Confirm owner preference on whether standalone DSPy + Gemini Decisions API engineering playbooks/diagrams should live under `notes/` (e.g., alongside `notes/managed-agents/`) or `ideas/`.
