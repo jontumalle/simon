@@ -52,6 +52,7 @@ steps:
       - "--min-instances=0"
       - "--max-instances=3"
       - "--set-env-vars=SIMON_STORE_BACKEND=${_STORE_BACKEND},GOOGLE_CLOUD_PROJECT=$PROJECT_ID,SIMON_AGENT_PREFIX=${_AGENT_PREFIX}"
+      - "--set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest"
 
 images:
   - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/simon-platform:$SHORT_SHA"
