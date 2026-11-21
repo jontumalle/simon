@@ -697,17 +697,17 @@ def dispatch_http_request(
             )
 
         agent_id = str(req.get("agent") or "").strip()
-        targets = req.get("targets")
-        if not isinstance(targets, list) or not targets:
+        raw_assignments = req.get("assignments") if "assignments" in req else req.get("targets")
+        if not isinstance(raw_assignments, list) or not raw_assignments:
             return (
                 HTTPStatus.BAD_REQUEST,
                 "application/json; charset=utf-8",
-                json.dumps({"error": "`targets` must be a non-empty list of strings."}).encode("utf-8"),
+                json.dumps(
+                    {"error": "`assignments` (or `targets`) must be a non-empty list."}
+                ).encode("utf-8"),
             )
-        prompt_template = str(
-            req.get("prompt_template")
-            or "Investigate and return objective factual data for: {target}"
-        )
+        prompt_template = req.get("prompt_template")
+        prompt_template_str = str(prompt_template) if prompt_template is not None else None
         max_concurrency = int(req.get("max_concurrency") or 5)
         webhook_url = str(req.get("webhook_url") or "").strip() or None
         wait = bool(req.get("wait", False))
@@ -716,8 +716,8 @@ def dispatch_http_request(
         try:
             summary = dispatch_fleet(
                 agent_id=agent_id,
-                targets=[str(t) for t in targets],
-                prompt_template=prompt_template,
+                assignments=raw_assignments,
+                prompt_template=prompt_template_str,
                 max_concurrency=max_concurrency,
                 webhook_url=webhook_url,
                 wait=wait,

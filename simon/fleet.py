@@ -74,20 +74,48 @@ def _request_with_backoff(
     raise RuntimeError(f"Gemini API {method} {url} failed (HTTP {last_code}): {last_body}")
 
 
+def _format_assignment(assignment: Any) -> Tuple[str, str]:
+    """Return (serialized_text, short_label) for any string or JSON assignment."""
+    if isinstance(assignment, str):
+        cleaned = assignment.strip()
+        return cleaned, cleaned[:120]
+    serialized = json.dumps(assignment, ensure_ascii=False)
+    if isinstance(assignment, dict):
+        label = str(
+            assignment.get("lead_id")
+            or assignment.get("id")
+            or assignment.get("stage_name")
+            or assignment.get("name")
+            or ""
+        ).strip()
+        if label:
+            return serialized, label[:120]
+    return serialized, serialized[:120]
+
+
 def build_worker_request(
     agent_id: str,
-    target: str,
-    prompt_template: str,
+    target: Any,
+    prompt_template: Optional[str],
     batch_id: str,
     target_index: int,
     webhook_url: Optional[str] = None,
     environment: Any = None,
 ) -> Dict[str, Any]:
     """Build one isolated background interaction request for a fleet worker."""
-    try:
-        prompt = prompt_template.format(target=target, index=target_index, batch_id=batch_id)
-    except (KeyError, ValueError):
-        prompt = f"{prompt_template}\n\nTarget: {target}"
+    serialized, label = _format_assignment(target)
+    if prompt_template:
+        try:
+            prompt = prompt_template.format(
+                assignment=serialized,
+                target=serialized,
+                index=target_index,
+                batch_id=batch_id,
+            )
+        except (KeyError, ValueError):
+            prompt = f"{prompt_template}\n\n{serialized}"
+    else:
+        prompt = serialized
 
     body: Dict[str, Any] = {
         "agent": agent_id,
@@ -102,7 +130,7 @@ def build_worker_request(
             "user_metadata": {
                 "batch_id": batch_id,
                 "target_index": str(target_index),
-                "target": target,
+                "target": label,
                 "agent_id": agent_id,
             },
         }
@@ -111,8 +139,9 @@ def build_worker_request(
 
 def dispatch_fleet(
     agent_id: str,
-    targets: List[str],
-    prompt_template: str = "Investigate and return objective factual data for: {target}",
+    targets: Optional[List[Any]] = None,
+    assignments: Optional[List[Any]] = None,
+    prompt_template: Optional[str] = None,
     max_concurrency: int = 5,
     webhook_url: Optional[str] = None,
     wait: bool = False,
@@ -123,22 +152,31 @@ def dispatch_fleet(
     request_fn: Callable[..., Tuple[int, Dict[str, Any]]] = _http_json,
     sleep_fn: Callable[[float], None] = time.sleep,
 ) -> Dict[str, Any]:
-    """Fan out one deployed Managed Agent across N targets with rate-limited concurrency."""
-    cleaned_targets = [str(t).strip() for t in targets if str(t).strip()]
-    if not cleaned_targets:
-        raise ValueError("Provide at least one target to scale across the fleet.")
+    """Fan out one deployed Managed Agent across N opaque assignments with rate-limited concurrency."""
+    raw_items = assignments if assignments is not None else (targets or [])
+    cleaned_items: List[Any] = []
+    for item in raw_items:
+        if isinstance(item, str):
+            s = item.strip()
+            if s:
+                cleaned_items.append(s)
+        elif item is not None:
+            cleaned_items.append(item)
+
+    if not cleaned_items:
+        raise ValueError("Provide at least one assignment (or target) to scale across the fleet.")
     if not agent_id or not agent_id.strip():
         raise ValueError("Provide a non-empty agent ID.")
 
-    workers_cap = max(1, min(int(max_concurrency), len(cleaned_targets), 20))
+    workers_cap = max(1, min(int(max_concurrency), len(cleaned_items), 20))
     batch_id = f"batch_{uuid.uuid4().hex[:10]}"
 
     if dry_run:
         planned = []
-        for idx, target in enumerate(cleaned_targets):
+        for idx, item in enumerate(cleaned_items):
             req_body = build_worker_request(
                 agent_id=agent_id.strip(),
-                target=target,
+                target=item,
                 prompt_template=prompt_template,
                 batch_id=batch_id,
                 target_index=idx,
@@ -147,7 +185,8 @@ def dispatch_fleet(
             planned.append(
                 {
                     "index": idx,
-                    "target": target,
+                    "assignment": item,
+                    "target": item,
                     "status": "dry_run",
                     "interaction_id": None,
                     "request": req_body,
@@ -168,10 +207,10 @@ def dispatch_fleet(
     if not resolved_key:
         raise ValueError("Set GEMINI_API_KEY (or pass dry_run=True) before running a live fleet.")
 
-    def _run_one(idx: int, target: str) -> Dict[str, Any]:
+    def _run_one(idx: int, item: Any) -> Dict[str, Any]:
         req_body = build_worker_request(
             agent_id=agent_id.strip(),
-            target=target,
+            target=item,
             prompt_template=prompt_template,
             batch_id=batch_id,
             target_index=idx,
@@ -209,7 +248,8 @@ def dispatch_fleet(
 
             worker_out: Dict[str, Any] = {
                 "index": idx,
-                "target": target,
+                "assignment": item,
+                "target": item,
                 "interaction_id": interaction_id,
                 "environment_id": result_obj.get("environment_id"),
                 "status": status,
@@ -223,7 +263,8 @@ def dispatch_fleet(
         except Exception as exc:  # noqa: BLE001 - isolate per-worker failures
             return {
                 "index": idx,
-                "target": target,
+                "assignment": item,
+                "target": item,
                 "interaction_id": None,
                 "environment_id": None,
                 "status": "error",
@@ -232,7 +273,7 @@ def dispatch_fleet(
 
     results: List[Dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=workers_cap) as pool:
-        futures = [pool.submit(_run_one, idx, target) for idx, target in enumerate(cleaned_targets)]
+        futures = [pool.submit(_run_one, idx, item) for idx, item in enumerate(cleaned_items)]
         for fut in as_completed(futures):
             results.append(fut.result())
 
