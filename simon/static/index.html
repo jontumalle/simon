@@ -24,6 +24,7 @@
           <button class="nav-tab" data-tab="discovery" type="button">Discovery</button>
           <a class="nav-tab" href="/investigate">Investigate</a>
           <a class="nav-tab" href="/screen">Screening</a>
+          <a class="nav-tab" href="/taste-profile">Taste Profile</a>
           <button class="nav-tab active" data-tab="review" type="button">Talent Review</button>
         </nav>
       </div>
@@ -130,9 +131,14 @@
               <input type="checkbox" id="discLiveToggle" />
               <span>Dispatch Live Managed Agents</span>
             </label>
+            <label style="display:inline-flex; align-items:center; gap:6px; font-size:12.5px; cursor:pointer;">
+              <input type="checkbox" id="discResetPrevToggle" checked />
+              <span>Start fresh (archive old runs)</span>
+            </label>
           </div>
 
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <button id="discClearOldRunsBtn" class="btn" type="button">↺ Clear Old Runs</button>
             <button id="discSyncToPipelineBtn" class="btn" type="button">Sync to Pipeline Phase 1 →</button>
             <button id="discDispatchBtn" class="btn btn-primary" type="button">Send Discovery Agents</button>
           </div>
@@ -140,6 +146,7 @@
 
         <div id="discPostDispatchBar" class="phase-lead-bar hidden">
           <span id="discPostDispatchMsg" style="font-weight:600;"></span>
+          <a id="discOpenInvestigateBtn" class="btn btn-primary" href="/investigate?autorun=1">Next: Investigate Discovered Leads →</a>
           <a id="discFollowFieldNewsBtn" class="btn" href="/field-news">Follow in Field News →</a>
           <a id="discOpenReportsBtn" class="btn" href="/reports">Open Scouting Reports →</a>
         </div>

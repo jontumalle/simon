@@ -231,6 +231,43 @@ class TestAgencyStudioUIAndPhases(unittest.TestCase):
         self.assertTrue(screen_data["ok"])
         self.assertGreaterEqual(screen_data["count"], 1)
 
+    def test_cross_screen_nav_parity_and_flow_handoffs(self) -> None:
+        # 1. Root Studio `/` has all 5 primary stage links matching standalone pages, without duplicating Tools links
+        code, _, root_html = dispatch_http_request(self.store, "GET", "/")
+        self.assertEqual(code, 200)
+        for token in (
+            b'data-tab="discovery"',
+            b'href="/investigate"',
+            b'href="/screen"',
+            b'href="/taste-profile"',
+            b'data-tab="review"',
+            b'id="discResetPrevToggle"',
+            b'id="discClearOldRunsBtn"',
+            b'href="/investigate?autorun=1"',
+        ):
+            self.assertIn(token, root_html)
+        self.assertNotIn(b'<a href="/?tab=pipeline">Pipeline Stepper</a>', root_html)
+
+        # 2. Standalone pages retain Pipeline Stepper & Agent Lab links inside Tools
+        for route in ("/investigate", "/screen", "/taste-profile", "/discovery", "/evals"):
+            code, _, html = dispatch_http_request(self.store, "GET", route)
+            self.assertEqual(code, 200)
+            self.assertIn(b'href="/taste-profile"', html)
+            self.assertIn(b'<a href="/?tab=pipeline">Pipeline Stepper</a>', html)
+
+        # 3. app.js wires end-to-end handoffs across Discovery -> Investigate -> Screening -> Talent Review -> Phase 4
+        code, _, js = dispatch_http_request(self.store, "GET", "/static/app.js")
+        self.assertEqual(code, 200)
+        for token in (
+            b"/api/demo/reset",
+            b"reset_previous",
+            b"buildProducerHandoffFromPacket",
+            b"refreshScreeningPackets",
+            b"renderScreenedPackets(reqLead)",
+            b"href=\"/investigate?subject=",
+        ):
+            self.assertIn(token, js)
+
 
 if __name__ == "__main__":
     unittest.main()

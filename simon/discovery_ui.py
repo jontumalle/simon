@@ -1075,8 +1075,9 @@ def render_top_nav(active_path: str) -> str:
         ]
     )
     studio_tools_links = (
-        '<a href="/?tab=pipeline">Pipeline Stepper</a>'
-        '<a href="/?tab=lab">Agent Lab</a>'
+        ""
+        if active_path == "/"
+        else '<a href="/?tab=pipeline">Pipeline Stepper</a><a href="/?tab=lab">Agent Lab</a>'
     )
     directory_nav = (
         '<nav class="nav-sections" aria-label="Simon Pipeline Navigation">'
@@ -2288,7 +2289,8 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
             <div style="margin-top:auto; padding-top:6px; display:flex; justify-content:space-between; align-items:center; gap:6px; flex-wrap:wrap;">
               <button class="btn" type="button" data-focus-lead="${{esc(l.lead_id || '')}}" data-focus-name="${{esc(l.stage_name || '')}}" style="font-size:0.78rem; padding:5px 10px;">Focus Lead &amp; Dossier</button>
               <a class="btn" href="/?tab=pipeline&amp;phase=2a_identity&amp;subject=${{encodeURIComponent(l.stage_name || '')}}${{l.lead_id ? '&amp;lead=' + encodeURIComponent(l.lead_id) : ''}}" style="font-size:0.78rem; padding:5px 10px;">Send to Studio Pipeline →</a>
-              <a href="/reports" style="font-size:0.8rem;">View Discovery Report →</a>
+              ${{hasDossier ? `<a class="btn" href="/screen?lead=${{encodeURIComponent(l.lead_id || '')}}" style="font-size:0.78rem; padding:5px 10px; border-color:rgba(192,132,252,0.45); color:var(--purple);">Open Screening Deck →</a>` : ''}}
+              <a href="/reports${{l.batch_id ? '?batch=' + encodeURIComponent(l.batch_id) : ''}}" style="font-size:0.8rem;">View Discovery Report →</a>
             </div>
           </div>`;
       }}).join('');
