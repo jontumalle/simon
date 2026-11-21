@@ -24,6 +24,7 @@ from .db_tools import (
     save_agent_document,
     verify_agent_db_auth,
 )
+from .demo_flow import archive_pipeline_workspace, investigate_active_leads
 from .deploy import compile_agent_package, list_agent_packages
 from .discovery_ui import (
     DISCOVERY_HTML,
@@ -1020,6 +1021,49 @@ def dispatch_http_request(
             json.dumps(eval_run, ensure_ascii=False).encode("utf-8"),
         )
 
+    if method == "POST" and parsed.path == "/api/demo/reset":
+        try:
+            req = json.loads((raw_body or b"{}").decode("utf-8"))
+        except ValueError:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "Invalid JSON request body."}).encode("utf-8"),
+            )
+        result = archive_pipeline_workspace(
+            store,
+            include_labels=bool(req.get("include_labels", False)),
+        )
+        return (
+            HTTPStatus.OK,
+            "application/json; charset=utf-8",
+            json.dumps(result, ensure_ascii=False).encode("utf-8"),
+        )
+
+    if method == "POST" and parsed.path == "/api/investigate/run":
+        try:
+            req = json.loads((raw_body or b"{}").decode("utf-8"))
+        except ValueError:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "Invalid JSON request body."}).encode("utf-8"),
+            )
+        lead_id_arg = str(req.get("lead_id") or "").strip() or None
+        try:
+            result = investigate_active_leads(store, lead_id=lead_id_arg)
+        except (ValueError, RuntimeError, OSError) as exc:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": str(exc)}).encode("utf-8"),
+            )
+        return (
+            HTTPStatus.OK,
+            "application/json; charset=utf-8",
+            json.dumps(result, ensure_ascii=False).encode("utf-8"),
+        )
+
     if method == "POST" and parsed.path == "/api/discovery/dispatch":
         try:
             req = json.loads((raw_body or b"{}").decode("utf-8"))
@@ -1029,7 +1073,10 @@ def dispatch_http_request(
                 "application/json; charset=utf-8",
                 json.dumps({"error": "Invalid JSON request body."}).encode("utf-8"),
             )
-        source_ids = req.get("source_ids") or []
+        if "source_ids" not in req or req.get("source_ids") is None:
+            source_ids = ["yt_sofar_sounds", "nyc_babys_all_right", "bc_brooklyn_soul_rnb"]
+        else:
+            source_ids = req.get("source_ids")
         if not isinstance(source_ids, list) or not source_ids:
             return (
                 HTTPStatus.BAD_REQUEST,
@@ -1040,9 +1087,12 @@ def dispatch_http_request(
         leads_per_agent = int(req.get("leads_per_agent") or 2)
         agent_count = int(req.get("agent_count") or len(source_ids))
         live = bool(req.get("live", False))
+        reset_previous = bool(req.get("reset_previous", False))
         api_key = str(req.get("api_key") or "").strip() or None
         load_dotenv_if_present()
         try:
+            if reset_previous:
+                archive_pipeline_workspace(store)
             batch = dispatch_discovery_batch(
                 store=store,
                 source_ids=[str(s) for s in source_ids],
