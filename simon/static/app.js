@@ -996,9 +996,14 @@
     if (batchLinks) {
       const batchId = result.output && result.output.batch_id;
       const dossierLeadId = result.phase_id === '2c_dossier' && result.output && result.output.lead_id;
+      const screenLeadId = result.phase_id === '3_screening' && result.output && result.output.lead_id;
       if (batchId) {
         const q = `?batch=${encodeURIComponent(batchId)}`;
         batchLinks.innerHTML = `<a class="btn" style="padding:3px 8px; font-size:11px;" href="/field-news${q}">Field News →</a><a class="btn" style="padding:3px 8px; font-size:11px;" href="/reports${q}">Reports →</a>`;
+        batchLinks.classList.remove('hidden');
+      } else if (screenLeadId) {
+        const q = `?lead=${encodeURIComponent(screenLeadId)}`;
+        batchLinks.innerHTML = `<a class="btn btn-primary" style="padding:3px 8px; font-size:11px;" href="/screen${q}">Open in Screening Deck →</a>`;
         batchLinks.classList.remove('hidden');
       } else if (dossierLeadId) {
         const q = `?lead=${encodeURIComponent(dossierLeadId)}`;
