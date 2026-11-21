@@ -24,6 +24,11 @@ agents/<agent-name>/
 
 Use `SIMON_AGENT_PREFIX` (`kevin-`, `jt-`, `prod-`) when syncing to `/v1beta/agents` so teammates can test agent changes concurrently without clobbering shared IDs.
 
+### Shared Skills (`agents/_shared/skills/`)
+Any agent can opt into shared sandbox tools by adding them to `shared_skills` in `agent.json` (`simon/deploy.py` bundles them to `.agents/skills/<name>/`):
+- **`simon-db`** (`agents/_shared/skills/simon-db/`) — Schema-validated Firestore API client (`credential: simon-db-token`).
+- **`youtube`** (`agents/_shared/skills/youtube/`) — Quota-aware YouTube Data API v3 client (`video`, `channel`, `channel-videos`, `comments`, `search`) using zero-trust `X-Goog-Api-Key` header auth (`credential: youtube-api-key` for `www.googleapis.com`).
+
 ---
 
 ## Planned & Active Agent Roster
