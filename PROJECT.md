@@ -34,11 +34,11 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 ## Recent sessions
 *Working memory (LRU pointer cache, max 12, most recent first). Maintained by the `project-manager` skill/subagent.*
 
+- 2026-11-21 · label-signing recall eval · added 10-artist Option C benchmark & merged recall eval runner (PR #21, `e56051b`) → `pm/log/2026-11-21-label-signing-recall-eval.md`, `data/evals/label_signing_recall_eval.json`, `simon/recall_eval.py`
 - 2026-11-21 · discovery dashboard ui · removed redundant section 3, expanded source selector with search/genres/chips/tray (PR #18) → `pm/log/2026-11-21-discovery-dashboard-ui.md`, `simon/discovery_ui.py`
 - 2026-11-21 · agency studio ui remodel · remodeled `/` into 3-tab studio (Talent Review, Phase Runner, Agent Lab), unified theme & phase runner API (PR #16) → `pm/log/2026-11-21-agency-studio-ui.md`, `simon/static/`, `simon/phases.py`
 - 2026-11-21 · reporting layer & two-stage ui · merged PRs #13/#14 (`AgentReport` v1.0.0, shared field-reporting/source-discovery skills, 2-stage UI) → `pm/log/2026-11-21-reporting-layer-two-stage-ui.md`, `data/agent_report_schema.json`, `agents/_shared/skills/`
 - 2026-11-21 · discovery vertex evals · 3-layer rubrics, canonical eval_runs schema & Vertex AI eval service integration → `pm/log/2026-11-21-discovery-vertex-evals.md`, `data/evals/`
-- 2026-11-21 · label-signing recall eval · added 10-artist Option C recall benchmark (6 in-map, 4 out-of-map) & registered in data/README.md → `pm/log/2026-11-21-label-signing-recall-eval.md`, `data/evals/label_signing_recall_eval.json`
 - 2026-11-21 · staging fleet smoke test · verified 9/9 staging managed agents live via concurrent /api/fleet/run (0 failures) → `pm/log/2026-11-21-staging-fleet-smoke-test.md`
 - 2026-11-21 · cloud run & firestore · merged PR #4 (`b2057e8`), deployed `simon-staging`, seeded 36 sources & live traces → `pm/log/2026-11-21-cloudrun-firestore-platform.md`, `simon/`, `data/`, `.agents/`
 - 2026-11-21 · shared youtube skill · enabled YouTube Data API v3, synced `/v1beta/credentials` & wired skill into 5 agents (PR #11, 40/40) → `pm/log/2026-11-21-shared-youtube-skill.md`, `agents/_shared/skills/youtube/`, `tests/`

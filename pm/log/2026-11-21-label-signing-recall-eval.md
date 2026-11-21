@@ -13,3 +13,8 @@
 - `data/evals/label_signing_recall_eval.json` — Added v1.0.0 10-artist Option C recall eval dataset with verified watch-page metadata, sample videos, and overlapping seed source IDs.
 - `data/README.md` — Registered `evals/label_signing_recall_eval.json` under Evaluation Benchmarks.
 - `PROJECT.md` — Updated `Recent sessions` LRU cache.
+
+## Runner Merge & Baseline Update
+- Merged PR #21 (`e56051b`, `feat(evals): add Option C label-signing recall eval runner`) to `main`, adding `simon/recall_eval.py` and `tests/test_recall_eval.py`.
+- Verified compatibility with PR #20 (`f81c258`, Vertex AI multi-agent eval runner & `/evals` UI); 7/7 eval tests pass alongside `tests/test_vertex_evals.py`.
+- Saved local baseline run to `local/evals/discovery-label-recall-latest.json`.
