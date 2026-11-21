@@ -1,55 +1,67 @@
 ---
 name: project-manager
 description: >-
-  Distills and files session work, decisions, live status, inbox captures, and partner resources
-  into the Simon repository's Life OS-inspired knowledge model, and updates the Recent sessions
-  working memory in PROJECT.md. Activate this skill when wrapping up substantive work in a chat
-  session, when launching or acting as the background Project Manager (Steward) subagent, or when
-  processing items from pm/inbox/ or raw transcripts.
+  Harvests session documents and brain artifacts across chat windows, distills decisions, live
+  status, session logs, and partner resources into the Simon repository's Life OS-inspired
+  knowledge model, updates the Recent sessions LRU cache in PROJECT.md, and continuously syncs
+  documentation directly to origin/main. Activate this skill in every chat window whenever
+  documents, research, artifacts, plans, or code milestones are produced, or when processing items
+  from pm/inbox/ or raw transcripts.
 ---
 
-# Simon Project Manager (Steward) Skill
+# Simon Project Manager (Steward) Skill — Cross-Window Harvesting & `main` Sync
 
-This skill implements the **Steward / Project Manager** role for the Simon repository (modeled after Life OS). Its job is to turn completed work, research, and confirmed decisions into crisp, accurately placed files without cluttering the primary coding session.
+This skill implements the **Steward / Project Manager** role for the Simon repository (modeled after Life OS). Its job in **every chat window** is to rescue reusable documents/artifacts from ephemeral chat contexts, distill completed work and decisions into the repository's Knowledge Model, and push documentation updates straight to `origin/main` with zero repercussions.
 
-## 1. Running in the Background (For Primary Agent)
+## 1. Launching in the Background (For Primary Agent — Every Chat Window)
 
-Whenever a work block, feature, research investigation, or decision session wraps up, launch a background subagent via `invoke_subagent`:
+Whenever a chat window produces documents, research, brain artifacts, plans, architectural decisions, or code milestones, launch a background subagent via `invoke_subagent`:
 - **`TypeName`**: `"self"`
 - **`Role`**: `"Project Manager (Steward)"`
 - **`Prompt`**: Pass:
   1. Instruction to read `.agents/skills/project-manager/SKILL.md`, `PROJECT.md`, `pm/scope.md`, and `pm/current.md`.
-  2. Concise summary of what happened, what files changed, any decisions confirmed by the owner, and any new tools/dependencies introduced.
-  3. Whether to commit & push governance updates to `origin/main` (per owner preference).
+  2. The session's artifact directory path (`<appDataDir>/brain/<conversation-id>`) and paths to any standalone markdown docs, notes, or transcripts produced in the session so none stay trapped in the chat window.
+  3. Concise summary of what happened, what code/files changed, confirmed owner decisions, and any new CLIs/SDKs/plugins/env vars introduced.
+  4. Instruction to commit and push all documentation/knowledge-model updates directly to `origin/main` via `python3 .agents/scripts/sync_main.py --docs-only`.
 
 ---
 
-## 2. Distillation & Filing Procedure (For Project Manager Agent)
+## 2. Cross-Window Document Harvesting & `main` Sync Runbook (For Steward Agent)
 
 Before writing, read `PROJECT.md`, `pm/scope.md`, `pm/current.md`, and `pm/decisions.md`.
 
-### Step A · Respect Bucket Modalities
+### Step 1 · Harvest Session Documents & Artifacts
+Check whether the chat session produced any standalone markdown documents, research reports, architecture notes, plans, transcripts, `pm/inbox/` captures, or Antigravity brain artifacts (`<appDataDir>/brain/<conversation-id>/*.md`) whose knowledge belongs in the repository:
+- Copy or distill reusable documents into the appropriate established bucket (`notes/managed-agents/`, `ideas/`, `agents/`, `pm/`, `data/`) so context is never trapped or lost inside a single chat window or ephemeral artifact directory.
+- Skip purely transient scratch files or internal task checklists that add no durable repo value once distilled into `pm/log/` and `pm/current.md`.
+- **Setup-Stage Guardrail**: Never invent new top-level folders or overwrite authored product runtime code (`simon/`). Established buckets go straight into the model; only flag genuinely unmapped items back to the caller/user rather than guessing.
+
+### Step 2 · Distill into Steward Files & `PROJECT.md`
+Update the repository's governance and pointer files while respecting bucket modalities:
+
 | Target | Modality & Rules |
 | :--- | :--- |
-| `pm/log/YYYY-MM-DD-<slug>.md` | **What happened** — dated, factual, concise bullets referencing changed files/commits. Prefer appending to today's topic log over creating duplicate files. |
-| `pm/decisions.md` | **Decisions confirmed** — append `- **YYYY-MM-DD · Title**: Rationale & outcome.` Never rewrite past decisions unless superseded (add a new dated line instead). |
-| `pm/current.md` | **State right now** — rewrite `Live Now`, `Next Up`, and `Blockers / Open Items` so they reflect reality today, and set `*Updated: YYYY-MM-DD*`. |
-| `RESOURCES.md` | **Partner toolchain sync** — add any newly adopted CLI, Python package, plugin, or env var name (never commit secret values!). |
-| `notes/managed-agents/` | **How-to engineering knowledge** — architecture, SDK/REST patterns, sandbox environment & deployment guides. |
+| `pm/log/YYYY-MM-DD-<slug>.md` | **What happened** — dated, factual, concise bullets referencing changed files/commits and harvested docs. Prefer appending to today's topic log over creating duplicate files. |
+| `pm/decisions.md` | **Decisions confirmed** — append `- **YYYY-MM-DD · Title**: Rationale & outcome.` Never rewrite past decisions unless superseded (append a new dated entry instead). |
+| `pm/current.md` | **State right now** — refresh `Live Now`, `Next Up`, and `Blockers / Open Items` to match reality today, and set `*Updated: YYYY-MM-DD*`. |
+| `RESOURCES.md` | **Partner toolchain sync** — add reproducible macOS/Linux install instructions for any newly adopted CLI, Python package, MCP server, plugin, or env var name (never commit secret values!). |
+| `notes/managed-agents/` | **How-to engineering knowledge** — architecture, SDK/REST patterns, sandbox environment & deployment playbooks. |
 | `agents/<agent-id>/` | **Curated Managed Agents** — declarative agent specs (`agent.json`), `SYSTEM.md` prompts, and usage docs. |
-| `ideas/` | **Explorations & future verticals** — unscheduled product ideas, scouting sources, calibration concepts. |
+| `ideas/` · `data/` | **Explorations, schemas & datasets** — product discovery/verticals (`ideas/`) and manifest schemas or eval benchmarks (`data/`). |
+| `PROJECT.md` (`Recent sessions`) | **LRU Working Memory (max 12)** — `- YYYY-MM-DD · <workstream> · <≤15 word summary> → <key paths>`. Touch & move to top if the workstream already exists; drop oldest if >12; never edit `## Focus` unless the owner explicitly changed priorities. |
 
-### Step B · Update `Recent sessions` in `PROJECT.md` (LRU Cache)
-Maintain the `## Recent sessions` list at the bottom of `PROJECT.md`:
-- Format: `- YYYY-MM-DD · <workstream> · <≤15 word summary> → <key paths>`
-- **Touch, don't duplicate**: If an entry for the same workstream already exists, update its date/summary and move it to the top.
-- **Max 12 entries**: Drop the oldest line if adding a 13th (detail already lives in `pm/log/` and bucket files).
-- **Never edit `## Focus`** unless the owner explicitly changed priorities.
+### Step 3 · Zero-Repercussion Sync to `main`
+Documentation and knowledge-model updates (`*.md`, `PROJECT.md`, `RESOURCES.md`, `pm/**`, `notes/**`, `ideas/**`, `data/**`, `agents/**`, `.agents/**`) carry **zero repercussions** to commit and push directly to `origin/main`:
+1. Run:
+   ```bash
+   python3 .agents/scripts/sync_main.py --docs-only -m "docs(pm): <concise summary>"
+   ```
+   *(When invoking shell commands in a sandboxed environment, request host access / `BypassSandbox: true` as needed because `.git/` lockfiles and GitHub network remotes require host git/SSH/HTTPS access.)*
+2. This pulls `origin/main` with `--rebase --autostash`, commits only documentation/knowledge paths, and pushes straight to `origin/main` so every parallel chat window and teammate sees the latest context immediately.
+3. **Graceful Fallback**: If the remote `git push` fails (e.g., pending GitHub collaborator permissions, auth issue, or offline), verify that the **local commit on `main` succeeded** and report the exact remote push status/error clearly.
 
-### Step C · Setup-Stage Guardrail
-- Never invent new top-level folders.
-- Never overwrite authored application code (`simon/`) during a PM pass.
-- If an item's destination is genuinely ambiguous, flag it clearly in your report back rather than guessing.
-
-### Step D · Report Back
-Return a brief summary listing every file updated and a one-line description of what changed.
+### Step 4 · Report Back
+Return (via `send_message` when running as a subagent) a concise summary covering:
+1. Harvested session/brain artifacts and where they were filed (plus any unmapped items flagged for the user),
+2. Every Steward / Knowledge Model file updated with a one-line description, and
+3. Exact `main` commit and `origin/main` push status.

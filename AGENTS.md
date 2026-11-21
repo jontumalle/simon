@@ -1,6 +1,6 @@
 # Simon Repository Governance
 
-This repository uses a **Life OS-inspired knowledge model** to keep governance, project management, Managed Agent playbooks, curated agent definitions, product code, data, ideas, and tests cleanly separated.
+This repository uses a **Life OS-inspired knowledge model** to keep governance, project management, Managed Agent playbooks, curated agent definitions, product code, data, ideas, and tests cleanly separated — and continuously synchronized across every chat window and teammate via `origin/main`.
 
 ## 1. Progressive Disclosure & Navigation
 - Start at [PROJECT.md](./PROJECT.md) to orient on current **Focus**, the **Knowledge & Code Map**, and **Recent sessions**.
@@ -18,15 +18,19 @@ This repository uses a **Life OS-inspired knowledge model** to keep governance, 
   - `data/` · `examples/` · `local/` — Schemas/benchmarks (`data/`), public demo fixtures (`examples/`), and gitignored private/live inputs & raw transcripts (`local/`).
   - `ideas/` — Product explorations, discovery sources, pitch concepts, and future verticals.
   - `tests/` — Automated tests and agent evaluations.
-- **Ask When Unmapped (Setup-Stage Guardrail)**: Do **not** invent new top-level directories. Whenever new work does not clearly fit an established bucket above (or could reasonably live in two places), **ask the user where to place it** before saving.
+  - `.agents/` — Repository skills, hooks, and sync utilities (`sync_main.py`).
+- **Ask When Unmapped (Setup-Stage Guardrail)**: Do **not** invent new top-level directories. Ask the user **only** when new work does not fit an established bucket above (or could reasonably live in two places) or would invent a new top-level folder. Files belonging to established documentation/knowledge buckets go straight into the model and push directly to `main`!
 
-## 3. Background Project Manager (Steward)
-- After substantive work, architectural findings, or decisions in a chat session, launch a **background Project Manager subagent** (`invoke_subagent` using `.agents/skills/project-manager/SKILL.md`) to distill and file updates into:
-  - `pm/log/YYYY-MM-DD-<topic>.md` (what happened — factual, dated)
-  - `pm/decisions.md` (decisions made — dated, append-only)
-  - `pm/current.md` (live state & blockers)
-  - `PROJECT.md` (`Recent sessions` LRU line)
-- Respect modality boundaries: never fabricate commitments or overwrite authored product code during PM distillation.
+## 3. Continuous `main` Sync & Zero-Repercussion Doc Pushing
+- **Zero-Repercussion Doc Pushing**: **Any documentation or knowledge-model file** (`*.md`, `PROJECT.md`, `RESOURCES.md`, `pm/**`, `notes/**`, `ideas/**`, `data/**`, `agents/**`, `.agents/**`) **can and should be committed and pushed directly to `origin/main` immediately with zero repercussions** — no PR ceremony, branch overhead, or hesitation needed for docs and shared context.
+- **Push & Pull Frequently**: Proactively encourage both the user and agent to push work to `main` frequently — **immediately** for docs/context (`python3 .agents/scripts/sync_main.py --docs-only`) and right after quick verification for code changes — while pulling `origin/main` with `--rebase --autostash` (`python3 .agents/scripts/sync_main.py`) so parallel chat windows and teammates never drift or lose context.
 
-## 4. Partner Resource Sync (`RESOURCES.md`)
+## 4. Background Project Manager (Steward) — Every Chat Window
+- In **every chat window**, whenever documents, research, artifacts, plans, architectural findings, decisions, or code milestones are produced, launch a **background `Project Manager (Steward)` subagent** (`invoke_subagent` following `.agents/skills/project-manager/SKILL.md`) to:
+  1. **Harvest session documents & artifacts**: Grab any newly created standalone docs, research notes, plans, or reusable Antigravity brain/scratch artifacts (`<appDataDir>/brain/<conversation-id>/*.md`) so nothing stays trapped inside an ephemeral chat window or scratch artifact folder.
+  2. **Organize & distill into the Knowledge Model**: File reusable knowledge and session updates into the appropriate established buckets (`notes/`, `pm/log/YYYY-MM-DD-<topic>.md`, `pm/decisions.md`, `pm/current.md`, `ideas/`, `agents/`, `data/`, `RESOURCES.md`, and the `Recent sessions` LRU cache in `PROJECT.md`).
+  3. **Sync directly to `main`**: Commit and push those documentation/knowledge updates straight to `origin/main` via `python3 .agents/scripts/sync_main.py --docs-only`.
+- Respect modality boundaries: never fabricate commitments or overwrite authored product code (`simon/`) during PM distillation, and ask the user only when an item is genuinely unmapped per the Setup-Stage Guardrail.
+
+## 5. Partner Resource Sync (`RESOURCES.md`)
 - Whenever a new CLI tool, Python dependency, MCP server, Antigravity plugin, or environment variable is introduced, update [RESOURCES.md](./RESOURCES.md) with reproducible macOS/Linux install instructions (never commit secret values) so a teammate's agent can self-install after `git pull`.

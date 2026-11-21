@@ -3,18 +3,21 @@
 *Updated: 2026-11-21*
 
 ## Live Now
-- **Starter Pipeline Working**: `python3 -m simon` runs the deterministic demo (`examples/showcase.json`), and `python3 -m simon --live local/showcase.json` runs `gemini-4-hydrogen` audio listening + 3 `antigravity-preview-09-2026` Managed Agent calls (`performance`, `booking`, `producer`).
-- **Repo Governance Scaffolded**: Life OS-inspired layout (`PROJECT.md`, `AGENTS.md`, `RESOURCES.md`, `pm/`, `notes/managed-agents/`, `agents/`, `ideas/`, `data/`, `tests/`, `.agents/`).
-- **Toolchain & Research In Flight**:
-  - Installing Python 3.12 (`uv`) + Google Cloud CLI (`gcloud`) on local macOS (`arm64`) and preparing OAuth login.
-  - Completing deep-dive playbook on Gemini Managed Agents (`v1beta/agents`, repo-mounted `base_environment`, `Files API`, `Credentials API`, background execution) to populate `notes/managed-agents/` and `agents/`.
+- **Starter Pipeline & Tests Passing**: `python3 -m simon` demo pipeline and `tests/` suite (`test_smoke.py`, `test_auto_approve_hook.py`) passing.
+- **Continuous `main` Sync & Cross-Window Steward Active**:
+  - [AGENTS.md](../AGENTS.md) enforces zero-repercussion direct `main` pushing for all Markdown/knowledge files, frequent `main` sync, and launching a background `Project Manager (Steward)` subagent across every chat window.
+  - [.agents/scripts/sync_main.py](../.agents/scripts/sync_main.py) + [main-sync/SKILL.md](../.agents/skills/main-sync/SKILL.md) handle safe `--docs-only` / `--all` staging, `git pull --rebase --autostash origin main`, and `git push origin main`.
+  - [.agents/hooks.json](../.agents/hooks.json) runs `SessionStart` (`session_start.py`), `PreToolUse` (`auto_approve_toolchain.py`), and `Stop` (`stop_doc_sync.py` — catches uncommitted docs before turn end).
+- **Local macOS (`arm64`) Toolchain Ready**:
+  - Installed: `uv 0.13.9`, `Python 3.12.16`, `gcloud 594.0.0`, `gemini-api 0.5.0`, `gh 2.105.0`, plus `.venv` (`google-genai 3.6.1`, `pydantic 2.14.4`, `pyyaml 6.0.4`, `pytest 9.2.0`, `ruff 0.17.6`).
+  - Antigravity plugins active: `gemini-api` and `wispr-flow`.
+- **Managed Agents Playbook & Seeded Blueprints**:
+  - Playbook in [notes/managed-agents/playbook.md](../notes/managed-agents/playbook.md); curated specs in [agents/](../agents/README.md) (`performance-critic`, `booking-critic`, `showcase-producer`).
 
 ## Next Up
-1. Complete `gcloud auth login` once `gcloud` + Python 3.12 finishes installing.
-2. Land the Managed Agents engineering playbook in `notes/managed-agents/` and finalize the declarative agent spec format in `agents/`.
-3. Curate our first deployable Managed Agents in `agents/` (`audio-scout`, `performance-critic`, `booking-critic`, `producer`) and wire deployment/invocation into `simon/`.
-4. Gather opt-in pilot clips/sources into `local/` and add unit + rubric tests in `tests/`.
+1. Accept collaborator invite from `jontumalle` on `github.com/jontumalle/simon` so `sync_main.py` pushes queued local `main` commits to `origin/main`.
+2. Run `gcloud auth login && gcloud auth application-default login` in terminal (optional unless mounting GCS buckets) and export `GEMINI_API_KEY` + `SIMON_AGENT_PREFIX="kevin-"`.
+3. Implement `simon` agent sync & runtime orchestration against `/v1beta/agents`, `/v1beta/environments`, and `/v1beta/interactions`.
 
 ## Blockers / Open Items
-- Confirm `GEMINI_API_KEY` (Tier 3 / hackathon credits mentioned in kickoff) is exported locally for live Managed Agent registration and test runs.
-- Add Wispr Flow plugin in Antigravity if pulling voice notes directly into `pm/inbox/`.
+- GitHub push access (`403` for `kvn-quisp` on `jontumalle/simon.git`) pending collaborator invite from JT.

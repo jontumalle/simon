@@ -90,14 +90,17 @@ job = client.interactions.create(
 result = client.interactions.get(job.id)
 ```
 
-### 2.4 CLI Operations (`gemini-api`)
-Google's official `gemini-api` CLI (`github.com/google-gemini/gemini-api-cli`) lets humans and local coding agents inspect and test Managed Agents directly from the shell:
+### 2.4 CLI Operations (`gemini-api` v0.5.0)
+Google's official `gemini-api` CLI (`github.com/google-gemini/gemini-api-cli`) lets humans and local coding agents inspect, create, and test Managed Agents directly from the shell (note: subcommand is `agent` singular, and `analyze -i` supports local audio AND YouTube URLs directly!):
 ```sh
-gemini-api agents list
-gemini-api agents get simon-performance-critic
-gemini-api agent run "Review audition a01" --agent simon-performance-critic --background --stream=false -o json
-gemini-api agent status <interaction-id> -o json
-gemini-api environments files list <env-id>
+gemini-api agent list --page-size 10
+gemini-api agent get simon-performance-critic
+gemini-api agent create --id simon-performance-critic --base-agent antigravity-preview-09-2026 \
+  --system-instruction "Independently evaluate vocal phrasing and live execution."
+gemini-api agent run "Review audition a01" --agent simon-performance-critic --background --jq '.id'
+gemini-api agent status <run-id> -o json
+gemini-api environments files list -e <env-id> -r
+gemini-api analyze -i "https://www.youtube.com/watch?v=..." "Describe vocal phrasing and timestamps"
 ```
 
 ---

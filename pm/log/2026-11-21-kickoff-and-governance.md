@@ -8,3 +8,6 @@
 - **Repository Governance Scaffolded**:
   - Created `PROJECT.md`, `AGENTS.md`, `RESOURCES.md`, `pm/`, `notes/managed-agents/`, `agents/`, `ideas/`, `data/`, `tests/`, and `.agents/` skills/hooks.
   - Launched background agents to (1) install `uv` + Python 3.12 + `gcloud` CLI on macOS `arm64`, and (2) produce the comprehensive Gemini Managed Agents ("agent as a repo") engineering playbook.
+- **Continuous `main` Sync, Hooks & Full Toolchain Completed**:
+  - Installed `uv 0.13.9`, `Python 3.12.16`, `gcloud 594.0.0`, `gemini-api 0.5.0`, and `.venv` (`google-genai 3.6.1`, `pydantic`, `pyyaml`, `pytest`, `ruff`); enabled `gemini-api` and `wispr-flow` Antigravity plugins.
+  - Built `.agents/scripts/sync_main.py`, `.agents/scripts/stop_doc_sync.py` (`Stop` hook), upgraded `.agents/scripts/session_start.py` (`SessionStart` hook), added `.agents/skills/main-sync/SKILL.md`, and updated `AGENTS.md` + `.agents/skills/project-manager/SKILL.md` for cross-window artifact harvesting and zero-repercussion `main` doc pushing.

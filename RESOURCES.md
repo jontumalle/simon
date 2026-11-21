@@ -22,10 +22,10 @@ done
 
 | Resource | Required? | Purpose | Reproducible Install (macOS Apple Silicon `arm64`) |
 | :--- | :---: | :--- | :--- |
-| **GitHub CLI (`gh`)** | **Core** | Repo sync, PRs, repo-mounted Managed Agent checks (`jontumalle/simon`) | `~/.local/bin/gh` or `brew install gh`, then `gh auth login` |
-| **`uv` + Python 3.12** | **Core** | Fast virtualenv/lockfile manager + Python ≥3.10 runtime required by `gcloud` and `google-genai` | `curl -LsSf https://astral.sh/uv/install.sh \| sh && ~/.local/bin/uv python install 3.12` |
-| **Gemini API CLI (`gemini-api`)** | **Core** | Create/list/run `/v1beta/agents`, manage `environments` & `credentials`, inspect schemas from shell | `curl -fsSL https://raw.githubusercontent.com/google-gemini/gemini-api-cli/main/scripts/install.sh \| bash` |
-| **Google Cloud CLI (`gcloud`)** | **Core** | GCP auth, GCS bucket mounts (`sources: [{type: "gcs"}]`), optional Cloud Run / Vertex ops | Extract `google-cloud-cli-darwin-arm.tar.gz` to `~/google-cloud-sdk`, set `export CLOUDSDK_PYTHON="$(~/.local/bin/uv python find 3.12)"`, run `~/google-cloud-sdk/install.sh --quiet --path-update true`, then `gcloud auth login` |
+| **GitHub CLI (`gh`)** | **Core** | Repo sync, PRs, repo-mounted Managed Agent checks (`jontumalle/simon`) | `~/.local/bin/gh` (`v2.105.0`), then `gh auth login && gh auth setup-git` |
+| **`uv` + Python 3.12** | **Core** | Fast virtualenv/lockfile manager + Python ≥3.10 runtime (`v0.13.9` + `Python 3.12.16`) | `curl -LsSf https://astral.sh/uv/install.sh \| sh && ~/.local/bin/uv python install 3.12` |
+| **Gemini API CLI (`gemini-api`)** | **Core** | Create/list/run `/v1beta/agents`, manage `environments` & `credentials`, YouTube/audio `analyze` (`v0.5.0`) | `GEMINI_VERSION="$(~/.local/bin/gh api repos/google-gemini/gemini-api-cli/releases/latest --jq .tag_name)" sh -c 'curl -fsSL https://raw.githubusercontent.com/google-gemini/gemini-api-cli/main/scripts/install.sh \| sh'` *(uses `gh` auth to avoid shared hackathon Wi-Fi 403 rate limits)* |
+| **Google Cloud CLI (`gcloud`)** | **Core** | GCP auth, GCS bucket mounts (`sources: [{type: "gcs"}]`), optional Cloud Run / Vertex ops (`v594.0.0`) | Extract `google-cloud-cli-darwin-arm.tar.gz` to `~/google-cloud-sdk`, set `export CLOUDSDK_PYTHON="$(~/.local/bin/uv python find 3.12)"`, run `~/google-cloud-sdk/install.sh --quiet --path-update true`, then `gcloud auth login && gcloud auth application-default login` |
 | **`ffmpeg` (`ffprobe`)** | Recommended | Trim, normalize, inspect sample rate/channels, convert `.m4a`/`.mov` → `.mp3`/`.wav` (<10 MB) | `brew install ffmpeg` or static `arm64` binary in `~/.local/bin/ffmpeg` |
 | **`yt-dlp`** | Optional | Local helper for downloading opt-in public live-session clips into gitignored `local/` | `~/.local/bin/uv tool install yt-dlp` (no Homebrew needed!) |
 | **`jq`** | Optional | Fast JSON inspection of `showcase.json` and `gemini-api -o json` outputs | `/usr/bin/jq` (preinstalled on macOS 15+) or `brew install jq` |
@@ -89,3 +89,15 @@ Add/enable from the Antigravity Marketplace UI:
 - **Wispr Flow** (`antigravity-plugins-partners/plugin/wispr-flow`) — Pull meeting transcripts, voice notes, and scratchpads into `pm/inbox/`.
 - **Google Cloud Developer** (`antigravity-plugins-official/plugin/google-cloud-developer`) — GCP auth validation and Google Developer Knowledge MCP.
 - **Gmail / Google Sheets** (`gmail`, `gsheets` — *optional*) — Human-approved artist callback email drafts and showcase budget tracking.
+
+Configure global MCP servers in `~/.gemini/config/mcp_config.json`:
+- **Excalidraw MCP App** (`excalidraw`) — Official Streamable HTTP server for inline hand-drawn architecture diagrams (`{"mcpServers": {"excalidraw": {"url": "https://mcp.excalidraw.com/mcp"}}}`).
+
+---
+
+## 6. Repo-Scoped Antigravity Hooks (`.agents/hooks.json`)
+
+Checked into Git so every teammate gets them automatically after `git pull`:
+- **`simon-toolchain-permissions` (`PreToolUse` → `.agents/scripts/auto_approve_toolchain.py`)** — Contextually inspects `run_command` calls and returns `"decision": "auto_approve"` for safe, non-destructive invocations of the CLIs in this manifest (`git`, `gh`, `uv`, `python3`, `pytest`, `ruff`, `gemini-api`, `gcloud`, `ffmpeg`/`ffprobe`, `yt-dlp`, `jq`), while falling back to Antigravity's default permission prompt on destructive flags, token-printing commands, shell injections, or unrecognized binaries.
+- **`simon-session-context` (`SessionStart` → `.agents/scripts/session_start.py`)** — Injects `PROJECT.md` orientation at session start.
+- **`simon-stop-doc-sync` (`Stop` → `.agents/scripts/stop_doc_sync.py`)** — Keeps shared docs synced cleanly to `origin/main`.
