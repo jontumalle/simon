@@ -79,6 +79,7 @@ from .screening import (
     save_screening_label,
 )
 from .store import SimonStore, create_store
+from .taste_profile_ui import build_taste_profile_payload, render_taste_profile_page
 
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -282,6 +283,21 @@ def dispatch_http_request(
             except ImportError:
                 html_bytes = render_fallback_screening_html().encode("utf-8")
             return (HTTPStatus.OK, "text/html; charset=utf-8", html_bytes)
+
+        if parsed.path == "/taste-profile":
+            return (
+                HTTPStatus.OK,
+                "text/html; charset=utf-8",
+                render_taste_profile_page().encode("utf-8"),
+            )
+
+        if parsed.path == "/api/taste-profile":
+            payload = build_taste_profile_payload(store)
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            )
 
         if parsed.path == "/api/screening/packets":
             qs = parse_qs(parsed.query)

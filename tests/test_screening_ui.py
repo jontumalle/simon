@@ -17,11 +17,13 @@ class TestScreeningDeckUI(unittest.TestCase):
         self.assertEqual(nav_screen, render_top_nav("/screen"))
         self.assertIn('<div class="nav-group stage-screening">', nav_screen)
         self.assertIn('<span class="nav-group-label">Screening</span>', nav_screen)
-        self.assertIn('<a href="/screen" id="screenNavLink" class="active">6. Screening Deck</a>', nav_screen)
+        self.assertIn('<a href="/screen" id="screenNavLink" class="active">7. Screening Deck</a>', nav_screen)
+        self.assertIn('<a href="/taste-profile" id="tasteProfileNavLink">8. Taste Profile</a>', nav_screen)
         self.assertNotIn('href="/discovery" class="active"', nav_screen)
 
         nav_disc = _render_top_nav("/discovery")
-        self.assertIn('<a href="/screen" id="screenNavLink">6. Screening Deck</a>', nav_disc)
+        self.assertIn('<a href="/screen" id="screenNavLink">7. Screening Deck</a>', nav_disc)
+        self.assertIn('<a href="/taste-profile" id="tasteProfileNavLink">8. Taste Profile</a>', nav_disc)
         self.assertIn('<a href="/discovery" class="active">1. Discovery Dashboard</a>', nav_disc)
 
         # Shared CSS styles .nav-group.stage-screening cleanly
@@ -34,8 +36,10 @@ class TestScreeningDeckUI(unittest.TestCase):
         html = render_screening_page()
         self.assertTrue(html.startswith("<!DOCTYPE html>"))
         self.assertEqual(html, SCREENING_HTML)
-        self.assertIn("6. Screening Deck", html)
-        self.assertIn('<a href="/screen" id="screenNavLink" class="active">6. Screening Deck</a>', html)
+        self.assertIn("7. Screening Deck", html)
+        self.assertIn('<a href="/screen" id="screenNavLink" class="active">7. Screening Deck</a>', html)
+        self.assertIn("View Our Taste Profile →", html)
+        self.assertIn('href="/taste-profile"', html)
 
         # Top Control Strip: counter, 5 filter pills, fleet/DSPy/eval buttons, active model badge
         self.assertIn('id="deckCounterBadge"', html)

@@ -1028,7 +1028,12 @@ def render_top_nav(active_path: str) -> str:
             _link("/evals", "6. Evals", "evalsNavLink"),
         ]
     )
-    screening_links = _link("/screen", "6. Screening Deck", "screenNavLink")
+    screening_links = "".join(
+        [
+            _link("/screen", "7. Screening Deck", "screenNavLink"),
+            _link("/taste-profile", "8. Taste Profile", "tasteProfileNavLink"),
+        ]
+    )
     theme_btn = (
         ""
         if active_path == "/"
