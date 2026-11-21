@@ -79,6 +79,9 @@ export SIMON_SYNTHESIS_AGENT="antigravity-preview-09-2026"   # or deployed simon
 export GEMINI_AUDIO_MODEL="gemini-4-hydrogen"
 export GEMINI_PRODUCER_MODEL="gemini-4-carbon"
 
+# Optional: YouTube Data API v3 key for Stage 2 Investigator (falls back to keyless oEmbed/innertube if unset)
+export YOUTUBE_API_KEY="your-youtube-api-key"
+
 # Optional: GCP project ID when using gcloud / GCS mounts
 export GOOGLE_CLOUD_PROJECT="your-gcp-project-id"
 ```

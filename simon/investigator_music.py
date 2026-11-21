@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import html as html_lib
 import json
+import os
 import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.error import HTTPError, URLError
@@ -259,6 +260,115 @@ def parse_jsonld_music_events(raw_html: str, source_url: str) -> List[Dict[str, 
                     }
                 )
     return shows
+
+
+def parse_iso8601_duration(iso_str: str) -> Optional[int]:
+    """Parse YouTube ISO 8601 duration (e.g. PT6M10S, PT1H2M3S) into integer seconds."""
+    if not isinstance(iso_str, str):
+        return None
+    match = re.match(r"^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$", iso_str.strip().upper())
+    if not match or not any(match.groups()):
+        return None
+    hours = int(match.group(1) or 0)
+    minutes = int(match.group(2) or 0)
+    seconds = int(match.group(3) or 0)
+    return hours * 3600 + minutes * 60 + seconds
+
+
+def fetch_youtube_video_and_channel_api(
+    video_id: str,
+    api_key: str,
+    json_fetcher: JsonFetcher = default_json_fetcher,
+) -> Dict[str, Any]:
+    """Fetch official YouTube Data API v3 video + channel statistics (zero audio/video decode)."""
+    if not video_id or not api_key:
+        return {}
+    vid_url = (
+        "https://www.googleapis.com/youtube/v3/videos?"
+        + urlencode(
+            {
+                "part": "snippet,contentDetails,statistics",
+                "id": video_id,
+                "key": api_key,
+            }
+        )
+    )
+    vid_data = json_fetcher(vid_url)
+    items = (vid_data or {}).get("items") or []
+    if not items or not isinstance(items[0], dict):
+        return {}
+    item = items[0]
+    snippet = item.get("snippet") or {}
+    stats = item.get("statistics") or {}
+    details = item.get("contentDetails") or {}
+
+    meta: Dict[str, Any] = {
+        "title": snippet.get("title"),
+        "author_name": snippet.get("channelTitle"),
+        "description": snippet.get("description") or "",
+        "duration_seconds": parse_iso8601_duration(str(details.get("duration") or "")),
+        "embeddable": True,
+    }
+    if stats.get("viewCount") and str(stats["viewCount"]).isdigit():
+        meta["view_count"] = int(stats["viewCount"])
+
+    channel_id = snippet.get("channelId")
+    if channel_id:
+        ch_url = (
+            "https://www.googleapis.com/youtube/v3/channels?"
+            + urlencode({"part": "statistics", "id": channel_id, "key": api_key})
+        )
+        ch_data = json_fetcher(ch_url)
+        ch_items = (ch_data or {}).get("items") or []
+        if ch_items and isinstance(ch_items[0], dict):
+            ch_stats = ch_items[0].get("statistics") or {}
+            if ch_stats.get("subscriberCount") and str(ch_stats["subscriberCount"]).isdigit():
+                meta["youtube_subscribers"] = int(ch_stats["subscriberCount"])
+    return meta
+
+
+def fetch_youtube_comments_api(
+    video_id: str,
+    api_key: str,
+    json_fetcher: JsonFetcher = default_json_fetcher,
+    max_comments: int = 50,
+) -> List[Dict[str, Any]]:
+    """Fetch up to 50 public top-level comments via official YouTube Data API v3."""
+    if not video_id or not api_key:
+        return []
+    url = (
+        "https://www.googleapis.com/youtube/v3/commentThreads?"
+        + urlencode(
+            {
+                "part": "snippet",
+                "videoId": video_id,
+                "maxResults": str(min(max_comments, 50)),
+                "order": "relevance",
+                "textFormat": "plainText",
+                "key": api_key,
+            }
+        )
+    )
+    data = json_fetcher(url)
+    items = (data or {}).get("items") or []
+    comments: List[Dict[str, Any]] = []
+    for item in items:
+        top = ((item.get("snippet") or {}).get("topLevelComment") or {}).get("snippet") or {}
+        text = str(top.get("textDisplay") or "").strip()
+        if not text:
+            continue
+        comments.append(
+            {
+                "text": text,
+                "author": str(top.get("authorDisplayName") or "unknown"),
+                "channel_url": top.get("authorChannelUrl"),
+                "is_verified": False,
+                "role_hint": None,
+            }
+        )
+        if len(comments) >= max_comments:
+            break
+    return comments
 
 
 def fetch_youtube_comments_keyless(
@@ -887,20 +997,33 @@ class MusicDomainPack:
 
         lead_key = str(identity_bundle.get("lead_id") or "").lower()
         hints = self._runtime_hints.setdefault(lead_key, {"tour_urls": [], "extra_credits": [], "extra_desc": ""})
+        yt_api_key = os.environ.get("YOUTUBE_API_KEY", "").strip()
 
         for url in candidate_urls:
             oembed = self.oembed_fixtures.get(url)
             watch_meta: Dict[str, Any] = {}
             if oembed is None and not self.oembed_fixtures:
-                oembed_url = f"https://www.youtube.com/oembed?url={quote(url, safe='')}&format=json"
-                oembed = self.json_fetcher(oembed_url)
-                watch_html = self.text_fetcher(url)
-                if watch_html:
-                    watch_meta = parse_youtube_watch_metadata(watch_html)
-                    if watch_meta.get("description"):
-                        hints["extra_desc"] = (hints.get("extra_desc", "") + "\n" + watch_meta["description"]).strip()
-                    if yt_subscribers is None and isinstance(watch_meta.get("youtube_subscribers"), int):
-                        yt_subscribers = watch_meta["youtube_subscribers"]
+                vid_id = extract_video_id(url)
+                if yt_api_key and vid_id:
+                    watch_meta = fetch_youtube_video_and_channel_api(
+                        vid_id, yt_api_key, json_fetcher=self.json_fetcher
+                    )
+                    if watch_meta:
+                        oembed = watch_meta
+                        if watch_meta.get("description"):
+                            hints["extra_desc"] = (hints.get("extra_desc", "") + "\n" + watch_meta["description"]).strip()
+                        if yt_subscribers is None and isinstance(watch_meta.get("youtube_subscribers"), int):
+                            yt_subscribers = watch_meta["youtube_subscribers"]
+                if oembed is None:
+                    oembed_url = f"https://www.youtube.com/oembed?url={quote(url, safe='')}&format=json"
+                    oembed = self.json_fetcher(oembed_url)
+                    watch_html = self.text_fetcher(url)
+                    if watch_html:
+                        watch_meta = parse_youtube_watch_metadata(watch_html)
+                        if watch_meta.get("description"):
+                            hints["extra_desc"] = (hints.get("extra_desc", "") + "\n" + watch_meta["description"]).strip()
+                        if yt_subscribers is None and isinstance(watch_meta.get("youtube_subscribers"), int):
+                            yt_subscribers = watch_meta["youtube_subscribers"]
             if isinstance(oembed, dict):
                 evidence_urls.append(url)
                 duration_sec = oembed.get("duration_seconds")
@@ -1006,9 +1129,16 @@ class MusicDomainPack:
                     break
             if yt_watch:
                 target_url = yt_watch
-                comments = fetch_youtube_comments_keyless(
-                    yt_watch, text_fetcher=self.text_fetcher, max_comments=50
-                )
+                yt_api_key = os.environ.get("YOUTUBE_API_KEY", "").strip()
+                vid_id = extract_video_id(yt_watch)
+                if yt_api_key and vid_id:
+                    comments = fetch_youtube_comments_api(
+                        vid_id, yt_api_key, json_fetcher=self.json_fetcher, max_comments=50
+                    )
+                if not comments:
+                    comments = fetch_youtube_comments_keyless(
+                        yt_watch, text_fetcher=self.text_fetcher, max_comments=50
+                    )
 
         counts, notable = classify_comments_single_pass(comments, max_sample=50)
         missing: List[str] = []

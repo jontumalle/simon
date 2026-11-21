@@ -28,7 +28,12 @@ from simon.investigator import (
     run_signal_forensics,
     run_track_record_mapper,
 )
-from simon.investigator_music import MusicDomainPack
+from simon.investigator_music import (
+    MusicDomainPack,
+    fetch_youtube_comments_api,
+    fetch_youtube_video_and_channel_api,
+    parse_iso8601_duration,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEMO_HANDOFF_PATH = REPO_ROOT / "examples" / "discovery_handoff_demo.json"
@@ -382,6 +387,57 @@ class TestInvestigatorPipelineAndProcessEvals(unittest.TestCase):
         res = evaluate_dossier_process(bad_show)
         self.assertFalse(res["passed"])
         self.assertTrue(any("ungrounded_show" in f for f in res["failures"]))
+
+
+    def test_youtube_data_api_v3_helpers(self) -> None:
+        self.assertEqual(parse_iso8601_duration("PT6M10S"), 370)
+        self.assertEqual(parse_iso8601_duration("PT1H2M3S"), 3723)
+        self.assertIsNone(parse_iso8601_duration("invalid"))
+
+        def fake_json(url: str):
+            if "/youtube/v3/videos" in url:
+                return {
+                    "items": [
+                        {
+                            "snippet": {
+                                "title": "YEBBA - My Mind | Sofar NYC",
+                                "channelTitle": "Sofar Sounds",
+                                "channelId": "UC_SOFAR",
+                                "description": "Live session in NYC.",
+                            },
+                            "contentDetails": {"duration": "PT6M10S"},
+                            "statistics": {"viewCount": "33220000"},
+                        }
+                    ]
+                }
+            if "/youtube/v3/channels" in url:
+                return {"items": [{"statistics": {"subscriberCount": "1400000"}}]}
+            if "/youtube/v3/commentThreads" in url:
+                return {
+                    "items": [
+                        {
+                            "snippet": {
+                                "topLevelComment": {
+                                    "snippet": {
+                                        "textDisplay": "Please drop this on Spotify!",
+                                        "authorDisplayName": "@fan1",
+                                        "authorChannelUrl": "https://www.youtube.com/@fan1",
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            return None
+
+        meta = fetch_youtube_video_and_channel_api("RXwE1G7_U9M", "fake-key", json_fetcher=fake_json)
+        self.assertEqual(meta["duration_seconds"], 370)
+        self.assertEqual(meta["view_count"], 33220000)
+        self.assertEqual(meta["youtube_subscribers"], 1400000)
+
+        comments = fetch_youtube_comments_api("RXwE1G7_U9M", "fake-key", json_fetcher=fake_json)
+        self.assertEqual(len(comments), 1)
+        self.assertEqual(comments[0]["text"], "Please drop this on Spotify!")
 
 
 if __name__ == "__main__":
