@@ -162,6 +162,38 @@ class TestDeployAndFleet(unittest.TestCase):
             self.assertEqual(fleet_data["total"], 2)
             self.assertEqual(fleet_data["mode"], "dry_run")
 
+            # Contract-agnostic structured JSON assignments (e.g., DiscoveryLead objects)
+            structured_payload = json.dumps(
+                {
+                    "agent": "staging-simon-investigator",
+                    "assignments": [
+                        {
+                            "lead_id": "lead_01",
+                            "stage_name": "Olivia Dean",
+                            "seed_sources": [
+                                {
+                                    "url": "https://www.youtube.com/watch?v=3-K26i1go0s",
+                                    "source_channel": "youtube_live_session",
+                                }
+                            ],
+                        }
+                    ],
+                    "webhook_url": "https://api.example.com/webhooks/gemini",
+                    "dry_run": True,
+                }
+            ).encode("utf-8")
+            status3, _, body3 = dispatch_http_request(store, "POST", "/api/fleet/run", structured_payload)
+            self.assertEqual(status3, 200)
+            fleet_struct = json.loads(body3.decode("utf-8"))
+            worker = fleet_struct["workers"][0]
+            self.assertEqual(worker["assignment"]["lead_id"], "lead_01")
+            sent_text = worker["request"]["input"][0]["text"]
+            self.assertEqual(json.loads(sent_text)["stage_name"], "Olivia Dean")
+            self.assertEqual(
+                worker["request"]["webhook_config"]["user_metadata"]["target"],
+                "lead_01",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
