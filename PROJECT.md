@@ -33,6 +33,7 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 ## Recent sessions
 *Working memory (LRU pointer cache, max 12, most recent first). Maintained by the `project-manager` skill/subagent.*
 
+- 2026-11-21 · taste-brief youtube mvp · shipped 3-unit YouTube vocal scout MVP, SQLite store, web studio & Wispr alignment → `simon/`, `agents/`, `data/`, `pm/`
 - 2026-11-21 · managed-agents pipeline · added workforce packaging, deploy pipeline, and cron/webhook trigger blueprint → `notes/managed-agents/`, `pm/`
 - 2026-11-21 · process-observer · added process-observer skill, inspect_sessions.py telemetry, and non-binary pm/process/ records → `.agents/skills/process-observer/`, `pm/process/`
 - 2026-11-21 · dspy & decisions api · prototyped Part 1 Decisions+DSPy 3.5 triage, 4-table DB & Excalidraw arch → `pm/`, `RESOURCES.md`
