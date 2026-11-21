@@ -28,8 +28,74 @@
 
   const $ = (id) => document.getElementById(id);
 
+  const AGENT_DISPLAY_NAMES = {
+    'discovery-scout': 'Discovery Scout',
+    'identity-resolver': 'Identity Resolver',
+    'footprint-profiler': 'Footprint Profiler',
+    'signal-forensics': 'Audience Signal Analyst',
+    'track-record-mapper': 'Live History Mapper',
+    'dossier-assembler': 'Profile Assembler',
+    'screen-advocate': 'Advocate Scout',
+    'screen-skeptic': 'Skeptic Scout',
+    'screening-judge': 'Screening Judge',
+    'showcase-producer': 'Showcase Producer',
+    'performance-critic': 'Performance Critic',
+    'booking-critic': 'Booking Critic',
+    'synthesis-scout': 'Shortlist Scout',
+  };
+
   function formatLabel(val) {
-    return String(val || '').replace(/_/g, ' ');
+    const text = String(val || '').replace(/[_-]+/g, ' ').trim();
+    if (!text) return '';
+    return text
+      .replace(/\b\w/g, (ch) => ch.toUpperCase())
+      .replace(/\bYoutube\b/g, 'YouTube')
+      .replace(/\bNyc\b/g, 'NYC')
+      .replace(/\bDsp\b/g, 'Streaming')
+      .replace(/\bRnb\b/g, 'R&B');
+  }
+
+  function formatAgentName(raw) {
+    const text = String(raw || '').trim();
+    if (!text) return 'Scout';
+    const m = text.match(/^([^\s(]+)(?:\s*\(([^)]+)\))?$/);
+    if (m) {
+      const base = m[1].replace(/^(?:staging|prod|dev)-/, '').replace(/^simon-/, '');
+      const label = AGENT_DISPLAY_NAMES[base] || formatLabel(base);
+      if (m[2]) {
+        const workerNum = m[2].match(/(\d+)$/);
+        return workerNum ? `${label} #${workerNum[1]}` : `${label} (${formatLabel(m[2])})`;
+      }
+      return label;
+    }
+    return formatLabel(text);
+  }
+
+  function formatStatus(val) {
+    const key = String(val || '').toLowerCase();
+    const map = {
+      completed: 'Done',
+      done: 'Done',
+      active: 'Active',
+      live: 'Live',
+      test: 'Test',
+      simulated: 'Sample',
+      dry_run: 'Dry Run',
+      dispatched: 'Running',
+      running: 'Running',
+      failed: 'Failed',
+      error: 'Error',
+      pending: 'Pending',
+      pending_human_review: 'Needs Review',
+      verified: 'Verified',
+      unverified: 'Unverified',
+      uncertain: 'Uncertain',
+      elevate: 'Elevate',
+      watch: 'Watch',
+      pass: 'Pass',
+      fail: 'Fail',
+    };
+    return map[key] || formatLabel(val);
   }
 
   function esc(str) {
@@ -339,7 +405,7 @@
             </span>
             <span style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
               ${extHtml}
-              <span class="pill ${statusCls}">${esc(s.status)}</span>
+              <span class="pill ${statusCls}">${esc(formatStatus(s.status))}</span>
             </span>
           </div>
           <div style="display:flex; gap:6px; flex-wrap:wrap;">
@@ -371,19 +437,22 @@
     if (!list) return;
     $('discBatchCountBadge').textContent = String(state.discoveryBatches.length);
     if (!state.discoveryBatches.length) {
-      list.innerHTML = `<div class="muted" style="font-size:12.5px;">No discovery batches dispatched yet. Select sources above and click <strong>Send Discovery Agents</strong>.</div>`;
+      list.innerHTML = `<div class="muted" style="font-size:12.5px;">No discovery runs yet. Pick sources above and click <strong>Send Discovery Scouts</strong>.</div>`;
       return;
     }
-    list.innerHTML = state.discoveryBatches.slice(0, 6).map((b) => {
+    list.innerHTML = state.discoveryBatches.slice(0, 6).map((b, idx) => {
       const workers = b.workers || [];
       const leadSum = workers.reduce((acc, w) => acc + Number(w.lead_count || 0), 0);
       const q = `?batch=${encodeURIComponent(b.batch_id)}`;
+      const runNum = state.discoveryBatches.length - idx;
+      const runDate = b.created_at ? String(b.created_at).slice(0, 10) : '';
+      const runTitle = runDate ? `Discovery Run #${runNum} · ${runDate}` : `Discovery Run #${runNum}`;
       return `
         <div class="lead-row">
           <div class="lead-row-top">
             <div>
-              <strong class="mono" style="font-size:12px;">${esc(b.batch_id)}</strong>
-              <span class="pill ${b.mode === 'live' ? 'ok' : 'accent'}" style="margin-left:6px;">${esc(b.mode || 'simulated')}</span>
+              <strong style="font-size:12.5px;">${esc(runTitle)}</strong>
+              <span class="pill ${b.mode === 'live' ? 'ok' : 'accent'}" style="margin-left:6px;">${esc(formatStatus(b.mode || 'simulated'))}</span>
             </div>
             <span class="muted" style="font-size:11.5px;">${workers.length} scouts · ${leadSum} leads</span>
           </div>
@@ -402,16 +471,16 @@
     if ($('discLeadCountBadge')) $('discLeadCountBadge').textContent = String(state.discoveredLeads.length);
 
     if (select) {
-      const opts = [`<option value="">Choose a lead from Discovery (${state.discoveredLeads.length})…</option>`];
+      const opts = [`<option value="">Choose an artist from Discovery (${state.discoveredLeads.length})…</option>`];
       state.discoveredLeads.forEach((lead, idx) => {
-        opts.push(`<option value="${idx}">${esc(lead.stage_name || lead.lead_id)} (${esc(lead.attribution_status || 'unverified')})</option>`);
+        opts.push(`<option value="${idx}">${esc(lead.stage_name || 'Unnamed Artist')} (${esc(formatStatus(lead.attribution_status || 'unverified'))})</option>`);
       });
       select.innerHTML = opts.join('');
     }
 
     if (!list) return;
     if (!state.discoveredLeads.length) {
-      list.innerHTML = `<div class="muted" style="font-size:12.5px;">No discovered leads stored yet. Run a Discovery batch or Phase 1 to populate this queue.</div>`;
+      list.innerHTML = `<div class="muted" style="font-size:12.5px;">No discovered artists yet. Run Discovery above to fill this list.</div>`;
       return;
     }
 
@@ -422,8 +491,8 @@
         <div class="lead-row">
           <div class="lead-row-top">
             <div>
-              <strong style="font-size:13.5px;">${esc(lead.stage_name || lead.lead_id)}</strong>
-              <span class="pill ${lead.attribution_status === 'verified' ? 'ok' : ''}" style="margin-left:6px;">${esc(lead.attribution_status || 'lead')}</span>
+              <strong style="font-size:13.5px;">${esc(lead.stage_name || 'Unnamed Artist')}</strong>
+              <span class="pill ${lead.attribution_status === 'verified' ? 'ok' : ''}" style="margin-left:6px;">${esc(formatStatus(lead.attribution_status || 'lead'))}</span>
               ${firstSeed.source_channel ? `<span class="pill" style="margin-left:4px;">${esc(formatLabel(firstSeed.source_channel))}</span>` : ''}
             </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
@@ -538,10 +607,10 @@
 
     $('discDispatchBtn').addEventListener('click', async () => {
       if (!state.selectedSourceIds.size) {
-        setBanner('Select at least one source from the Discovery Source Registry first.', 'error');
+        setBanner('Pick at least one source first.', 'error');
         return;
       }
-      setBanner('Dispatching discovery agents…', 'info');
+      setBanner('Sending discovery scouts…', 'info');
       $('discDispatchBtn').disabled = true;
       try {
         const res = await fetch('/api/discovery/dispatch', {
@@ -558,7 +627,7 @@
         });
         const payload = await res.json();
         if (!res.ok) throw new Error(payload.error || 'Discovery dispatch failed');
-        const msg = `Dispatched ${payload.agent_count} scout(s) in ${payload.mode} mode (${payload.batch_id}).`;
+        const msg = `Sent ${payload.agent_count} scout(s) in ${formatStatus(payload.mode)} mode.`;
         setBanner(msg, 'info');
         syncDiscoveryBatchLinks(payload.batch_id, msg);
         await refreshDiscoveryData();
@@ -591,7 +660,7 @@
         .map(
           (m, idx) => `
           <button type="button" class="moment-chip ${m.label === label ? 'active' : ''}" data-midx="${idx}">
-            ▶ ${esc(m.timestamp)} · ${esc(m.dimension || 'moment')}
+            ▶ ${esc(m.timestamp)} · ${esc(formatLabel(m.dimension || 'moment'))}
           </button>`
         )
         .join('');
@@ -660,7 +729,7 @@
                 data-label="${esc(lead.stage_name + ' @ ' + obs.timestamp)}"
                 data-title="${esc(clip.title || clip.source_url)}"
                 data-note="${esc(obs.musical_choice)}">
-                ▶ @ ${esc(obs.timestamp)} · ${esc(obs.dimension)}
+                ▶ @ ${esc(obs.timestamp)} · ${esc(formatLabel(obs.dimension))}
               </button>
               <a href="${esc(obs.play_url)}" target="_blank" rel="noopener noreferrer" style="font-size:11.5px;">YouTube ↗</a>
             </div>
@@ -672,7 +741,7 @@
           <div class="card" style="padding:12px;">
             <div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">
               <strong style="font-size:13px;">${esc(clip.title || clip.source_url)}</strong>
-              <span class="pill">${esc(clip.recording_context)}</span>
+              <span class="pill">${esc(formatLabel(clip.recording_context))}</span>
             </div>
             <div class="muted" style="font-size:12px; margin-top:2px;">${esc(clip.recording_context_notes || '')}</div>
             ${obsHtml}
@@ -739,7 +808,7 @@
     $('activeBriefHeading').textContent = briefPrompt ? `“${briefPrompt}”` : 'Active Scouting Run';
 
     const modeBadge = $('runModeBadge');
-    modeBadge.textContent = run.mode === 'live' ? 'LIVE MANAGED AGENTS' : 'VERIFIED YOUTUBE DEMO';
+    modeBadge.textContent = run.mode === 'live' ? 'Live Scouts' : 'YouTube Demo';
     modeBadge.className = 'pill ' + (run.mode === 'live' ? 'ok' : 'accent');
 
     const leads = run.artist_leads || [];
@@ -771,7 +840,7 @@
       .map((item) => {
         const lead = leads.find((l) => l.stage_name === item.stage_name) || { lead_id: item.lead_id || '' };
         const badges = [];
-        badges.push(`<span class="pill ${item.recording_context === 'live' ? 'ok' : ''}">${esc(item.recording_context)}</span>`);
+        badges.push(`<span class="pill ${item.recording_context === 'live' ? 'ok' : ''}">${esc(formatLabel(item.recording_context))}</span>`);
         badges.push(
           item.single_clip_flag
             ? `<span class="pill warn">⚠ 1 Clip Only</span>`
@@ -868,12 +937,12 @@
         (step) => `
         <div class="output-card">
           <div class="output-card-head">
-            <span>${esc(step.stage.replace(/_/g, ' ').toUpperCase())}</span>
+            <span>${esc(formatLabel(step.stage))}</span>
             <span>${esc(step.duration_ms)} ms</span>
           </div>
-          <div class="mono muted" style="font-size:11px;">${esc(step.actor)}</div>
+          <div class="muted" style="font-size:11.5px; font-weight:600;">${esc(formatAgentName(step.actor))}</div>
           <div style="margin-top:6px;">${esc(step.summary)}</div>
-          <div class="mono muted" style="font-size:11px; margin-top:4px;">interaction_id: ${esc(step.interaction_id || 'n/a')}</div>
+          <div class="muted" style="font-size:11px; margin-top:4px;">Run Reference: ${esc(step.interaction_id || 'Local Demo')}</div>
         </div>`
       )
       .join('');
@@ -975,32 +1044,37 @@
     if (!sorted.length) {
       container.innerHTML = `
         <div class="card artist-card">
-          <div class="muted" style="font-size:13px;">No Screening Deck packets yet. Run Screening from <a href="/investigate">Investigate</a> or <a href="/screen">Screening</a> to surface elevated artists here.</div>
+          <div class="muted" style="font-size:13px;">No screened artists yet. Run Screening from <a href="/investigate">Investigate</a> or <a href="/screen">Screening</a> to see elevated artists here.</div>
         </div>`;
       return;
     }
     container.innerHTML = sorted.map((pkt, idx) => {
       const ds = pkt.dossier_snapshot || {};
       const idObj = ds.identity_and_contact || {};
-      const stageName = pkt.stage_name || idObj.stage_name || pkt.lead_id || 'Unnamed Artist';
+      const stageName = pkt.stage_name || idObj.stage_name || 'Unnamed Artist';
       const leadId = pkt.lead_id || ds.lead_id || '';
       const judge = pkt.judge_decision || {};
       const human = pkt.human_review || null;
       const verdict = String((human && human.human_verdict) || judge.verdict || 'WATCH').toUpperCase();
       const verdictCls = verdict === 'ELEVATE' ? 'ok' : (verdict === 'PASS' ? 'warn' : 'accent');
       const score = judge.total_score != null ? `${Number(judge.total_score).toFixed(1)} / 10` : '—';
-      const rationale = (human && human.reason) || judge.rationale || judge.summary || 'Screened candidate packet.';
+      const rationale = (human && human.reason) || judge.rationale || judge.summary || 'Screened candidate.';
       const media = (ds.source_and_media_queue && ds.source_and_media_queue.media_links) || [];
       const firstUrl = (media[0] && (typeof media[0] === 'string' ? media[0] : media[0].url)) || (ds.source_and_media_queue && ds.source_and_media_queue.seed_source_url) || '';
       const ytId = extractYtIdFromUrl(firstUrl);
       const isFocused = Boolean(focusLeadId && leadId === focusLeadId);
+      const city = idObj.home_city || '';
+      const srcChannel = (ds.source_and_media_queue && ds.source_and_media_queue.source_channel)
+        ? formatLabel(ds.source_and_media_queue.source_channel)
+        : '';
+      const subline = [city, srcChannel].filter(Boolean).join(' · ') || 'Screened Candidate';
       return `
         <article class="card artist-card" data-lead-id="${esc(leadId)}" style="${isFocused ? 'border-color: var(--accent); box-shadow: 0 0 0 2px rgba(217,119,6,0.22);' : ''}">
           <div class="artist-card-top">
             <div>
               <h3 class="artist-name">${esc(stageName)}</h3>
               <div class="badges">
-                <span class="pill ${verdictCls}">${esc(verdict)}</span>
+                <span class="pill ${verdictCls}">${esc(formatStatus(verdict))}</span>
                 <span class="pill">${esc(score)}</span>
                 ${human ? '<span class="pill ok">Human Verified</span>' : '<span class="pill">Judge Verdict</span>'}
               </div>
@@ -1012,7 +1086,7 @@
           </div>
           <p class="artist-fit">${esc(rationale)}</p>
           <div class="artist-footer">
-            <div class="artist-next mono">lead_id: ${esc(leadId || '—')}</div>
+            <div class="artist-next">${esc(subline)}</div>
             <button type="button" class="btn btn-primary screened-producer-btn" data-sidx="${idx}">Draft Callback (Phase 4) →</button>
           </div>
         </article>`;
@@ -1026,7 +1100,7 @@
           playBtn.dataset.url,
           `${playBtn.dataset.name} · Screened Clip`,
           playBtn.dataset.name,
-          'Loaded from Stage 3 Screening Deck packet.',
+          'Loaded from Stage 3 Screening.',
           true,
           []
         );
@@ -1053,7 +1127,7 @@
             playBtn.dataset.url,
             `${playBtn.dataset.name} · Screened Clip`,
             playBtn.dataset.name,
-            'Loaded from Stage 3 Screening Deck packet.',
+            'Loaded from Stage 3 Screening.',
             false,
             []
           );
@@ -1111,7 +1185,7 @@
   function resetPhaseOutputPanel() {
     $('phaseRunMeta').textContent = 'Not run yet';
     $('phaseChecks').innerHTML = '';
-    $('phaseOutputCards').innerHTML = '<div class="muted" style="font-size:12.5px;">Run this phase to inspect agent outputs, checks, and next-stage handoff.</div>';
+    $('phaseOutputCards').innerHTML = '<div class="muted" style="font-size:12.5px;">Run this phase to view scout outputs, checks, and the next handoff.</div>';
     $('phaseRawJson').textContent = '{}';
     const batchLinks = $('phaseBatchLinks');
     if (batchLinks) {
@@ -1170,7 +1244,10 @@
   }
 
   function renderPhaseResult(result) {
-    $('phaseRunMeta').textContent = `${result.mode.toUpperCase()} · ${result.duration_ms} ms · ${result.phase_run_id}`;
+    const modeLabel = formatStatus(result.mode || 'test');
+    const statusLabel = result.passed ? 'Passed' : 'Needs Review';
+    const durLabel = result.duration_ms >= 1000 ? `${(result.duration_ms / 1000).toFixed(1)}s` : `${result.duration_ms} ms`;
+    $('phaseRunMeta').textContent = `${modeLabel} · ${statusLabel} · ${durLabel}`;
     const batchLinks = $('phaseBatchLinks');
     if (batchLinks) {
       const batchId = result.output && result.output.batch_id;
@@ -1235,8 +1312,8 @@
         (c) => `
         <div class="output-card">
           <div class="output-card-head">
-            <span>${esc(c.agent)}</span>
-            <span class="pill ${c.status === 'failed' ? 'warn' : 'ok'}">${esc(c.status)}</span>
+            <span>${esc(formatAgentName(c.agent))}</span>
+            <span class="pill ${c.status === 'failed' ? 'warn' : 'ok'}">${esc(formatStatus(c.status))}</span>
           </div>
           <div>${esc(c.summary)}</div>
         </div>`
@@ -1249,7 +1326,7 @@
     $('checkpointCountBadge').textContent = `${state.phaseRuns.length} saved`;
     const list = $('checkpointList');
     if (state.phaseRuns.length === 0) {
-      list.innerHTML = `<div class="muted" style="font-size:12px;">Run any phase to save a replayable checkpoint here.</div>`;
+      list.innerHTML = `<div class="muted" style="font-size:12px;">Run any phase to save a checkpoint here.</div>`;
       return;
     }
     list.innerHTML = state.phaseRuns
@@ -1258,9 +1335,9 @@
         (r, idx) => `
         <div class="eval-row">
           <div>
-            <span class="pill ${r.passed ? 'ok' : 'warn'}">${r.passed ? 'PASS' : 'CHECK'}</span>
+            <span class="pill ${r.passed ? 'ok' : 'warn'}">${r.passed ? 'Passed' : 'Review'}</span>
             <strong style="margin-left:6px;">Phase ${esc(r.phase_code)} · ${esc(r.phase_name)}</strong>
-            <span class="mono muted" style="margin-left:6px;">[${esc(r.mode)}] ${esc(r.duration_ms)}ms</span>
+            <span class="muted" style="margin-left:6px;">${esc(formatStatus(r.mode))} · ${esc(r.duration_ms)} ms</span>
           </div>
           <button type="button" class="btn load-ckpt-btn" data-cidx="${idx}">Inspect</button>
         </div>`
@@ -1286,7 +1363,9 @@
 
     const wantLive = state.pipelineMode === 'live';
     const keyOverride = $('apiKeyInput').value.trim();
-    setBanner(`Running Phase ${phaseId} (${wantLive ? 'LIVE' : 'TEST'})…`, 'info');
+    const phaseObj = state.phases.find((p) => p.id === phaseId);
+    const phaseLabel = phaseObj ? `Phase ${phaseObj.code} — ${phaseObj.name}` : formatLabel(phaseId);
+    setBanner(`Running ${phaseLabel} (${wantLive ? 'Live' : 'Test'})…`, 'info');
     $('runThisPhaseBtn').disabled = true;
     $('runNextPhaseBtn').disabled = true;
     try {
@@ -1364,8 +1443,7 @@
       .map(
         (a) => `
         <button type="button" class="roster-item ${state.activeAgent && state.activeAgent.package === a.package ? 'active' : ''}" data-pkg="${esc(a.package)}">
-          <span>${esc(a.package)}</span>
-          <span class="mono" style="font-size:10px; opacity:0.7;">${esc((a.model || '').replace('gemini-4-', ''))}</span>
+          <span>${esc(formatAgentName(a.package))}</span>
         </button>`
       )
       .join('');
@@ -1381,12 +1459,12 @@
     const changed = !state.activeAgent || state.activeAgent.package !== agent.package;
     state.activeAgent = agent;
     renderAgentRoster();
-    $('labAgentName').textContent = agent.package;
-    $('labAgentDeployedId').textContent = agent.deployed_id;
-    $('labAgentModel').textContent = agent.model || 'default';
+    $('labAgentName').textContent = formatAgentName(agent.package);
+    $('labAgentDeployedId').textContent = 'Ready for isolated testing';
+    $('labAgentModel').textContent = agent.model ? formatLabel(agent.model.replace(/^gemini-4-/, 'Gemini ')) : 'Standard';
     const hintEl = $('labInputHint');
     if (hintEl) {
-      hintEl.textContent = agent.input_hint || 'JSON object or array for batch fan-out';
+      hintEl.textContent = agent.input_hint || 'JSON object or list of inputs';
     }
     const defaultPayload = agent.default_input || {
       lead_id: 'lead_luna_jinna',
@@ -1400,7 +1478,7 @@
       $('labChecksRow').innerHTML = '';
       $('labOutputRaw').textContent = '{}';
       $('labOutputFormatted').innerHTML =
-        '<div class="muted">Run an agent to inspect its response and contract checks.</div>';
+        '<div class="muted">Run an agent to view its output and rule checks.</div>';
     }
     renderEvalHistory();
   }
@@ -1418,7 +1496,7 @@
       ? state.evals.filter((e) => e.agent_id === state.activeAgent.package || e.agent_id === state.activeAgent.deployed_id)
       : state.evals;
     if (filtered.length === 0) {
-      list.innerHTML = `<div class="muted" style="font-size:12px;">No saved evals for this agent yet.</div>`;
+      list.innerHTML = `<div class="muted" style="font-size:12px;">No saved review notes for this agent yet.</div>`;
       return;
     }
     list.innerHTML = filtered
@@ -1427,11 +1505,11 @@
         (ev) => `
         <div class="eval-row">
           <div>
-            <span class="pill ${ev.verdict === 'pass' ? 'ok' : 'warn'}">${esc((ev.verdict || '').toUpperCase())}</span>
-            <strong style="margin-left:6px;">${esc(ev.agent_id)}</strong>
+            <span class="pill ${ev.verdict === 'pass' ? 'ok' : 'warn'}">${esc(formatStatus(ev.verdict))}</span>
+            <strong style="margin-left:6px;">${esc(formatAgentName(ev.agent_id))}</strong>
             <span class="muted" style="margin-left:6px;">${esc(ev.note || '')}</span>
           </div>
-          <span class="mono muted" style="font-size:11px;">${esc((ev.created_at || '').slice(11, 19))}</span>
+          <span class="muted" style="font-size:11px;">${esc((ev.created_at || '').slice(11, 19))}</span>
         </div>`
       )
       .join('');
@@ -1458,7 +1536,7 @@
     const keyOverride = $('apiKeyInput').value.trim();
 
     $('labRunBtn').disabled = true;
-    setBanner(`Running ${state.activeAgent.deployed_id} (${dryRun ? 'Dry Run' : 'Live'})…`, 'info');
+    setBanner(`Running ${formatAgentName(state.activeAgent.package)} (${dryRun ? 'Dry Run' : 'Live'})…`, 'info');
     const t0 = performance.now();
     try {
       const res = await fetch('/api/fleet/run', {
@@ -1501,10 +1579,10 @@
 
       $('labOutputFormatted').innerHTML = `
         <div class="output-card-head">
-          <span>${esc(state.activeAgent.deployed_id)}</span>
-          <span class="pill ok">${esc(data.mode || (dryRun ? 'dry_run' : 'live'))}</span>
+          <span>${esc(formatAgentName(state.activeAgent.package))}</span>
+          <span class="pill ok">${esc(formatStatus(data.mode || (dryRun ? 'dry_run' : 'live')))}</span>
         </div>
-        <div><strong>Workers:</strong> ${esc((data.results || []).length)} · <strong>Fleet ID:</strong> <span class="mono">${esc(data.fleet_run_id || 'n/a')}</span></div>
+        <div><strong>Scouts Run:</strong> ${esc((data.results || []).length)}</div>
         <div class="muted" style="margin-top:6px;">${esc(typeof worker.output === 'string' ? worker.output.slice(0, 320) : JSON.stringify(worker).slice(0, 320))}</div>
       `;
     } catch (err) {
@@ -1548,7 +1626,7 @@
     const data = await res.json();
     const opts = [`<option value="">Saved runs (${data.runs.length})…</option>`];
     data.runs.forEach((r) => {
-      opts.push(`<option value="${esc(r.run_id)}">[${esc(r.mode)}] ${esc(r.brief_prompt.slice(0, 46))}…</option>`);
+      opts.push(`<option value="${esc(r.run_id)}">[${esc(formatStatus(r.mode))}] ${esc(r.brief_prompt.slice(0, 46))}…</option>`);
     });
     $('historySelect').innerHTML = opts.join('');
   }
@@ -1569,7 +1647,7 @@
     closeDrawers();
     setBanner(
       wantLive
-        ? 'Running Discovery Scout → Gemini 4 Hydrogen clip evaluation → Synthesis Scout… (20–50s)'
+        ? 'Running Discovery Scout → Vocal Clip Review → Shortlist Builder… (20–50s)'
         : 'Loading verified public YouTube performances & shortlist…',
       'info'
     );
