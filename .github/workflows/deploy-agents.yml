@@ -54,6 +54,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SIMON_AGENT_DB_TOKEN: ${{ secrets.SIMON_AGENT_DB_TOKEN }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           SIMON_AGENT_MODEL_OVERRIDE: ${{ vars.SIMON_AGENT_MODEL_OVERRIDE }}
         run: |
           set -euo pipefail
@@ -83,6 +84,10 @@ jobs:
             if [ -n "${SIMON_AGENT_DB_TOKEN:-}" ]; then
               echo "Syncing simon-db-token credential on /v1beta/credentials..."
               python3 -c 'import json, os; from simon.deploy import sync_env_credential; print(json.dumps(sync_env_credential("simon-db-token", os.environ["SIMON_AGENT_DB_TOKEN"], ["simon-staging-139550420825.us-east1.run.app"])))'
+            fi
+            if [ -n "${YOUTUBE_API_KEY:-}" ]; then
+              echo "Syncing youtube-api-key credential on /v1beta/credentials..."
+              python3 -c 'import json, os; from simon.deploy import sync_env_credential; print(json.dumps(sync_env_credential("youtube-api-key", os.environ["YOUTUBE_API_KEY"], ["www.googleapis.com"])))'
             fi
             echo "Deploying Managed Agents live to /v1beta/agents (prefix=$PREFIX)..."
           fi

@@ -26,10 +26,14 @@
       "SIMON_DB_URL": "https://simon-staging-139550420825.us-east1.run.app",
       "SIMON_AGENT_DB_TOKEN": {
         "credential": "simon-db-token"
+      },
+      "YOUTUBE_API_KEY": {
+        "credential": "youtube-api-key"
       }
     }
   },
   "shared_skills": [
-    "simon-db"
+    "simon-db",
+    "youtube"
   ]
 }
