@@ -5,7 +5,7 @@
   "agent_config": {
     "type": "antigravity",
     "model": "gemini-4-hydrogen",
-    "max_total_tokens": "64000"
+    "max_total_tokens": "192000"
   },
   "system_instruction_file": "SYSTEM.md",
   "tools": [
