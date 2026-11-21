@@ -1,0 +1,242 @@
+{
+  "dataset_version": "0.1.0",
+  "description": "Baseline eval cases for Simon's existing Discovery Scout (simon-discovery-scout + YouTubeConnector + Second-Take Loop).",
+  "attribution_cases": [
+    {
+      "id": "attr_01_curated_session_verified",
+      "title": "Olivia Dean - Wish I Didn't Miss You (Angie Stone) | Mahogany Session",
+      "channel": "Mahogany",
+      "expected_stage_name": "Olivia Dean",
+      "expected_status": "verified",
+      "notes": "Standard Artist - Song format on curated live session channel."
+    },
+    {
+      "id": "attr_02_third_party_venue_uncertain",
+      "title": "Acantha Lang at Sofar Sounds NYC",
+      "channel": "Hiddentravel",
+      "expected_stage_name": "Acantha Lang",
+      "expected_status": "uncertain",
+      "notes": "Audience capture uploaded by third-party channel."
+    },
+    {
+      "id": "attr_03_featured_collab_uncertain",
+      "title": "Amber Run - I Found ft. London Contemporary Voices | Mahogany Session",
+      "channel": "Mahogany",
+      "expected_stage_name": "Amber Run",
+      "expected_status": "uncertain",
+      "notes": "Multiple vocalists credited with ft.; must flag uncertain."
+    },
+    {
+      "id": "attr_04_artist_own_channel_verified",
+      "title": "Gravity (Acoustic Live Cover)",
+      "channel": "Maya Vance Official",
+      "expected_stage_name": "Maya Vance",
+      "expected_status": "verified",
+      "notes": "Artist self-upload without dash delimiter; strip 'Official'."
+    },
+    {
+      "id": "attr_05_performs_pattern_verified",
+      "title": "Samara Joy performs Misty (Live in Studio)",
+      "channel": "NPR Music",
+      "expected_stage_name": "Samara Joy",
+      "expected_status": "verified",
+      "notes": "'Artist performs Song' credit on session channel."
+    },
+    {
+      "id": "attr_06_unattributed_open_mic_uncertain",
+      "title": "Friday Night Open Mic Highlights #14",
+      "channel": "Brooklyn Open Mic Collective",
+      "expected_stage_name": "Brooklyn Open Mic Collective",
+      "expected_status": "uncertain",
+      "notes": "Venue/open-mic channel with no solo performer credit."
+    },
+    {
+      "id": "attr_07_ampersand_duo_uncertain",
+      "title": "Nora & Devon - Landslide (Acoustic Live)",
+      "channel": "Sofar Sounds",
+      "expected_stage_name": "Nora & Devon",
+      "expected_status": "uncertain",
+      "notes": "Duo credited with '&' should flag uncertain for solo vocalist check."
+    },
+    {
+      "id": "attr_08_artist_topic_channel_verified",
+      "title": "River (Live Acoustic)",
+      "channel": "Leon Bridges - Topic",
+      "expected_stage_name": "Leon Bridges",
+      "expected_status": "verified",
+      "notes": "YouTube auto-generated Topic channel; strip '- Topic'."
+    },
+    {
+      "id": "attr_09_title_with_colon_session_uncertain",
+      "title": "Tiny Desk Contest: Song by Clara Reyes",
+      "channel": "NPR Music",
+      "expected_stage_name": "Clara Reyes",
+      "expected_status": "uncertain",
+      "notes": "Non-standard 'by Artist' credit on session channel."
+    },
+    {
+      "id": "attr_10_empty_metadata_uncertain",
+      "title": "",
+      "channel": "",
+      "expected_stage_name": "Unknown Vocalist",
+      "expected_status": "uncertain",
+      "notes": "Missing title and channel must degrade cleanly to uncertain."
+    }
+  ],
+  "url_hygiene_cases": [
+    {
+      "id": "url_01_standard_watch",
+      "input_url": "https://www.youtube.com/watch?v=3-K26i1go0s",
+      "expected_valid": true,
+      "expected_canonical": "https://www.youtube.com/watch?v=3-K26i1go0s"
+    },
+    {
+      "id": "url_02_short_youtu_be",
+      "input_url": "https://youtu.be/3-K26i1go0s?t=45",
+      "expected_valid": true,
+      "expected_canonical": "https://www.youtube.com/watch?v=3-K26i1go0s"
+    },
+    {
+      "id": "url_03_shorts_url",
+      "input_url": "https://www.youtube.com/shorts/RXwE1G7_U9M",
+      "expected_valid": true,
+      "expected_canonical": "https://www.youtube.com/watch?v=RXwE1G7_U9M"
+    },
+    {
+      "id": "url_04_mobile_watch",
+      "input_url": "https://m.youtube.com/watch?v=Bb07cO7lX_0&feature=share",
+      "expected_valid": true,
+      "expected_canonical": "https://www.youtube.com/watch?v=Bb07cO7lX_0"
+    },
+    {
+      "id": "url_05_soundcloud_rejected",
+      "input_url": "https://soundcloud.com/emerging-singer/live-acoustic-demo",
+      "expected_valid": false,
+      "expected_canonical": null
+    },
+    {
+      "id": "url_06_malformed_short_id_rejected",
+      "input_url": "https://www.youtube.com/watch?v=short123",
+      "expected_valid": false,
+      "expected_canonical": null
+    },
+    {
+      "id": "url_07_spotify_rejected",
+      "input_url": "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT",
+      "expected_valid": false,
+      "expected_canonical": null
+    }
+  ],
+  "grouping_cases": [
+    {
+      "id": "grp_01_dedupe_variants_and_the_prefix",
+      "videos": [
+        {
+          "url": "https://www.youtube.com/watch?v=3-K26i1go0s",
+          "title": "The Lumineers - Ophelia | Mahogany Session",
+          "channel": "Mahogany"
+        },
+        {
+          "url": "https://youtu.be/3-K26i1go0s?t=30",
+          "title": "Lumineers - Ophelia (Live)",
+          "channel": "Mahogany"
+        },
+        {
+          "url": "https://www.youtube.com/watch?v=BcQnHzrc24Y",
+          "title": "Lumineers - Stubborn Love | Sofar Sounds",
+          "channel": "Sofar Sounds"
+        }
+      ],
+      "expected_lead_count": 1,
+      "expected_unique_links": 2,
+      "expected_status": "verified"
+    },
+    {
+      "id": "grp_02_uncertain_taints_mixed_lead",
+      "videos": [
+        {
+          "url": "https://www.youtube.com/watch?v=kVUq2wgHW0Q",
+          "title": "Acantha Lang - Ride This Train | Sofar London",
+          "channel": "Sofar Sounds"
+        },
+        {
+          "url": "https://www.youtube.com/watch?v=XIIYcEz1u28",
+          "title": "Acantha Lang at Sofar Sounds NYC",
+          "channel": "Hiddentravel"
+        }
+      ],
+      "expected_lead_count": 1,
+      "expected_unique_links": 2,
+      "expected_status": "uncertain"
+    },
+    {
+      "id": "grp_03_drop_invalid_and_soundcloud_urls",
+      "videos": [
+        {
+          "url": "https://soundcloud.com/fake/track",
+          "title": "Bad Source - Track",
+          "channel": "SoundCloud"
+        },
+        {
+          "url": "https://www.youtube.com/watch?v=RXwE1G7_U9M",
+          "title": "YEBBA - My Mind | Sofar NYC",
+          "channel": "Sofar Sounds"
+        }
+      ],
+      "expected_lead_count": 1,
+      "expected_unique_links": 1,
+      "expected_status": "verified"
+    }
+  ],
+  "pipeline_scenarios": [
+    {
+      "id": "pipe_01_adversarial_discovery_hygiene",
+      "brief": "Find singers who reinterpret familiar songs through distinctive phrasing or stripped-back live arrangements.",
+      "max_leads": 3,
+      "max_second_takes": 2,
+      "agent_output": {
+        "search_queries": [
+          "Mahogany Session soul cover live phrasing",
+          "Sofar Sounds live acoustic vocal NYC"
+        ],
+        "candidate_videos": [
+          {
+            "stage_name": "Olivia Dean",
+            "url": "https://youtu.be/3-K26i1go0s",
+            "title": "Olivia Dean - Wish I Didn't Miss You | Mahogany Session",
+            "channel": "Mahogany",
+            "attribution_status": "verified",
+            "attribution_notes": "Official Mahogany session credit."
+          },
+          {
+            "stage_name": "Hallucinated Singer",
+            "url": "https://www.youtube.com/watch?v=DEAD0000000",
+            "title": "Hallucinated Singer - Fake Video",
+            "channel": "FakeChannel",
+            "attribution_status": "verified",
+            "attribution_notes": "Dead URL that oEmbed must drop."
+          },
+          {
+            "stage_name": "SoundCloud Singer",
+            "url": "https://soundcloud.com/artist/live-demo",
+            "title": "SoundCloud Demo",
+            "channel": "SoundCloud",
+            "attribution_status": "verified",
+            "attribution_notes": "Disallowed platform that oEmbed/URL hygiene must drop."
+          }
+        ],
+        "discovery_summary": "Targeted stripped-back live vocal sessions."
+      },
+      "expected": {
+        "lead_count": 3,
+        "must_exclude_urls": [
+          "https://www.youtube.com/watch?v=DEAD0000000",
+          "https://soundcloud.com/artist/live-demo"
+        ],
+        "expected_uncertain_artists": ["Acantha Lang"],
+        "expected_multi_clip_artists": ["Olivia Dean"],
+        "expected_single_clip_artists": ["YEBBA"]
+      }
+    }
+  ]
+}
