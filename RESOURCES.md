@@ -9,7 +9,7 @@
 
 | Environment | URL | Access | Backend & Project | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| **Staging (Cloud Run)** | `https://simon-staging-139550420825.us-east1.run.app` | **Public** (no auth required) | Firestore `(default)` in GCP `gemini4nyc26nyc-2203` (`us-east1`) | Serves the Web Studio UI, `/api/agents`, `/api/fleet/run`, `/api/agent-runs`, and `/api/db/<collection>`. `GEMINI_API_KEY` is mounted from Secret Manager. Deployed from PR #4 (`feat/cloudrun-firestore-cicd`). |
+| **Staging (Cloud Run)** | `https://simon-staging-139550420825.us-east1.run.app` | **Public** (no auth required) | Firestore `(default)` in GCP `gemini4nyc26nyc-2203` (`us-east1`) | Serves the Web Studio & Control Plane UI, `/api/agents`, `/api/fleet/run`, `/api/sources`, `/api/sources/seed`, `/api/agent-runs`, and `/api/db/<collection>`. `GEMINI_API_KEY` is mounted from Secret Manager. Merged in PR #4 (`b2057e8`). |
 
 ### Quick Staging Smoke Tests (Browser or Terminal)
 - **Web UI**: Open `https://simon-staging-139550420825.us-east1.run.app` in any browser.
@@ -23,7 +23,7 @@
   ```sh
   curl -sS "$BASE_URL/api/agents" | jq '.agents[].deployed_id'
   ```
-- **Firestore DB Gateway (25 seeded NYC sources & agent traces)**:
+- **Firestore DB Gateway (36 seeded curated music sources & agent traces)**:
   ```sh
   curl -sS "$BASE_URL/api/db/source_registry" | jq '{collection, count}'
   curl -sS "$BASE_URL/api/agent-runs" | jq '{count}'
@@ -73,6 +73,7 @@ Create a `uv`-managed Python 3.12 virtual environment (`.venv/` is gitignored):
 ~/.local/bin/uv venv --python 3.12 .venv
 ~/.local/bin/uv pip install --python .venv/bin/python -U \
   google-genai \
+  google-cloud-firestore \
   dspy \
   pydantic \
   pyyaml \
@@ -88,7 +89,7 @@ Create a `uv`-managed Python 3.12 virtual environment (`.venv/` is gitignored):
 
 | Package Group | Packages | Why We Need It |
 | :--- | :--- | :--- |
-| **Managed Agents & Decisions** | `google-genai`, `dspy`, `pydantic`, `pyyaml` | `v1beta` `client.decisions.create` (`gemini-decision-1`), `client.agents`, `interactions` + DSPy rubric compilation & strict schemas |
+| **Managed Agents, Decisions & Storage** | `google-genai`, `google-cloud-firestore`, `dspy`, `pydantic`, `pyyaml` | `v1beta` `client.decisions.create` (`gemini-decision-1`), `client.agents`, `interactions`, Cloud Run Firestore backend (`simon/firestore_store.py`), DSPy rubric compilation & strict schemas |
 | **Audio Forensics** | `soundfile`, `numpy`, `scipy`, `mutagen` | Crest-factor, clipping, silence/layering heuristics, and duration/MIME validation locally & inside sandboxes |
 | **Dev, Test & Local Agent** | `pytest`, `pytest-asyncio`, `ruff`, `google-antigravity` | Fast unit/contract suites, linting, and optional local interactive producer review harness |
 
@@ -112,7 +113,10 @@ export SIMON_SYNTHESIS_AGENT="antigravity-preview-09-2026"   # or deployed simon
 export GEMINI_AUDIO_MODEL="gemini-4-hydrogen"
 export GEMINI_PRODUCER_MODEL="gemini-4-carbon"
 
-# Optional: GCP project ID when using gcloud / GCS mounts
+# Optional: Persistence backend ("sqlite" default locally; "firestore" on Cloud Run)
+export SIMON_STORE_BACKEND="firestore"
+
+# Optional: GCP project ID when using gcloud / GCS mounts / Firestore
 export GOOGLE_CLOUD_PROJECT="your-gcp-project-id"
 
 # Optional (stored in GCP Secret Manager + GitHub Actions secrets; synced to /v1beta/credentials as `youtube-api-key`)
