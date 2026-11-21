@@ -6,9 +6,14 @@ This section holds **how-to engineering knowledge** for building, testing, mount
 
 ## Playbooks
 - **[playbook.md](./playbook.md)** — Complete architecture & API reference:
-  - `/v1beta/agents` persistent blueprints (`gemini-4-hydrogen` vs `gemini-4-carbon` vs `deep-research-preview-04-2026`)
+  - `/v1beta/agents` persistent blueprints (`gemini-3.8-flash` / `gemini-4-argon` / `deep-research-preview-04-2026`)
   - "Agent as a Repo" (`base_environment.sources` mounting GitHub repos + inline `.agents/AGENTS.md` & `.agents/skills/`)
   - Shared sandbox state (`/v1beta/environments` + Files API) & epistemic critic independence
   - Zero-trust security (`network: "disabled"` for artist demos + `Credentials API` egress proxy)
   - `background=True` async execution (`store=True` requirement) & `gemini-api` CLI commands
   - Teammate namespacing (`SIMON_AGENT_PREFIX`) so parallel dev never collides
+- **[deployment-and-triggers.md](./deployment-and-triggers.md)** — Workforce packaging, 1-command deploy pipeline & trigger topologies:
+  - Job Package manifest (`agents/<job-name>/`: `agent.yaml` + `SYSTEM.md` + `skills/` + `dispatch`/`triggers`)
+  - Upstream API constraints (immutable blue/green SHA-8 vs recreate deploy since no in-place `agents.update`, locked `agent_config.model`, reserved ID prefixes)
+  - Native Cron Triggers (`/v1beta/triggers` / `client.triggers.create`) with persistent cross-run sandbox state
+  - Inbound HTTP Job Endpoints & External Webhooks (`POST /jobs/<job>`) vs Outbound Gemini Webhooks (`/v1beta/webhooks` Standard HMAC + per-call `webhook_config` RS256 JWKS) for zero-polling multi-agent DAG fan-in

@@ -501,19 +501,37 @@ def main() -> int:
         if target_branch == "main" and pull_unreachable and not pulled:
             pass
         else:
-            push_args = (
-                ["push", "origin", "main"]
-                if target_branch == "main"
-                else ["push", "-u", "origin", target_branch]
-            )
-            try:
-                push_proc = run_git(push_args, cwd=repo_root, env=env, timeout=20)
-                if push_proc.returncode == 0:
-                    pushed = True
-                else:
-                    errors.append(compact_err(f"git {' '.join(push_args)} failed", push_proc))
-            except subprocess.TimeoutExpired:
-                errors.append(f"git {' '.join(push_args)} timed out after 20s")
+            can_push = True
+            if target_branch == "main" and mode == "docs":
+                diff_main_proc = run_git(
+                    ["diff", "--name-only", "-z", "origin/main..HEAD"],
+                    cwd=repo_root,
+                    env=env,
+                    timeout=10,
+                )
+                if diff_main_proc.returncode == 0 and diff_main_proc.stdout:
+                    ahead_paths = [p for p in diff_main_proc.stdout.split("\0") if p]
+                    non_doc_ahead = [p for p in ahead_paths if not is_doc_or_knowledge_path(p)]
+                    if non_doc_ahead:
+                        can_push = False
+                        errors.append(
+                            "Skipped pushing HEAD:main in --docs-only mode because branch has "
+                            f"unmerged non-doc commits ({', '.join(non_doc_ahead[:3])})"
+                        )
+            if can_push:
+                push_args = (
+                    ["push", "origin", "HEAD:main"]
+                    if target_branch == "main"
+                    else ["push", "-u", "origin", target_branch]
+                )
+                try:
+                    push_proc = run_git(push_args, cwd=repo_root, env=env, timeout=20)
+                    if push_proc.returncode == 0:
+                        pushed = True
+                    else:
+                        errors.append(compact_err(f"git {' '.join(push_args)} failed", push_proc))
+                except subprocess.TimeoutExpired:
+                    errors.append(f"git {' '.join(push_args)} timed out after 20s")
 
     return emit(0)
 
