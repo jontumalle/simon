@@ -13,6 +13,13 @@ import os
 from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
+from .db_tools import (
+    ALLOWED_AGENT_COLLECTIONS,
+    get_agent_document,
+    list_agent_documents,
+    save_agent_document,
+    verify_agent_db_auth,
+)
 from .deploy import compile_agent_package, list_agent_packages
 from .fleet import dispatch_fleet
 from .scout import DEFAULT_TASTE_BRIEF, load_dotenv_if_present, run_scout
@@ -617,9 +624,93 @@ def dispatch_http_request(
     method: str,
     path: str,
     raw_body: bytes = b"",
+    headers: Optional[Dict[str, str]] = None,
 ) -> tuple[int, str, bytes]:
     """Pure HTTP routing dispatcher returning (status_code, content_type, response_bytes)."""
     parsed = urlparse(path)
+
+    # Permissioned, schema-validated agent DB gateway: /api/db/<collection>[/<doc_id>]
+    if parsed.path.startswith("/api/db/"):
+        authed, auth_err = verify_agent_db_auth(headers)
+        if not authed:
+            return (
+                HTTPStatus.UNAUTHORIZED,
+                "application/json; charset=utf-8",
+                json.dumps({"error": auth_err}).encode("utf-8"),
+            )
+        parts = [p for p in parsed.path[len("/api/db/"):].split("/") if p]
+        if not parts:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "Collection name required."}).encode("utf-8"),
+            )
+        collection = parts[0]
+        if collection not in ALLOWED_AGENT_COLLECTIONS:
+            return (
+                HTTPStatus.FORBIDDEN,
+                "application/json; charset=utf-8",
+                json.dumps(
+                    {
+                        "error": f"Collection '{collection}' is not permitted for agent access.",
+                        "allowed_collections": sorted(ALLOWED_AGENT_COLLECTIONS),
+                    }
+                ).encode("utf-8"),
+            )
+
+        if method == "GET":
+            if len(parts) == 2:
+                doc = get_agent_document(store, collection, parts[1])
+                if doc is None:
+                    return (
+                        HTTPStatus.NOT_FOUND,
+                        "application/json; charset=utf-8",
+                        json.dumps({"error": "Document not found."}).encode("utf-8"),
+                    )
+                return (
+                    HTTPStatus.OK,
+                    "application/json; charset=utf-8",
+                    json.dumps({"collection": collection, "doc_id": parts[1], "document": doc}, ensure_ascii=False).encode("utf-8"),
+                )
+            qs = parse_qs(parsed.query)
+            limit = int((qs.get("limit") or ["25"])[0])
+            docs = list_agent_documents(store, collection, limit=limit)
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps({"collection": collection, "count": len(docs), "documents": docs}, ensure_ascii=False).encode("utf-8"),
+            )
+
+        if method == "POST" and len(parts) == 1:
+            try:
+                payload = json.loads((raw_body or b"{}").decode("utf-8"))
+            except ValueError:
+                return (
+                    HTTPStatus.BAD_REQUEST,
+                    "application/json; charset=utf-8",
+                    json.dumps({"error": "Invalid JSON request body."}).encode("utf-8"),
+                )
+            qs = parse_qs(parsed.query)
+            doc_id = (qs.get("doc_id") or [None])[0]
+            try:
+                saved = save_agent_document(store, collection, payload, doc_id=doc_id)
+            except ValueError as exc:
+                return (
+                    HTTPStatus.UNPROCESSABLE_ENTITY,
+                    "application/json; charset=utf-8",
+                    json.dumps({"error": str(exc)}).encode("utf-8"),
+                )
+            return (
+                HTTPStatus.CREATED,
+                "application/json; charset=utf-8",
+                json.dumps(saved, ensure_ascii=False).encode("utf-8"),
+            )
+
+        return (
+            HTTPStatus.METHOD_NOT_ALLOWED,
+            "application/json; charset=utf-8",
+            json.dumps({"error": "Method not allowed on /api/db endpoint."}).encode("utf-8"),
+        )
 
     if method == "GET":
         if parsed.path == "/":
@@ -784,13 +875,17 @@ def create_handler(store: SimonStore):
             self.wfile.write(body)
 
         def do_GET(self) -> None:
-            status, content_type, body = dispatch_http_request(store, "GET", self.path)
+            status, content_type, body = dispatch_http_request(
+                store, "GET", self.path, headers=dict(self.headers.items())
+            )
             self._write(status, content_type, body)
 
         def do_POST(self) -> None:
             length = int(self.headers.get("Content-Length") or 0)
             raw_body = self.rfile.read(length) if length > 0 else b"{}"
-            status, content_type, body = dispatch_http_request(store, "POST", self.path, raw_body)
+            status, content_type, body = dispatch_http_request(
+                store, "POST", self.path, raw_body, headers=dict(self.headers.items())
+            )
             self._write(status, content_type, body)
 
     return SimonHTTPHandler
