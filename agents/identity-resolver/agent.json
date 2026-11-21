@@ -23,7 +23,10 @@
     "type": "remote",
     "env": {
       "SIMON_DOMAIN": "music",
-      "SIMON_DB_URL": "https://simon-staging-139550420825.us-east1.run.app"
+      "SIMON_DB_URL": "https://simon-staging-139550420825.us-east1.run.app",
+      "SIMON_AGENT_DB_TOKEN": {
+        "credential": "simon-db-token"
+      }
     }
   },
   "shared_skills": [

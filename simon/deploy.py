@@ -11,6 +11,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 AGENTS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/agents"
+CREDENTIALS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/credentials"
 DEFAULT_API_REVISION = "2026-05-20"
 MAX_INLINE_FILE_BYTES = 1_000_000
 MAX_INLINE_TOTAL_BYTES = 2_000_000
@@ -423,6 +424,62 @@ def deploy_compiled_agent(
         "status": "ok",
         "written_file": written_path,
         "remote": post_body,
+    }
+
+
+def sync_env_credential(
+    credential_id: str,
+    value: str,
+    trusted_domains: List[str],
+    api_key: Optional[str] = None,
+    dry_run: bool = False,
+    request_fn=_api_request,
+) -> Dict[str, Any]:
+    """Upsert an environment_variable credential on /v1beta/credentials (write-only secret)."""
+    if not credential_id.strip():
+        raise ValueError("credential_id must be non-empty.")
+    if not value:
+        raise ValueError("Credential value must be non-empty.")
+
+    payload = {
+        "id": credential_id.strip(),
+        "type": "environment_variable",
+        "injection_location": "header",
+        "trusted_domains": list(trusted_domains),
+        "value": value,
+    }
+    if dry_run:
+        return {
+            "credential_id": credential_id.strip(),
+            "trusted_domains": list(trusted_domains),
+            "action": "dry_run",
+            "status": "ok",
+        }
+
+    resolved_key = api_key or os.environ.get("GEMINI_API_KEY")
+    if not resolved_key:
+        raise ValueError("Set GEMINI_API_KEY before syncing credentials.")
+
+    cid = credential_id.strip()
+    status_get, _ = request_fn("GET", f"{CREDENTIALS_ENDPOINT}/{cid}", resolved_key)
+    action = "created"
+    if status_get == 200:
+        status_del, del_body = request_fn("DELETE", f"{CREDENTIALS_ENDPOINT}/{cid}", resolved_key)
+        if status_del not in (200, 204):
+            raise RuntimeError(f"Failed deleting existing credential '{cid}' (HTTP {status_del}): {del_body}")
+        action = "recreated"
+    elif status_get != 404:
+        raise RuntimeError(f"Unexpected HTTP {status_get} checking credential '{cid}'.")
+
+    status_post, post_body = request_fn("POST", CREDENTIALS_ENDPOINT, resolved_key, body=payload)
+    if status_post not in (200, 201):
+        raise RuntimeError(f"Failed creating credential '{cid}' (HTTP {status_post}): {post_body}")
+
+    return {
+        "credential_id": cid,
+        "trusted_domains": list(trusted_domains),
+        "action": action,
+        "status": "ok",
     }
 
 
