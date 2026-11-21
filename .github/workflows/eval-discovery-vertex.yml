@@ -1,0 +1,160 @@
+name: Discovery Scout Evals (Vertex AI)
+
+on:
+  pull_request:
+    branches:
+      - main
+      - prod
+    paths:
+      - "agents/discovery-scout/**"
+      - "agents/_shared/skills/**"
+      - "data/evals/**"
+      - "simon/vertex_eval.py"
+      - "tests/eval_discovery.py"
+      - ".github/workflows/eval-discovery-vertex.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "agents/discovery-scout/**"
+      - "agents/_shared/skills/**"
+      - "data/evals/**"
+      - "simon/vertex_eval.py"
+      - ".github/workflows/eval-discovery-vertex.yml"
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Evaluation mode (vertex = live Vertex AI Gen AI Eval Service, offline = deterministic gates)"
+        required: true
+        default: "vertex"
+        type: choice
+        options:
+          - vertex
+          - offline
+      sample_source:
+        description: "Which samples to grade"
+        required: true
+        default: "mixed"
+        type: choice
+        options:
+          - mixed
+          - golden_dataset
+          - live_reports
+      push_to_platform:
+        description: "POST eval scorecard to live Simon platform (/api/eval-runs)"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  offline-gates:
+    name: Layer 1 Hard Gates (Offline CI)
+    runs-on: ubuntu-latest
+    outputs:
+      gcp_auth_configured: ${{ steps.gcp-auth-check.outputs.configured }}
+    steps:
+      - name: Check GCP auth credentials
+        id: gcp-auth-check
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
+        run: |
+          if [ -n "${GCP_SA_KEY:-}" ] || [ -n "${GCP_WIF_PROVIDER:-}" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run Discovery Scout deterministic baseline suite
+        run: python3 tests/eval_discovery.py
+
+      - name: Run 3-layer offline rubric check (all agents)
+        run: |
+          python3 -m simon.vertex_eval \
+            --all-agents \
+            --mode offline \
+            --sample-source golden_dataset \
+            --trigger github_actions_pr \
+            --out eval_offline_report.json \
+            --summary-md "$GITHUB_STEP_SUMMARY" \
+            --fail-on-gate
+
+      - name: Upload offline scorecard artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: discovery-eval-offline-${{ github.run_id }}
+          path: eval_offline_report.json
+
+  vertex-ai-eval:
+    name: Layer 2 & 3 Rubrics (Vertex AI Gen AI Evaluation Service)
+    needs: offline-gates
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.event.inputs.mode != 'offline') &&
+      needs.offline-gates.outputs.gcp_auth_configured == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'gemini4nyc26nyc-2203' }}
+      GCP_REGION: ${{ vars.GCP_REGION || 'us-east1' }}
+      SIMON_PLATFORM_URL: ${{ vars.SIMON_PLATFORM_URL || 'https://simon-staging-139550420825.us-east1.run.app' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Install Vertex AI Evaluation SDK
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install "google-cloud-aiplatform[evaluation]" pandas
+
+      - name: Run Vertex AI Gen AI Evaluation Service
+        env:
+          SIMON_AGENT_DB_TOKEN: ${{ secrets.SIMON_AGENT_DB_TOKEN }}
+        run: |
+          set -euo pipefail
+          SAMPLE_SOURCE="${{ github.event.inputs.sample_source || 'mixed' }}"
+          PUSH_ARGS=""
+          if [ "${{ github.event.inputs.push_to_platform }}" != "false" ]; then
+            PUSH_ARGS="--push-url ${SIMON_PLATFORM_URL}"
+          fi
+          python3 -m simon.vertex_eval \
+            --mode vertex \
+            --sample-source "$SAMPLE_SOURCE" \
+            --project "$GCP_PROJECT_ID" \
+            --region "$GCP_REGION" \
+            --trigger "github_actions_vertex" \
+            --out eval_vertex_report.json \
+            --summary-md "$GITHUB_STEP_SUMMARY" \
+            $PUSH_ARGS \
+            --fail-on-gate
+
+      - name: Upload Vertex AI scorecard artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: discovery-eval-vertex-${{ github.run_id }}
+          path: eval_vertex_report.json

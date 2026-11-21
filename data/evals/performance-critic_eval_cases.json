@@ -1,0 +1,246 @@
+{
+  "dataset_version": "1.0.0",
+  "agent_id": "simon-performance-critic",
+  "description": "Golden evaluation cases for Simon Performance Critic (Stage 3 Critic), testing valid performance evaluations, timestamp hygiene, telemetry isolation, and epistemic boundaries.",
+  "cases": [
+    {
+      "case_id": "perf_01_acoustic_single_take_pass",
+      "expected_valid": true,
+      "brief": "Independently evaluate audition a01 performance evidence for First Listen NYC. Surface one distinctive musical choice with timestamp and one live-execution uncertainty.",
+      "context": "Audition a01 (Demo Singer A). Audio file: audition_a01.wav (0:48). Listening notes: At 0:18, unaccompanied acoustic verse transitions into controlled chorus with micro-dynamic lift. At 0:33, sustained high phrase resolves softly. Waveform inspection confirms natural dynamic envelope, single acoustic take, and zero comping.",
+      "output": {
+        "contract_version": "1.0.0",
+        "stage": "critic",
+        "critic_type": "performance",
+        "reviews": [
+          {
+            "audition_id": "a01",
+            "distinctive_choice": "At 0:18, an unaccompanied acoustic verse transitions into a controlled chorus with subtle micro-dynamic lift and resonant vocal phrasing.",
+            "distinctive_choice_timestamp": "0:18",
+            "live_execution_uncertainty": "Slight pitch drift at 0:33 on the sustained high phrase under dry room acoustics without stage monitor support.",
+            "evidence_timestamp": "0:33",
+            "recording_context": "live_single_take",
+            "acoustic_observations": "Waveform exhibits natural dynamic envelope and room decay; single acoustic take verified with zero multi-track comping."
+          }
+        ]
+      },
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_perf_a01_eval01",
+        "batch_id": "batch_first_listen_nyc",
+        "agent_name": "Performance Critic 01",
+        "stage": "critic",
+        "brief": "Independently evaluate audition a01 performance evidence for First Listen NYC.",
+        "status": "completed",
+        "headline": "Evaluated a01: verified single-take dynamic phrasing at 0:18 with pitch stability uncertainty on sustained high phrase at 0:33.",
+        "steps": [
+          {
+            "phase": "looking_at",
+            "title": "Inspecting audition_a01.wav audio waveform and listening notes",
+            "detail": "Examining 48-second acoustic single-take submission for dynamic envelope and vocal continuity."
+          },
+          {
+            "phase": "finding",
+            "title": "Noted distinctive dynamic lift at 0:18",
+            "detail": "Vocalist demonstrates controlled micro-dynamics transitioning from sparse verse into chorus."
+          },
+          {
+            "phase": "analysis",
+            "title": "Acoustic verification and live-execution uncertainty check",
+            "detail": "Isolated sustained high note at 0:33 showing minor pitch drift in dry room acoustic."
+          }
+        ],
+        "findings": [
+          {
+            "title": "audition a01",
+            "summary": "Distinctive dynamic lift at 0:18; pitch stability uncertainty on dry room sustained phrase at 0:33."
+          }
+        ],
+        "output": {
+          "contract_version": "1.0.0",
+          "stage": "critic",
+          "critic_type": "performance",
+          "reviews": [
+            {
+              "audition_id": "a01",
+              "distinctive_choice": "At 0:18, an unaccompanied acoustic verse transitions into a controlled chorus with subtle micro-dynamic lift and resonant vocal phrasing.",
+              "distinctive_choice_timestamp": "0:18",
+              "live_execution_uncertainty": "Slight pitch drift at 0:33 on the sustained high phrase under dry room acoustics without stage monitor support.",
+              "evidence_timestamp": "0:33",
+              "recording_context": "live_single_take",
+              "acoustic_observations": "Waveform exhibits natural dynamic envelope and room decay; single acoustic take verified with zero multi-track comping."
+            }
+          ]
+        }
+      },
+      "notes": "Clean pass case: single acoustic take with precise timestamps, dual finding, and zero logistics bleed."
+    },
+    {
+      "case_id": "perf_02_layered_studio_harmonies_pass",
+      "expected_valid": true,
+      "brief": "Independently evaluate audition a02 performance evidence for First Listen NYC. Surface one distinctive musical choice with timestamp and one live-execution uncertainty.",
+      "context": "Audition a02 (Demo Singer B). Audio file: audition_a02.wav (1:02). Listening notes: At 0:15, tight three-part vocal harmonies enter cleanly over the lead vocal. Studio production with stereo doubling and compression. Waveform indicates multi-track comping with limited evidence of single-take live vocal execution.",
+      "output": {
+        "contract_version": "1.0.0",
+        "stage": "critic",
+        "critic_type": "performance",
+        "reviews": [
+          {
+            "audition_id": "a02",
+            "distinctive_choice": "At 0:15, tight three-part vocal harmonies enter cleanly over the lead vocal, displaying deliberate harmonic arrangement and interval control.",
+            "distinctive_choice_timestamp": "0:15",
+            "live_execution_uncertainty": "Heavy studio multi-tracking and stereo vocal doubling leave live single-take vocal power and breath support unproven.",
+            "evidence_timestamp": "0:15",
+            "recording_context": "studio_layered",
+            "acoustic_observations": "Spectral analysis displays dynamic compression and multi-track layering; single-take acoustic resilience remains open."
+          }
+        ]
+      },
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_perf_a02_eval02",
+        "batch_id": "batch_first_listen_nyc",
+        "agent_name": "Performance Critic 01",
+        "stage": "critic",
+        "brief": "Independently evaluate audition a02 performance evidence for First Listen NYC.",
+        "status": "completed",
+        "headline": "Evaluated a02: distinctive harmonic arrangement at 0:15; studio layering leaves live execution viability unconfirmed.",
+        "steps": [
+          {
+            "phase": "looking_at",
+            "title": "Evaluating audition_a02.wav studio arrangement layers",
+            "detail": "Inspecting 62-second studio take for vocal layering, compression artifacts, and harmonic arrangement."
+          },
+          {
+            "phase": "finding",
+            "title": "Identified tight vocal harmonies at 0:15",
+            "detail": "Three-part vocal harmony arrangement shows intentional melodic structure."
+          },
+          {
+            "phase": "analysis",
+            "title": "Live-execution uncertainty assessment",
+            "detail": "Studio stereo doubling prevents verification of unassisted solo vocal projection."
+          }
+        ],
+        "findings": [
+          {
+            "title": "audition a02",
+            "summary": "Distinctive vocal harmony arrangement at 0:15; studio layering leaves live execution open."
+          }
+        ],
+        "output": {
+          "contract_version": "1.0.0",
+          "stage": "critic",
+          "critic_type": "performance",
+          "reviews": [
+            {
+              "audition_id": "a02",
+              "distinctive_choice": "At 0:15, tight three-part vocal harmonies enter cleanly over the lead vocal, displaying deliberate harmonic arrangement and interval control.",
+              "distinctive_choice_timestamp": "0:15",
+              "live_execution_uncertainty": "Heavy studio multi-tracking and stereo vocal doubling leave live single-take vocal power and breath support unproven.",
+              "evidence_timestamp": "0:15",
+              "recording_context": "studio_layered",
+              "acoustic_observations": "Spectral analysis displays dynamic compression and multi-track layering; single-take acoustic resilience remains open."
+            }
+          ]
+        }
+      },
+      "notes": "Clean pass case: studio layered take with correct uncertainty flagging, timestamped harmony observation, and clean Field News."
+    },
+    {
+      "case_id": "perf_03_missing_timestamp_and_ungrounded_fail",
+      "expected_valid": false,
+      "brief": "Independently evaluate audition a03 performance evidence for First Listen NYC.",
+      "context": "Audition a03 (Demo Singer C). Audio file: audition_a03.wav (0:35). Short acoustic vocal run in D major. Natural vibrato.",
+      "output": {
+        "contract_version": "1.0.0",
+        "stage": "critic",
+        "critic_type": "performance",
+        "reviews": [
+          {
+            "audition_id": "a03",
+            "distinctive_choice": "The singer possesses an incredible natural voice that shines across the entire song.",
+            "distinctive_choice_timestamp": "",
+            "live_execution_uncertainty": "The singer struggled during the extended electric guitar solo at 04:12 with high pitch distortion.",
+            "evidence_timestamp": "04:12",
+            "recording_context": "live",
+            "acoustic_observations": "Sounds very solid overall."
+          }
+        ]
+      },
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_perf_a03_eval03",
+        "batch_id": "batch_first_listen_nyc",
+        "agent_name": "Performance Critic 01",
+        "stage": "critic",
+        "brief": "Independently evaluate audition a03 performance evidence.",
+        "status": "completed",
+        "headline": "Great singer with minor flaws in the outro.",
+        "steps": [
+          {
+            "phase": "analysis",
+            "title": "General listening",
+            "detail": "Listened to track and wrote thoughts."
+          }
+        ],
+        "findings": [
+          {
+            "title": "audition a03",
+            "summary": "Great vocal delivery."
+          }
+        ]
+      },
+      "notes": "Failure case: Missing timestamp for distinctive choice, fabricated 04:12 timestamp exceeding 35s clip duration, and subjective non-technical praise."
+    },
+    {
+      "case_id": "perf_04_telemetry_leak_and_logistics_violation_fail",
+      "expected_valid": false,
+      "brief": "Independently evaluate audition a01 performance evidence for First Listen NYC.",
+      "context": "Audition a01 (Demo Singer A). Audio file: audition_a01.wav (0:48). Acoustic single-take submission.",
+      "output": {
+        "contract_version": "1.0.0",
+        "stage": "critic",
+        "critic_type": "performance",
+        "reviews": [
+          {
+            "audition_id": "a01",
+            "distinctive_choice": "At 0:18, dynamic transition from verse to chorus.",
+            "distinctive_choice_timestamp": "0:18",
+            "live_execution_uncertainty": "Pitch stability at 0:33.",
+            "evidence_timestamp": "0:33",
+            "recording_context": "live_single_take",
+            "logistics_notes": "The $250 artist guarantee is unacceptable for this venue and the 15-minute slot should be rebooked as a 30-minute headliner.",
+            "interaction_id": "int_critic_leak_001",
+            "environment_id": "env_sandbox_leak_999"
+          }
+        ]
+      },
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_perf_a01_eval04",
+        "batch_id": "batch_first_listen_nyc",
+        "agent_name": "Performance Critic 01",
+        "stage": "critic",
+        "brief": "Independently evaluate audition a01 performance evidence.",
+        "status": "completed",
+        "headline": "Evaluated a01 under environment env_sandbox_leak_999.",
+        "trace_id": "trace_agent_telemetry_forbidden",
+        "steps": [
+          {
+            "phase": "looking_at",
+            "title": "Ran tool with interaction_id int_critic_leak_001",
+            "detail": "Raw environment logs loaded from /workspace/tmp/exec.log."
+          }
+        ],
+        "findings": [
+          {
+            "title": "audition a01",
+            "summary": "Dynamic choice noted at 0:18."
+          }
+        ]
+      },
+      "notes": "Failure case: Leaks forbidden telemetry keys (interaction_id, environment_id, trace_id) and violates Epistemic Rule 5 by judging slot lengths, artist guarantees, and venue booking."
+    }
+  ]
+}

@@ -1025,6 +1025,7 @@ def render_top_nav(active_path: str) -> str:
         [
             _link("/investigate", "4. Investigator Desk"),
             _link("/", "5. Vocal Studio"),
+            _link("/evals", "6. Evals", "evalsNavLink"),
         ]
     )
     screening_links = _link("/screen", "6. Screening Deck", "screenNavLink")
@@ -2336,6 +2337,277 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
     el('refreshDeskBtn').onclick = loadDesk;
 
     loadDesk();
+  </script>
+</body>
+</html>
+"""
+
+
+def list_eval_runs(store: SimonStore, agent_id: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+    """List recent agent evaluation runs stored in Firestore/SQLite."""
+    rows = list_agent_documents(store, "eval_runs", limit=limit)
+    runs: List[Dict[str, Any]] = []
+    for row in rows:
+        doc = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else row
+        if not isinstance(doc, dict):
+            continue
+        if agent_id and doc.get("agent_id") != agent_id and not str(doc.get("agent_id", "")).endswith(agent_id):
+            continue
+        runs.append(doc)
+    runs.sort(key=lambda r: str(r.get("created_at") or ""), reverse=True)
+    return runs
+
+
+EVALS_HTML = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Simon · 6. Agent Evals &amp; Rubrics (Vertex AI)</title>
+  <style>{_SHARED_CSS}</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <h1>Simon <span class="pill blue">6. Evals (Vertex AI)</span></h1>
+        <p>Run 3-layer rubrics across every Simon Managed Agent, track Vertex AI Gen AI Evaluation Service scorecards, and catch live regressions.</p>
+      </div>
+      {render_top_nav("/evals")}
+    </header>
+
+    <div id="evalBanner" class="banner"></div>
+
+    <section class="card">
+      <div class="section-head">
+        <h2>Run Agent Eval</h2>
+        <span class="pill amber">data/evals/*_rubrics.json</span>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between;">
+        <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+          <label style="font-size:0.86rem;">
+            Agent:
+            <select id="evalAgentSelect" style="margin-left:6px;">
+              <option value="discovery-scout">discovery-scout</option>
+            </select>
+          </label>
+          <label style="font-size:0.86rem;">
+            Runner:
+            <select id="evalModeSelect" style="margin-left:6px;">
+              <option value="offline">Offline Gates + Heuristics (Instant)</option>
+              <option value="vertex">Vertex AI Gen AI Eval Service (GCP)</option>
+            </select>
+          </label>
+          <label style="font-size:0.86rem;">
+            Samples:
+            <select id="evalSampleSelect" style="margin-left:6px;">
+              <option value="mixed">Live Reports + Golden Dataset</option>
+              <option value="live_reports">Live Scouting Reports Only</option>
+              <option value="golden_dataset">Golden Dataset Only</option>
+            </select>
+          </label>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button id="refreshEvalsBtn" class="btn" type="button">Refresh</button>
+          <button id="runAllEvalsBtn" class="btn" type="button">Run All Agents Baseline</button>
+          <button id="runEvalBtn" class="btn primary" type="button">Run Eval Now</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <h2>Eval Runs &amp; Vertex AI Scorecards <span id="evalCountBadge" class="pill">0 runs</span></h2>
+        <span class="mono" style="font-size:0.8rem;">Synced from GitHub Actions (.github/workflows/eval-discovery-vertex.yml) &amp; UI runs</span>
+      </div>
+      <div id="evalRunsContainer">
+        <div class="mono">Loading evaluation runs...</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <h2>Active Rubric Spec <span id="rubricVersionBadge" class="pill blue">v1.0.0</span></h2>
+        <span id="rubricAgentLabel" class="mono" style="font-size:0.8rem;">simon-discovery-scout</span>
+      </div>
+      <div id="rubricCatalogContainer">
+        <div class="mono">Loading rubrics...</div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const el = (id) => document.getElementById(id);
+    function esc(s) {{ const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }}
+
+    function showBanner(msg, isError) {{
+      const b = el('evalBanner');
+      b.style.display = 'block';
+      b.style.borderColor = isError ? 'var(--bad)' : 'var(--ok)';
+      b.style.color = isError ? '#ff8e99' : '#7ef0ba';
+      b.textContent = msg;
+    }}
+
+    function statusPill(status) {{
+      if (status === 'passed') return '<span class="pill ok">PASSED</span>';
+      if (status === 'failed' || status === 'error') return '<span class="pill bad">' + esc(status.toUpperCase()) + '</span>';
+      return '<span class="pill amber">' + esc((status || 'warning').toUpperCase()) + '</span>';
+    }}
+
+    function renderRubrics(spec) {{
+      el('rubricVersionBadge').textContent = (spec.rubric_set_id || 'agent') + ' · v' + (spec.version || '1.0.0');
+      el('rubricAgentLabel').textContent = spec.agent_id || '';
+      const layers = spec.layers || [];
+      el('rubricCatalogContainer').innerHTML = layers.map((layer) => {{
+        const rows = (layer.rubrics || []).map((r) => `
+          <div class="step-row">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+              <strong>${{esc(r.name)}}</strong>
+              <div style="display:flex; gap:6px;">
+                <span class="pill blue">${{esc(r.skill || 'SYSTEM.md')}}</span>
+                <span class="pill">${{esc(r.scale || 'pass_fail')}}</span>
+              </div>
+            </div>
+            <div style="color:var(--muted); margin-top:4px;">${{esc(r.criteria || '')}}</div>
+          </div>`).join('');
+        return `
+          <div style="margin-bottom:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <strong style="font-size:0.95rem;">${{esc(layer.name)}}</strong>
+              <span class="pill ${{layer.blocking ? 'bad' : 'amber'}}">${{layer.blocking ? 'Blocking Gate (100%)' : 'Target >= ' + Math.round((layer.pass_threshold || 0.75) * 100) + '%'}}</span>
+            </div>
+            ${{rows}}
+          </div>`;
+      }}).join('');
+    }}
+
+    function renderEvalRuns(runs) {{
+      el('evalCountBadge').textContent = `${{runs.length}} run${{runs.length === 1 ? '' : 's'}}`;
+      if (!runs.length) {{
+        el('evalRunsContainer').innerHTML = '<div class="mono">No eval runs recorded yet. Click <strong>Run Eval Now</strong> or <strong>Run All Agents Baseline</strong> above.</div>';
+        return;
+      }}
+      el('evalRunsContainer').innerHTML = runs.map((run, idx) => {{
+        const pct = Math.round((run.overall_score || 0) * 100);
+        const prev = runs.slice(idx + 1).find((r) => r.agent_id === run.agent_id);
+        let deltaHtml = '';
+        if (prev) {{
+          const delta = Math.round(((run.overall_score || 0) - (prev.overall_score || 0)) * 100);
+          if (delta < 0) deltaHtml = `<span class="pill bad">REGRESSION ${{delta}}%</span>`;
+          else if (delta > 0) deltaHtml = `<span class="pill ok">+${{delta}}% vs prev</span>`;
+          else deltaHtml = `<span class="pill">0% vs prev</span>`;
+        }}
+        const dims = run.dimensions || [];
+        const dimsHtml = dims.map((d) => `
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border); font-size:0.84rem;">
+            <div>
+              <strong>${{esc(d.name)}}</strong>
+              <span class="pill" style="margin-left:6px;">${{esc(d.skill || '')}}</span>
+              <div style="color:var(--muted); font-size:0.78rem;">${{esc(d.detail || '')}}</div>
+            </div>
+            <div style="white-space:nowrap;">
+              <span class="pill ${{d.passed ? 'ok' : 'bad'}}">${{Math.round((d.score || 0) * 100)}}%</span>
+            </div>
+          </div>`).join('');
+        const cases = run.case_results || [];
+        const casesHtml = cases.length ? `
+          <details style="margin-top:10px;">
+            <summary style="cursor:pointer; font-size:0.84rem; color:var(--accent); font-weight:600;">Per-Case Judge Rationales (${{cases.length}})</summary>
+            <div style="margin-top:8px;">
+              ${{cases.map((c) => `
+                <div class="step-row">
+                  <div><strong>${{esc(c.case_id)}}</strong> <span class="pill ${{c.passed ? 'ok' : 'bad'}}">${{c.passed ? 'PASS' : 'FAIL'}}</span></div>
+                  <div style="color:var(--muted); margin-top:3px;">${{esc(c.rationale || '')}}</div>
+                </div>`).join('')}}
+            </div>
+          </details>` : '';
+        const vertexBtn = run.vertex_console_url
+          ? `<a class="btn" href="${{esc(run.vertex_console_url)}}" target="_blank" rel="noopener">Open in Vertex AI Console →</a>`
+          : '';
+        return `
+          <div class="worker-card" style="margin-bottom:14px;">
+            <div class="section-head" style="margin-bottom:8px;">
+              <div>
+                <h3 style="margin:0; font-size:1rem;">${{esc(run.agent_id)}} · <span class="mono">${{esc(run.eval_run_id)}}</span> ${{statusPill(run.status)}} <span class="pill blue">${{pct}}% overall</span> ${{deltaHtml}}</h3>
+                <div class="mono" style="margin-top:4px; font-size:0.78rem;">
+                  Runner: ${{esc(run.runner)}} · Trigger: ${{esc(run.trigger || 'cli')}} · Samples: ${{esc(run.sample_count)}} (${{esc(run.sample_source || 'mixed')}}) · ${{esc(run.created_at || '')}}
+                </div>
+              </div>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <span class="pill ${{run.passed_gates ? 'ok' : 'bad'}}">Gates: ${{run.passed_gates ? 'PASS' : 'FAIL'}}</span>
+                ${{vertexBtn}}
+              </div>
+            </div>
+            ${{dimsHtml}}
+            ${{casesHtml}}
+          </div>`;
+      }}).join('');
+    }}
+
+    async function loadAgentsList() {{
+      const res = await fetch('/api/evals/agents');
+      if (!res.ok) return;
+      const data = await res.json();
+      const agents = data.agents || [];
+      if (!agents.length) return;
+      const sel = el('evalAgentSelect');
+      const current = sel.value || 'discovery-scout';
+      sel.innerHTML = agents.map((a) => `<option value="${{esc(a.slug)}}">${{esc(a.slug)}} (${{a.rubric_count}} rubrics)</option>`).join('');
+      if (agents.some((a) => a.slug === current)) sel.value = current;
+    }}
+
+    async function loadRubricAndRuns() {{
+      const agent = el('evalAgentSelect').value || 'discovery-scout';
+      const [rubRes, runsRes] = await Promise.all([
+        fetch('/api/evals/rubrics?agent=' + encodeURIComponent(agent)),
+        fetch('/api/eval-runs'),
+      ]);
+      if (rubRes.ok) renderRubrics(await rubRes.json());
+      if (runsRes.ok) {{
+        const data = await runsRes.json();
+        renderEvalRuns(data.eval_runs || []);
+      }}
+    }}
+
+    async function triggerEval(allAgents) {{
+      const btn = allAgents ? el('runAllEvalsBtn') : el('runEvalBtn');
+      const orig = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Running...';
+      try {{
+        const res = await fetch('/api/eval-runs/run', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{
+            agent: el('evalAgentSelect').value,
+            all_agents: !!allAgents,
+            mode: el('evalModeSelect').value,
+            sample_source: el('evalSampleSelect').value,
+          }}),
+        }});
+        const data = await res.json();
+        if (!res.ok) {{
+          showBanner(data.error || 'Eval run failed.', true);
+        }} else if (allAgents) {{
+          showBanner(`Completed baseline across ${{(data.eval_runs || []).length}} agents.`, false);
+          await loadRubricAndRuns();
+        }} else {{
+          showBanner(`Completed ${{data.agent_id}} (${{Math.round((data.overall_score || 0) * 100)}}% overall).`, false);
+          await loadRubricAndRuns();
+        }}
+      }} catch (err) {{
+        showBanner('Network error running eval: ' + err, true);
+      }} finally {{
+        btn.disabled = false;
+        btn.textContent = orig;
+      }}
+    }}
+
+    el('evalAgentSelect').onchange = loadRubricAndRuns;
+    el('runEvalBtn').onclick = () => triggerEval(false);
+    el('runAllEvalsBtn').onclick = () => triggerEval(true);
+    el('refreshEvalsBtn').onclick = loadRubricAndRuns;
+    loadAgentsList().then(loadRubricAndRuns);
   </script>
 </body>
 </html>

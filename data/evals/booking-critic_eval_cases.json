@@ -1,0 +1,267 @@
+{
+  "dataset_version": "1.0.0",
+  "agent_id": "simon-booking-critic",
+  "description": "Golden evaluation cases for Simon Booking Critic (Stage 3 Critic), testing showcase constraint verification, open questions rigor, epistemic isolation, and telemetry hygiene.",
+  "cases": [
+    {
+      "case_id": "book_01_acoustic_duo_pass",
+      "expected_valid": true,
+      "brief": "Independently evaluate practical stage fit for First Listen NYC: 15-minute opening set at listening-room showcase, emerging vocalist with one original song and simple stage setup, $250 guarantee.",
+      "context": "Audition a01 (Demo Singer A). Artist notes: 'The submitted song is an original. The artist can bring a guitarist for a 15-minute set.' Performance notes indicate acoustic format.",
+      "output": {
+        "contract_version": "1.0.0",
+        "stage": "critic",
+        "critic_type": "booking",
+        "showcase_event": "First Listen NYC",
+        "reviews": [
+          {
+            "audition_id": "a01",
+            "original_song_verified": true,
+            "slot_duration_minutes": 15,
+            "stage_setup_summary": "Two-person acoustic setup (vocalist plus guitarist).",
+            "brief_constraints_met": true,
+            "open_questions": [
+              "Confirm availability of artist and guitarist for showcase date.",
+              "Confirm stage input requirements (vocal mic + direct acoustic DI)."
+            ],
+            "practical_fit_summary": "Strong practical fit for 15-minute listening-room opening slot; minimal stage footprint and fast changeover."
+          }
+        ]
+      },
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_book_a01_eval01",
+        "batch_id": "batch_first_listen_nyc",
+        "agent_name": "Booking Critic 01",
+        "stage": "critic",
+        "brief": "Evaluate practical stage fit for First Listen NYC.",
+        "status": "completed",
+        "headline": "Evaluated a01: strong practical fit for 15-minute acoustic slot; 2 open questions raised regarding availability and DI inputs.",
+        "steps": [
+          {
+            "phase": "looking_at",
+            "title": "Inspecting audition a01 artist notes and stage setup against brief",
+            "detail": "Comparing submitted setup (vocalist + guitarist) against First Listen NYC listening-room constraints."
+          },
+          {
+            "phase": "finding",
+            "title": "Verified original material and compact duo setup",
+            "detail": "Original song requirement met; two-person footprint fits 15-minute opening slot."
+          },
+          {
+            "phase": "analysis",
+            "title": "Formulating open questions for stage logistics",
+            "detail": "Flagged guitarist scheduling availability and input list as open questions for producer follow-up."
+          }
+        ],
+        "findings": [
+          {
+            "title": "audition a01",
+            "summary": "Original song verified; compact acoustic duo fits room constraints; 2 open questions on availability/DI."
+          }
+        ],
+        "output": {
+          "contract_version": "1.0.0",
+          "stage": "critic",
+          "critic_type": "booking",
+          "showcase_event": "First Listen NYC",
+          "reviews": [
+            {
+              "audition_id": "a01",
+              "original_song_verified": true,
+              "slot_duration_minutes": 15,
+              "stage_setup_summary": "Two-person acoustic setup (vocalist plus guitarist).",
+              "brief_constraints_met": true,
+              "open_questions": [
+                "Confirm availability of artist and guitarist for showcase date.",
+                "Confirm stage input requirements (vocal mic + direct acoustic DI)."
+              ],
+              "practical_fit_summary": "Strong practical fit for 15-minute listening-room opening slot; minimal stage footprint and fast changeover."
+            }
+          ]
+        }
+      },
+      "notes": "Clean pass case: Original song confirmed, stage constraints satisfied, open questions articulated without assumptions."
+    },
+    {
+      "case_id": "book_02_studio_unspecified_setup_pass",
+      "expected_valid": true,
+      "brief": "Independently evaluate practical stage fit for First Listen NYC: 15-minute opening set at listening-room showcase, emerging vocalist with one original song and simple stage setup, $250 guarantee.",
+      "context": "Audition a02 (Demo Singer B). Artist notes: 'The submitted clip is a layered studio take of an original. The artist has yet to specify a live setup.'",
+      "output": {
+        "contract_version": "1.0.0",
+        "stage": "critic",
+        "critic_type": "booking",
+        "showcase_event": "First Listen NYC",
+        "reviews": [
+          {
+            "audition_id": "a02",
+            "original_song_verified": true,
+            "slot_duration_minutes": 15,
+            "stage_setup_summary": "Unspecified live stage setup; submitted clip is a layered studio production.",
+            "brief_constraints_met": false,
+            "open_questions": [
+              "What is the intended live stage setup (solo acoustic, backing tracks, or live rhythm section)?",
+              "Can the artist deliver a 15-minute set with a simple stage setup fitting a listening-room showcase?"
+            ],
+            "practical_fit_summary": "Original song requirement met, but practical stage viability cannot be confirmed until live setup is clarified."
+          }
+        ]
+      },
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_book_a02_eval02",
+        "batch_id": "batch_first_listen_nyc",
+        "agent_name": "Booking Critic 01",
+        "stage": "critic",
+        "brief": "Evaluate practical stage fit for First Listen NYC.",
+        "status": "completed",
+        "headline": "Evaluated a02: original song verified, but live stage setup is unspecified; flagged 2 open questions on instrumentation.",
+        "steps": [
+          {
+            "phase": "looking_at",
+            "title": "Reviewing audition a02 artist notes against brief requirements",
+            "detail": "Assessing candidate setup details against listening-room slot limits and original-song criteria."
+          },
+          {
+            "phase": "finding",
+            "title": "Identified missing live setup specifications",
+            "detail": "Artist submitted layered studio take without specifying live stage configuration."
+          },
+          {
+            "phase": "analysis",
+            "title": "Establishing logistical open questions",
+            "detail": "Framed missing stage setup details as necessary producer open questions before commitment."
+          }
+        ],
+        "findings": [
+          {
+            "title": "audition a02",
+            "summary": "Original song verified; live setup unspecified; flagged open questions on live format."
+          }
+        ],
+        "output": {
+          "contract_version": "1.0.0",
+          "stage": "critic",
+          "critic_type": "booking",
+          "showcase_event": "First Listen NYC",
+          "reviews": [
+            {
+              "audition_id": "a02",
+              "original_song_verified": true,
+              "slot_duration_minutes": 15,
+              "stage_setup_summary": "Unspecified live stage setup; submitted clip is a layered studio production.",
+              "brief_constraints_met": false,
+              "open_questions": [
+                "What is the intended live stage setup (solo acoustic, backing tracks, or live rhythm section)?",
+                "Can the artist deliver a 15-minute set with a simple stage setup fitting a listening-room showcase?"
+              ],
+              "practical_fit_summary": "Original song requirement met, but practical stage viability cannot be confirmed until live setup is clarified."
+            }
+          ]
+        }
+      },
+      "notes": "Clean pass case: Handles unspecified live setup by raising explicit open questions without fabricating answers."
+    },
+    {
+      "case_id": "book_03_invented_commitments_ungrounded_fail",
+      "expected_valid": false,
+      "brief": "Independently evaluate practical stage fit for First Listen NYC: 15-minute opening set at listening-room showcase.",
+      "context": "Audition a02 (Demo Singer B). Artist notes: 'The submitted clip is a layered studio take of an original. The artist has yet to specify a live setup.'",
+      "output": {
+        "contract_version": "1.0.0",
+        "stage": "critic",
+        "critic_type": "booking",
+        "showcase_event": "First Listen NYC",
+        "reviews": [
+          {
+            "audition_id": "a02",
+            "original_song_verified": true,
+            "slot_duration_minutes": 15,
+            "stage_setup_summary": "Confirmed 4-piece backing band with acoustic drums, upright bass, and synth keys.",
+            "brief_constraints_met": true,
+            "open_questions": [],
+            "practical_fit_summary": "Artist confirmed availability for the 8:00 PM soundcheck and agreed to supply their own 4-channel wireless IEM system."
+          }
+        ]
+      },
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_book_a02_eval03",
+        "batch_id": "batch_first_listen_nyc",
+        "agent_name": "Booking Critic 01",
+        "stage": "critic",
+        "brief": "Evaluate practical stage fit for First Listen NYC.",
+        "status": "completed",
+        "headline": "Artist ready with 4-piece band and soundcheck scheduled.",
+        "steps": [
+          {
+            "phase": "analysis",
+            "title": "Confirmed live logistics",
+            "detail": "Assumed artist will bring full rhythm section and wireless IEMs."
+          }
+        ],
+        "findings": [
+          {
+            "title": "audition a02",
+            "summary": "Full band verified with wireless IEMs."
+          }
+        ]
+      },
+      "notes": "Failure case: Fabricates 4-piece band, soundcheck time, and IEM equipment not grounded in artist notes, with empty open_questions."
+    },
+    {
+      "case_id": "book_04_vocal_artistry_and_telemetry_leak_fail",
+      "expected_valid": false,
+      "brief": "Independently evaluate practical stage fit for First Listen NYC.",
+      "context": "Audition a01 (Demo Singer A). Artist notes: 'The submitted song is an original. The artist can bring a guitarist for a 15-minute set.'",
+      "output": {
+        "contract_version": "1.0.0",
+        "stage": "critic",
+        "critic_type": "booking",
+        "showcase_event": "First Listen NYC",
+        "reviews": [
+          {
+            "audition_id": "a01",
+            "original_song_verified": true,
+            "slot_duration_minutes": 15,
+            "stage_setup_summary": "Acoustic duo.",
+            "vocal_artistry_score": "10/10 singing ability with stunning vibrato, captivating vocal tone, and masterclass phrasing.",
+            "brief_constraints_met": true,
+            "open_questions": [
+              "Confirm soundcheck schedule."
+            ],
+            "practical_fit_summary": "Must book because the vocal performance is breathtaking and unforgettable.",
+            "interaction_id": "int_booking_leak_999",
+            "trace_id": "trace_env_booking_001"
+          }
+        ]
+      },
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_book_a01_eval04",
+        "batch_id": "batch_first_listen_nyc",
+        "agent_name": "Booking Critic 01",
+        "stage": "critic",
+        "brief": "Evaluate practical stage fit for First Listen NYC.",
+        "status": "completed",
+        "headline": "Evaluated a01 under trace trace_env_booking_001 with 10/10 vocal rating.",
+        "trace_id": "trace_env_booking_001",
+        "steps": [
+          {
+            "phase": "analysis",
+            "title": "Evaluated singing talent under interaction int_booking_leak_999",
+            "detail": "Singer has magnificent vibrato and high register pitch."
+          }
+        ],
+        "findings": [
+          {
+            "title": "audition a01",
+            "summary": "10/10 vocal score; book immediately."
+          }
+        ]
+      },
+      "notes": "Failure case: Violates Epistemic Rule 5 by judging vocal artistry and singing talent, and leaks forbidden telemetry (interaction_id, trace_id)."
+    }
+  ]
+}
