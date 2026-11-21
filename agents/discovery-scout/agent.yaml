@@ -1,15 +1,19 @@
 id: simon-discovery-scout
+description: Stage 1 Discovery (Lead Gen) agent that queries simon-db sources, runs Layer 2 domain playbooks, emits DiscoveryHandoff v1.0.0 (unranked, zero scoring), and persists results to simon-db.
 base_agent: antigravity-preview-09-2026
 agent_config:
   type: antigravity
   model: gemini-4-hydrogen
+  max_total_tokens: "64000"
 system_instruction_file: SYSTEM.md
 tools:
   - type: google_search
   - type: url_context
   - type: code_execution
-environment:
+base_environment:
   type: remote
-  inline_mounts:
-    - source: SYSTEM.md
-      target: .agents/AGENTS.md
+  env:
+    SIMON_DOMAIN: music
+    SIMON_DB_URL: https://simon-staging-139550420825.us-east1.run.app
+shared_skills:
+  - simon-db

@@ -23,10 +23,11 @@ class TestDeployAndFleet(unittest.TestCase):
         self.assertEqual(compiled["deployed_id"], "kevin-simon-discovery-scout")
         self.assertEqual(payload["id"], "kevin-simon-discovery-scout")
         self.assertEqual(payload["agent_config"]["model"], "gemini-3.8-flash")
-        self.assertIn("Public YouTube Only", payload["system_instruction"])
+        self.assertIn("DiscoveryHandoff", payload["system_instruction"])
         sources = payload["base_environment"]["sources"]
         targets = {s["target"] for s in sources if s.get("type") == "inline"}
         self.assertIn(".agents/AGENTS.md", targets)
+        self.assertIn(".agents/skills/music/SKILL.md", targets)
 
     def test_compile_bundles_skills_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
