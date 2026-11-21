@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://simon.local/schemas/source_registry_schema.json",
+  "title": "Simon Discovery Source Registry Schema",
+  "description": "Data model for Simon's queryable discovery source registry. Agents query active sources by location, source_channel, source_type, career_tier, and access_method, and append newly discovered sources back to this registry.",
+  "type": "object",
+  "required": ["schema_version", "sources"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "domain": {
+      "type": "string",
+      "description": "Vertical/domain tag (e.g., 'music', 'comedy', 'real_estate').",
+      "default": "music"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/DiscoverySource"
+      }
+    }
+  },
+  "$defs": {
+    "SourceLocation": {
+      "type": "object",
+      "required": ["scope", "city"],
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "type": "string",
+          "enum": ["hyper_local", "city", "metro", "regional", "national", "global"]
+        },
+        "city": {
+          "type": ["string", "null"],
+          "description": "Primary city (e.g., 'New York', 'Jersey City', 'Chicago') or null when global."
+        },
+        "area": {
+          "type": ["string", "null"],
+          "description": "Borough, neighborhood, or county (e.g., 'Williamsburg, Brooklyn', 'Lower East Side', 'Harlem', 'Hudson County, NJ')."
+        },
+        "country": {
+          "type": ["string", "null"],
+          "description": "ISO-2 country code (e.g., 'US', 'UK') or null when global."
+        }
+      }
+    },
+    "DiscoverySource": {
+      "type": "object",
+      "description": "One queryable source record. Extends SourceDiscoveryEntry from discovery_investigator_contract.json with structured routing metadata.",
+      "required": [
+        "source_id",
+        "name",
+        "url",
+        "source_channel",
+        "source_type",
+        "location",
+        "genre_tags",
+        "career_tier",
+        "access_method",
+        "why_useful",
+        "discovered_by",
+        "status"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$",
+          "description": "Stable snake_case primary key (e.g., 'nyc_babys_all_right')."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "source_channel": {
+          "type": "string",
+          "description": "Aligned 1:1 with SourceDiscoveryEntry.source_channel in discovery_investigator_contract.json.",
+          "enum": [
+            "youtube_live_session",
+            "diy_venue_calendar",
+            "diy_venue_flyer_ocr",
+            "bandcamp_local_arrival",
+            "open_mic_lineup",
+            "bgv_or_session_credit_graph",
+            "musicbrainz",
+            "event_listing",
+            "other"
+          ]
+        },
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "session_channel",
+            "submission_feed",
+            "raw_upload_query",
+            "venue_calendar",
+            "aggregator",
+            "directory",
+            "open_mic",
+            "flyer_feed",
+            "credit_db",
+            "tastemaker_blog",
+            "radio_playlist",
+            "community",
+            "opt_in"
+          ]
+        },
+        "location": {
+          "$ref": "#/$defs/SourceLocation"
+        },
+        "genre_tags": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "career_tier": {
+          "type": "string",
+          "enum": ["ground_floor", "grassroots", "tastemaker", "mixed"]
+        },
+        "access_method": {
+          "type": "string",
+          "enum": [
+            "public_web",
+            "youtube_search",
+            "oembed",
+            "api_free",
+            "vision_ocr",
+            "login_walled"
+          ]
+        },
+        "why_useful": {
+          "type": "string",
+          "minLength": 1
+        },
+        "discovered_by": {
+          "type": "string",
+          "enum": ["seed_curated", "stage_1_discovery", "stage_2_investigator"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "deferred", "noisy", "blocked", "archived"]
+        },
+        "notes": {
+          "type": ["string", "null"]
+        },
+        "last_checked_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}
