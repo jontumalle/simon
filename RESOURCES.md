@@ -105,4 +105,3 @@ Checked into Git so every teammate gets them automatically after `git pull`:
 - **`main-sync` Skill (`.agents/skills/main-sync/SKILL.md` → `.agents/scripts/sync_main.py`)** — Separates immediate **Docs Sync** (`--docs-only`, used by the `Project Manager (Steward)` straight to `origin/main`) from gated **Code Sync** (`--code --paths <files...>`, enforcing unit/smoke/ruff verification before commit and supporting `--branch feat/<slug>` PR workflows).
 - **`plain-english` Skill (`.agents/skills/plain-english/SKILL.md`)** — On-command thought-partner alignment, Mermaid visualization, and STE-100 + Zinsser content rewriting/auditing skill.
 - **`simon-session-context` (`SessionStart` → `.agents/scripts/session_start.py`)** — Injects `PROJECT.md` orientation at session start.
-- **`simon-stop-doc-sync` (`Stop` → `.agents/scripts/stop_doc_sync.py`)** — Keeps shared docs synced cleanly to `origin/main`.

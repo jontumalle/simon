@@ -21,14 +21,5 @@
         ]
       }
     ]
-  },
-  "simon-stop-doc-sync": {
-    "Stop": [
-      {
-        "type": "command",
-        "command": "python3 scripts/stop_doc_sync.py",
-        "timeout": 5
-      }
-    ]
   }
 }
