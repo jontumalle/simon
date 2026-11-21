@@ -6,7 +6,11 @@ import tempfile
 import unittest
 
 from simon.db_tools import list_agent_documents, save_agent_document
-from simon.discovery_ui import dispatch_discovery_batch, refresh_discovery_batch
+from simon.discovery_ui import (
+    dispatch_discovery_batch,
+    load_source_registry,
+    refresh_discovery_batch,
+)
 from simon.store import SimonStore
 from simon.web import dispatch_http_request
 
@@ -543,6 +547,37 @@ class TestDiscoveryUIAndTraces(unittest.TestCase):
             _, _, html = dispatch_http_request(store, "GET", route)
             self.assertIn(b"Clear / Start Over", html)
             self.assertIn(b"Show archived", html)
+
+    def test_discovery_dashboard_removes_third_section_and_expands_selector(self) -> None:
+        store = self.store
+        code, ctype, html = dispatch_http_request(store, "GET", "/discovery")
+        self.assertEqual(code, 200)
+        self.assertIn("text/html", ctype)
+        self.assertIn(b"1. Select Discovery Sources", html)
+        self.assertIn(b"2. Orchestrate Discovery Fleet", html)
+
+        self.assertNotIn(b"3. Per-Agent Contract Outputs", html)
+        self.assertNotIn(b"outputsContainer", html)
+        self.assertNotIn(b"interaction_id", html)
+
+        for expected in (
+            b"wrap-wide",
+            b"selector-toolbar",
+            b"sourceSearchInput",
+            b"genreFilter",
+            b"channelChips",
+            b"selectedTray",
+            b"selectFilteredBtn",
+            b"toggleExpandBtn",
+            b"minmax(340px, 1fr)",
+            b"min-height: 520px",
+        ):
+            self.assertIn(expected, html)
+
+        reg = load_source_registry(store)
+        self.assertIn("genres", reg)
+        self.assertIn("soul", reg["genres"])
+        self.assertIn("indie", reg["genres"])
 
 
 if __name__ == "__main__":

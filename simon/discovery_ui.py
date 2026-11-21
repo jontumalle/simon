@@ -94,11 +94,20 @@ def load_source_registry(store: SimonStore) -> Dict[str, Any]:
     channels = sorted({s.get("source_channel", "other") for s in sources})
     cities = sorted({(s.get("location") or {}).get("city") or "Global" for s in sources})
     tiers = sorted({s.get("career_tier", "mixed") for s in sources})
+    genres = sorted(
+        {
+            str(g)
+            for s in sources
+            for g in (s.get("genre_tags") or [])
+            if g and str(g) != "all"
+        }
+    )
     return {
         "count": len(sources),
         "channels": channels,
         "cities": cities,
         "tiers": tiers,
+        "genres": genres,
         "sources": sources,
     }
 
@@ -1166,16 +1175,164 @@ _SHARED_CSS = (
 )
 
 
+_DISCOVERY_PAGE_CSS = """
+  .wrap.wrap-wide { max-width: 1440px; }
+  .selector-toolbar {
+    display: grid;
+    grid-template-columns: minmax(260px, 1.8fr) repeat(4, minmax(155px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  @media (max-width: 980px) {
+    .selector-toolbar { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 600px) {
+    .selector-toolbar { grid-template-columns: 1fr; }
+  }
+  .selector-toolbar input,
+  .selector-toolbar select {
+    width: 100%;
+    min-height: 42px;
+    padding: 10px 13px;
+    font-size: 0.92rem;
+  }
+  .channel-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-bottom: 12px;
+  }
+  .chip-btn {
+    padding: 5px 11px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+  }
+  .chip-btn:hover { border-color: var(--accent); color: var(--text); }
+  .chip-btn.active {
+    background: var(--amber-bg);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .selected-tray {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    font-size: 0.82rem;
+  }
+  .sel-chip {
+    border: 1px solid var(--accent);
+    background: var(--amber-bg);
+    color: var(--accent);
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .source-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 14px;
+    min-height: 520px;
+    max-height: 76vh;
+    overflow-y: auto;
+    padding: 4px 6px 6px 2px;
+  }
+  .source-grid.expanded {
+    max-height: none;
+    overflow: visible;
+  }
+  .source-item {
+    padding: 16px 18px;
+    border-radius: 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    min-height: 156px;
+  }
+  .source-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    border: 1.5px solid var(--border);
+    background: var(--panel);
+    font-size: 0.78rem;
+    font-weight: 800;
+    flex-shrink: 0;
+  }
+  .source-item.selected .source-check {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-fg, #111318);
+  }
+  .source-title {
+    font-weight: 700;
+    font-size: 0.98rem;
+    margin: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .source-why {
+    font-size: 0.86rem;
+    color: var(--text);
+    opacity: 0.9;
+    line-height: 1.45;
+    margin: 0;
+  }
+  .source-genres {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: auto;
+    padding-top: 2px;
+  }
+  .genre-tag {
+    font-size: 0.71rem;
+    padding: 2px 7px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .source-note {
+    font-size: 0.77rem;
+    color: var(--muted);
+  }
+  .source-ext {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--teal);
+    white-space: nowrap;
+  }
+"""
+
+
 DISCOVERY_HTML = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Simon · Stage 1 Discovery &amp; Source Orchestrator</title>
-  <style>{_SHARED_CSS}</style>
+  <style>{_SHARED_CSS}{_DISCOVERY_PAGE_CSS}</style>
 </head>
 <body>
-  <div class="wrap">
+  <div class="wrap wrap-wide">
     <header>
       <div class="brand">
         <h1>Simon <span class="pill amber">1. Discovery Dashboard</span></h1>
@@ -1188,15 +1345,25 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
 
     <section class="card">
       <div class="section-head">
-        <h2>1. Select Discovery Sources <span id="selectedBadge" class="pill amber">0 selected</span></h2>
+        <h2>1. Select Discovery Sources <span id="selectedBadge" class="pill amber">0 selected</span> <span id="showingBadge" class="pill">0 / 0 shown</span></h2>
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-          <select id="channelFilter"><option value="">All channels</option></select>
-          <select id="cityFilter"><option value="">All locations</option></select>
-          <select id="tierFilter"><option value="">All tiers</option></select>
           <button class="btn" type="button" id="selectQuickBtn">Quick Pick: 3 NYC Active</button>
+          <button class="btn" type="button" id="selectFilteredBtn">Select All Shown</button>
           <button class="btn" type="button" id="clearSelBtn">Clear</button>
+          <button class="btn" type="button" id="toggleExpandBtn">Expand Full List</button>
         </div>
       </div>
+
+      <div class="selector-toolbar">
+        <input type="search" id="sourceSearchInput" placeholder="Search sources by name, neighborhood, genre, or scouting note…" aria-label="Search discovery sources" />
+        <select id="channelFilter"><option value="">All channels</option></select>
+        <select id="cityFilter"><option value="">All locations</option></select>
+        <select id="tierFilter"><option value="">All career tiers</option></select>
+        <select id="genreFilter"><option value="">All genres</option></select>
+      </div>
+
+      <div id="channelChips" class="channel-chips"></div>
+      <div id="selectedTray" class="selected-tray" style="display:none;"></div>
       <div id="sourceGrid" class="source-grid"></div>
     </section>
 
@@ -1222,31 +1389,22 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
             <span>Dispatch Live Managed Agents</span>
           </label>
         </div>
-        <div style="display:flex; gap:10px; align-items:center;">
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <div id="postDispatchLinks" style="display:none; gap:8px; flex-wrap:wrap; align-items:center;">
+            <a id="followFieldNewsBtn" class="btn" href="/field-news">Follow in Field News →</a>
+            <a id="openReportsBtn" class="btn" href="/reports">Open Scouting Reports →</a>
+          </div>
           <button id="dispatchBtn" class="btn primary" type="button">Send Discovery Agents</button>
         </div>
-      </div>
-    </section>
-
-    <section class="card">
-      <div class="section-head">
-        <h2>3. Per-Agent Contract Outputs (<code>DiscoveryHandoff v1.0.0</code>)</h2>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <span id="batchStatusBadge" class="pill">No batch dispatched yet</span>
-          <a id="openTracesBtn" class="btn" href="/traces" style="display:none;">Track Live Traces →</a>
-        </div>
-      </div>
-      <div id="outputsContainer" class="worker-grid">
-        <div class="mono">Select sources above and click <strong>Send Discovery Agents</strong> to see each agent's contract output here.</div>
       </div>
     </section>
   </div>
 
   <script>
     let allSources = [];
+    let currentFiltered = [];
     const selectedIds = new Set();
-    let activeBatchId = null;
-    let pollTimer = null;
+    let isExpanded = false;
 
     const el = (id) => document.getElementById(id);
     function esc(s) {{ const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }}
@@ -1255,37 +1413,160 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       if (!msg) {{ b.style.display = 'none'; return; }}
       b.textContent = msg; b.className = 'banner ' + (kind || 'info'); b.style.display = 'block';
     }}
+    function formatLabel(val) {{
+      return String(val || '').replace(/_/g, ' ');
+    }}
+
+    function syncBatchLinks(batchId) {{
+      if (!batchId) return;
+      const q = `?batch=${{encodeURIComponent(batchId)}}`;
+      if (el('tracesNavLink')) el('tracesNavLink').href = `/field-news${{q}}`;
+      if (el('reportsNavLink')) el('reportsNavLink').href = `/reports${{q}}`;
+      if (el('followFieldNewsBtn')) el('followFieldNewsBtn').href = `/field-news${{q}}`;
+      if (el('openReportsBtn')) el('openReportsBtn').href = `/reports${{q}}`;
+      if (el('postDispatchLinks')) el('postDispatchLinks').style.display = 'inline-flex';
+    }}
+
+    function renderChannelChips() {{
+      const activeChannel = el('channelFilter').value;
+      const counts = new Map();
+      allSources.forEach((s) => {{
+        const ch = s.source_channel || 'other';
+        counts.set(ch, (counts.get(ch) || 0) + 1);
+      }});
+      const chips = [
+        `<button type="button" class="chip-btn ${{activeChannel === '' ? 'active' : ''}}" data-channel="">All (${{allSources.length}})</button>`,
+      ];
+      Array.from(counts.keys()).sort().forEach((ch) => {{
+        chips.push(
+          `<button type="button" class="chip-btn ${{activeChannel === ch ? 'active' : ''}}" data-channel="${{esc(ch)}}">${{esc(formatLabel(ch))}} (${{counts.get(ch)}})</button>`
+        );
+      }});
+      el('channelChips').innerHTML = chips.join('');
+      el('channelChips').querySelectorAll('.chip-btn').forEach((btn) => {{
+        btn.onclick = () => {{
+          el('channelFilter').value = btn.dataset.channel || '';
+          renderSources();
+        }};
+      }});
+    }}
+
+    function renderSelectedTray() {{
+      const tray = el('selectedTray');
+      if (!selectedIds.size) {{
+        tray.style.display = 'none';
+        tray.innerHTML = '';
+        return;
+      }}
+      const byId = new Map(allSources.map((s) => [s.source_id, s]));
+      const items = Array.from(selectedIds).map((id) => {{
+        const src = byId.get(id);
+        const name = src ? src.name : id;
+        return `<button type="button" class="sel-chip" data-remove-id="${{esc(id)}}" title="Remove source">${{esc(name)}} ×</button>`;
+      }});
+      tray.innerHTML = `<span style="font-weight:700; color:var(--muted);">Selected:</span>` + items.join('');
+      tray.style.display = 'flex';
+      tray.querySelectorAll('.sel-chip').forEach((btn) => {{
+        btn.onclick = () => {{
+          selectedIds.delete(btn.dataset.removeId);
+          renderSources();
+        }};
+      }});
+    }}
+
+    function resetFilters() {{
+      el('sourceSearchInput').value = '';
+      el('channelFilter').value = '';
+      el('cityFilter').value = '';
+      el('tierFilter').value = '';
+      el('genreFilter').value = '';
+      renderSources();
+    }}
 
     function renderSources() {{
+      const q = (el('sourceSearchInput').value || '').trim().toLowerCase();
       const ch = el('channelFilter').value;
       const city = el('cityFilter').value;
       const tier = el('tierFilter').value;
-      const filtered = allSources.filter((s) => {{
-        const sCity = (s.location && s.location.city) || 'Global';
+      const genre = el('genreFilter').value;
+
+      currentFiltered = allSources.filter((s) => {{
+        const loc = s.location || {{}};
+        const sCity = loc.city || 'Global';
+        const tags = Array.isArray(s.genre_tags) ? s.genre_tags : [];
         if (ch && s.source_channel !== ch) return false;
         if (city && sCity !== city) return false;
         if (tier && s.career_tier !== tier) return false;
+        if (genre && !tags.includes(genre)) return false;
+        if (q) {{
+          const hay = [
+            s.name,
+            s.why_useful,
+            s.notes,
+            s.source_channel,
+            sCity,
+            loc.area,
+            tags.join(' '),
+          ].filter(Boolean).join(' ').toLowerCase();
+          if (!hay.includes(q)) return false;
+        }}
         return true;
       }});
-      el('sourceGrid').innerHTML = filtered.map((s) => {{
+
+      renderChannelChips();
+      renderSelectedTray();
+
+      el('selectedBadge').textContent = `${{selectedIds.size}} selected`;
+      el('showingBadge').textContent = `${{currentFiltered.length}} / ${{allSources.length}} shown`;
+
+      if (!currentFiltered.length) {{
+        el('sourceGrid').innerHTML = `
+          <div style="grid-column: 1 / -1; padding: 36px 20px; text-align: center; color: var(--muted);">
+            <div style="font-weight:700; margin-bottom:8px;">No sources match the active filters.</div>
+            <button type="button" class="btn" id="resetFiltersBtn">Reset Filters</button>
+          </div>`;
+        if (el('resetFiltersBtn')) el('resetFiltersBtn').onclick = resetFilters;
+        return;
+      }}
+
+      el('sourceGrid').innerHTML = currentFiltered.map((s) => {{
         const isSel = selectedIds.has(s.source_id);
-        const sCity = (s.location && s.location.city) || 'Global';
+        const loc = s.location || {{}};
+        const sCity = loc.city || 'Global';
+        const locLabel = loc.area ? `${{loc.area}} · ${{sCity}}` : sCity;
         const statusCls = s.status === 'active' ? 'ok' : 'warn';
+        const tags = (Array.isArray(s.genre_tags) ? s.genre_tags : []).filter((g) => g && g !== 'all').slice(0, 5);
+        const tagsHtml = tags.length
+          ? `<div class="source-genres">${{tags.map((g) => `<span class="genre-tag">${{esc(g)}}</span>`).join('')}}</div>`
+          : '';
+        const noteHtml = s.notes ? `<div class="source-note">Note: ${{esc(s.notes)}}</div>` : '';
+        const extHtml = s.url
+          ? `<a class="source-ext" href="${{esc(s.url)}}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Open ↗</a>`
+          : '';
+
         return `
           <div class="source-item ${{isSel ? 'selected' : ''}}" data-id="${{esc(s.source_id)}}">
             <div class="source-title">
-              <span>${{isSel ? '☑ ' : '☐ '}}${{esc(s.name)}}</span>
-              <span class="pill ${{statusCls}}">${{esc(s.status)}}</span>
+              <span style="display:flex; align-items:flex-start; gap:9px;">
+                <span class="source-check">${{isSel ? '✓' : ''}}</span>
+                <span>${{esc(s.name)}}</span>
+              </span>
+              <span style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+                ${{extHtml}}
+                <span class="pill ${{statusCls}}">${{esc(s.status)}}</span>
+              </span>
             </div>
-            <div style="display:flex; gap:5px; flex-wrap:wrap;">
-              <span class="pill blue">${{esc(s.source_channel)}}</span>
-              <span class="pill">${{esc(sCity)}}</span>
-              <span class="pill">${{esc(s.career_tier)}}</span>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <span class="pill blue">${{esc(formatLabel(s.source_channel))}}</span>
+              <span class="pill">${{esc(locLabel)}}</span>
+              <span class="pill">${{esc(formatLabel(s.career_tier))}}</span>
             </div>
             <div class="source-why">${{esc(s.why_useful)}}</div>
+            ${{noteHtml}}
+            ${{tagsHtml}}
           </div>`;
       }}).join('');
-      el('selectedBadge').textContent = `${{selectedIds.size}} selected`;
+
       document.querySelectorAll('.source-item').forEach((node) => {{
         node.onclick = () => {{
           const id = node.dataset.id;
@@ -1297,91 +1578,17 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       }});
     }}
 
-    function statusPill(status) {{
-      if (status === 'completed') return '<span class="pill ok">completed</span>';
-      if (status === 'in_progress' || status === 'running' || status === 'queued') return '<span class="pill amber">' + esc(status) + '</span>';
-      return '<span class="pill warn">' + esc(status || 'unknown') + '</span>';
-    }}
-
-    function renderBatch(batch) {{
-      if (!batch) return;
-      activeBatchId = batch.batch_id;
-      const workers = batch.workers || [];
-      const done = workers.filter((w) => w.status === 'completed').length;
-      el('batchStatusBadge').textContent = `${{batch.batch_id}} · ${{batch.mode}} · ${{done}}/${{workers.length}} completed`;
-      el('openTracesBtn').href = `/traces?batch=${{encodeURIComponent(batch.batch_id)}}`;
-      el('openTracesBtn').style.display = 'inline-block';
-      el('tracesNavLink').href = `/field-news?batch=${{encodeURIComponent(batch.batch_id)}}`;
-      if (el('reportsNavLink')) el('reportsNavLink').href = `/reports?batch=${{encodeURIComponent(batch.batch_id)}}`;
-
-      el('outputsContainer').innerHTML = workers.map((w) => {{
-        const handoff = w.output_json;
-        const leads = (handoff && Array.isArray(handoff.leads)) ? handoff.leads : [];
-        const contractBadge = w.contract_valid === true
-          ? '<span class="pill ok">Contract v1.0.0 VALID</span>'
-          : (w.contract_valid === false
-              ? '<span class="pill warn">Contract Errors</span>'
-              : '<span class="pill">Awaiting Output…</span>');
-        const sourcesHtml = (w.assigned_sources || []).map((s) => `<span class="pill blue">${{esc(s.name)}}</span>`).join(' ');
-        const leadsHtml = leads.length ? leads.map((l) => `
-          <div class="lead-box">
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-              <strong>${{esc(l.stage_name)}}</strong>
-              <span class="pill ${{l.attribution_status === 'verified' ? 'ok' : 'amber'}}">${{esc(l.attribution_status || 'uncertain')}}</span>
-            </div>
-            <div style="font-size:0.82rem; color:var(--muted); margin:4px 0 6px;">${{esc(l.context_snippet || 'No snippet')}}</div>
-            <div style="display:flex; flex-direction:column; gap:4px;">
-              ${{(l.seed_sources || []).map((ss) => `<a class="mono" href="${{esc(ss.url)}}" target="_blank" rel="noopener">↗ [${{esc(ss.source_channel)}}] ${{esc(ss.url)}}</a>`).join('')}}
-            </div>
-          </div>`).join('') : (w.error ? `<div class="pill warn">${{esc(w.error)}}</div>` : '<div class="mono">Agent working… open Traces to inspect live steps.</div>');
-
-        return `
-          <div class="worker-card">
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-              <strong>${{esc(w.worker_id)}}</strong>
-              <div style="display:flex; gap:6px;">${{statusPill(w.status)}} ${{contractBadge}}</div>
-            </div>
-            <div class="mono">interaction: ${{esc(w.interaction_id || 'pending')}} · ${{w.duration_ms || 0}}ms</div>
-            <div style="display:flex; gap:5px; flex-wrap:wrap;">${{sourcesHtml}}</div>
-            <div style="display:flex; flex-direction:column; gap:8px;">${{leadsHtml}}</div>
-            <div style="margin-top:auto; padding-top:6px; display:flex; gap:12px; flex-wrap:wrap;">
-              <a href="/field-news?batch=${{encodeURIComponent(batch.batch_id)}}">Follow Field News →</a>
-              <a href="/reports?batch=${{encodeURIComponent(batch.batch_id)}}">View Scouting Report →</a>
-            </div>
-          </div>`;
-      }}).join('');
-
-      const anyRunning = workers.some((w) => !['completed', 'failed', 'error', 'cancelled', 'timeout'].includes(w.status));
-      if (anyRunning && !pollTimer) {{
-        pollTimer = true;
-        (async () => {{
-          let lastSteps = batch.total_steps || workers.reduce((acc, w) => acc + ((w.steps || []).length), 0);
-          while (pollTimer && activeBatchId === batch.batch_id) {{
-            try {{
-              const res = await fetch(`/api/discovery/batches/${{encodeURIComponent(activeBatchId)}}?wait=1&since_steps=${{lastSteps}}&timeout=15`);
-              if (!res.ok) break;
-              const updated = await res.json();
-              lastSteps = updated.total_steps || (updated.workers || []).reduce((acc, w) => acc + ((w.steps || []).length), 0);
-              renderBatch(updated);
-              const stillRunning = (updated.workers || []).some((w) => !['completed', 'failed', 'error', 'cancelled', 'timeout'].includes(w.status));
-              if (!stillRunning) {{ pollTimer = null; break; }}
-            }} catch (_e) {{
-              await new Promise((r) => setTimeout(r, 2000));
-            }}
-          }}
-        }})();
-      }} else if (!anyRunning) {{
-        pollTimer = null;
-      }}
-    }}
-
     async function init() {{
       const res = await fetch('/api/sources');
       const data = await res.json();
       allSources = data.sources || [];
-      (data.channels || []).forEach((c) => el('channelFilter').add(new Option(c, c)));
+      (data.channels || []).forEach((c) => el('channelFilter').add(new Option(formatLabel(c), c)));
       (data.cities || []).forEach((c) => el('cityFilter').add(new Option(c, c)));
-      (data.tiers || []).forEach((t) => el('tierFilter').add(new Option(t, t)));
+      (data.tiers || []).forEach((t) => el('tierFilter').add(new Option(formatLabel(t), t)));
+      const genres = (data.genres && data.genres.length)
+        ? data.genres
+        : Array.from(new Set(allSources.flatMap((s) => Array.isArray(s.genre_tags) ? s.genre_tags : []).filter((g) => g && g !== 'all'))).sort();
+      genres.forEach((g) => el('genreFilter').add(new Option(g, g)));
       // Default quick selection: 3 active diverse sources
       ['yt_sofar_sounds', 'nyc_babys_all_right', 'bc_brooklyn_soul_rnb'].forEach((id) => {{
         if (allSources.some((s) => s.source_id === id)) selectedIds.add(id);
@@ -1389,18 +1596,17 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       el('agentCountInput').value = Math.max(1, selectedIds.size);
       renderSources();
 
-      // Load most recent batch if any
       const bRes = await fetch('/api/discovery/batches');
       if (bRes.ok) {{
         const bData = await bRes.json();
         if (bData.batches && bData.batches.length) {{
-          const detail = await fetch(`/api/discovery/batches/${{encodeURIComponent(bData.batches[0].batch_id)}}`);
-          if (detail.ok) renderBatch(await detail.json());
+          syncBatchLinks(bData.batches[0].batch_id);
         }}
       }}
     }}
 
-    ['channelFilter', 'cityFilter', 'tierFilter'].forEach((id) => el(id).onchange = renderSources);
+    el('sourceSearchInput').oninput = renderSources;
+    ['channelFilter', 'cityFilter', 'tierFilter', 'genreFilter'].forEach((id) => el(id).onchange = renderSources);
     el('selectQuickBtn').onclick = () => {{
       selectedIds.clear();
       allSources.filter((s) => s.status === 'active' && (s.location && s.location.city === 'New York')).slice(0, 3)
@@ -1408,7 +1614,17 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       el('agentCountInput').value = Math.max(1, selectedIds.size);
       renderSources();
     }};
+    el('selectFilteredBtn').onclick = () => {{
+      currentFiltered.forEach((s) => selectedIds.add(s.source_id));
+      if (selectedIds.size > 0) el('agentCountInput').value = Math.min(selectedIds.size, 10);
+      renderSources();
+    }};
     el('clearSelBtn').onclick = () => {{ selectedIds.clear(); renderSources(); }};
+    el('toggleExpandBtn').onclick = () => {{
+      isExpanded = !isExpanded;
+      el('sourceGrid').classList.toggle('expanded', isExpanded);
+      el('toggleExpandBtn').textContent = isExpanded ? 'Collapse List' : 'Expand Full List';
+    }};
 
     el('dispatchBtn').onclick = async () => {{
       if (selectedIds.size === 0) {{ showBanner('Select at least one source first.', 'err'); return; }}
@@ -1428,8 +1644,8 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
         }});
         const payload = await res.json();
         if (!res.ok) throw new Error(payload.error || 'Dispatch failed');
-        showBanner(`Dispatched ${{payload.agent_count}} agent(s) in ${{payload.mode}} mode (${{payload.batch_id}}).`, 'info');
-        renderBatch(payload);
+        showBanner(`Dispatched ${{payload.agent_count}} agent(s) in ${{payload.mode}} mode (${{payload.batch_id}}). Track live progress in Field News.`, 'info');
+        syncBatchLinks(payload.batch_id);
       }} catch (err) {{
         showBanner(err.message, 'err');
       }} finally {{
