@@ -19,7 +19,7 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 | **[data/](./data/README.md)** | Data & Schemas | Manifest schemas, evaluation datasets (paired with `examples/` fixtures and gitignored `local/`) |
 | **[ideas/](./ideas/README.md)** | Ideas & Verticals | Product riffing, discovery sources, future verticals, and pitch framing |
 | **[tests/](./tests/)** | Verification | Unit tests, fixture smoke tests, and agent evaluation harnesses |
-| **[.agents/](./.agents/)** | Repo Agent Ops | Antigravity skills (`project-manager`, `process-observer`, `main-sync`, `knowledge-governance`, `managed-agents-curator`) & hooks |
+| **[.agents/](./.agents/)** | Repo Agent Ops | Antigravity skills (`plain-english`, `project-manager`, `process-observer`, `main-sync`, `knowledge-governance`, `managed-agents-curator`) & hooks |
 
 ---
 
@@ -34,6 +34,7 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 *Working memory (LRU pointer cache, max 12, most recent first). Maintained by the `project-manager` skill/subagent.*
 
 - 2026-11-21 · taste-brief youtube mvp · shipped 3-unit YouTube vocal scout MVP, SQLite store, web studio & Wispr alignment → `simon/`, `agents/`, `data/`, `pm/`
+- 2026-11-21 · plain-english alignment · added STE-100/Zinsser skill, global rule, and adaptive execution gate → `.agents/skills/plain-english/`, `pm/`
 - 2026-11-21 · managed-agents pipeline · added workforce packaging, deploy pipeline, and cron/webhook trigger blueprint → `notes/managed-agents/`, `pm/`
 - 2026-11-21 · process-observer · added process-observer skill, inspect_sessions.py telemetry, and non-binary pm/process/ records → `.agents/skills/process-observer/`, `pm/process/`
 - 2026-11-21 · dspy & decisions api · prototyped Part 1 Decisions+DSPy 3.5 triage, 4-table DB & Excalidraw arch → `pm/`, `RESOURCES.md`

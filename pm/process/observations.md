@@ -41,3 +41,10 @@
 - **Evidence**: Across 9 conversations, agents organically read `repo:project-manager` (`7×`), `builtin:agy-customizations` (`4×`), `builtin:antigravity_guide` (`4×`), `repo:main-sync` (`3×`), `plugin:gemini-api-cli` (`2×`), `plugin:gemini-api-dev` (`2×`), `repo:knowledge-governance` (`1×`), and `repo:managed-agents-curator` (`1×`), paired with `6×` `SessionStart` context injections.
 - **Operating Spectrum**:
   - *Where it helps*: Progressive disclosure via `SessionStart` (`PROJECT.md`) + crisp `SKILL.md` frontmatter descriptions is working as intended — every root window and Steward subagent discovered and followed the governance loop without context bloat.
+
+### `OBS-2026-11-21-06` · Worktree Branch Push Refspec in `sync_main.py --docs-only`
+- **Facets**: `parallel-concurrency`, `subagent-orchestration`, `hook-ergonomics`
+- **Evidence**: Inside git worktree branch `content_alignment_skill_rule` (`b2a966c3` / Steward `5673c610`), `sync_main.py --docs-only` pulls and rebases `HEAD` onto `origin/main` cleanly, so pushing `HEAD:main` (`git push origin HEAD:main`) is required when the local worktree branch is not named `main`.
+- **Operating Spectrum**:
+  - *Where it helps*: Isolated git worktrees eliminate concurrent `edit_file` target drift and shared working-tree collisions across parallel windows.
+  - *Where it drags*: If `sync_main.py --docs-only` pushes `origin main` rather than `origin HEAD:main` when running on a non-`main` worktree branch, `origin/main` does not advance until `git push origin HEAD:main` runs explicitly.
