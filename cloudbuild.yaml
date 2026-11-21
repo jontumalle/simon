@@ -1,0 +1,58 @@
+# Google Cloud Build CI/CD for the Simon platform (Cloud Run + Firestore)
+#
+# Run manually:
+#   gcloud builds submit --config=cloudbuild.yaml
+#
+# Or connect to GitHub (jontumalle/simon) in Cloud Build -> Triggers:
+#   - Trigger 1 (main):  _SERVICE_NAME=simon-staging, _AGENT_PREFIX=staging-
+#   - Trigger 2 (prod):  _SERVICE_NAME=simon-prod,    _AGENT_PREFIX=prod-
+
+substitutions:
+  _REGION: us-east1
+  _REPO: simon
+  _SERVICE_NAME: simon-staging
+  _AGENT_PREFIX: staging-
+  _STORE_BACKEND: firestore
+
+steps:
+  - name: "python:3.12-slim"
+    id: "unit-tests"
+    entrypoint: "python3"
+    args: ["-m", "unittest", "discover", "-s", "tests"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: "build-image"
+    args:
+      - "build"
+      - "-t"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/simon-platform:$SHORT_SHA"
+      - "-t"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/simon-platform:latest"
+      - "."
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push-image"
+    args:
+      - "push"
+      - "--all-tags"
+      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/simon-platform"
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+    id: "deploy-cloud-run"
+    entrypoint: "gcloud"
+    args:
+      - "run"
+      - "deploy"
+      - "${_SERVICE_NAME}"
+      - "--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/simon-platform:$SHORT_SHA"
+      - "--region=${_REGION}"
+      - "--platform=managed"
+      - "--allow-unauthenticated"
+      - "--port=8080"
+      - "--min-instances=0"
+      - "--max-instances=3"
+      - "--set-env-vars=SIMON_STORE_BACKEND=${_STORE_BACKEND},GOOGLE_CLOUD_PROJECT=$PROJECT_ID,SIMON_AGENT_PREFIX=${_AGENT_PREFIX}"
+
+images:
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/simon-platform:$SHORT_SHA"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/simon-platform:latest"
