@@ -1,0 +1,606 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://simon.local/schemas/screening_contract.json",
+  "title": "Simon Stage 3 (Adversarial Screening & Judging Policy) Data Contract",
+  "description": "Shared boundary contract for Simon's Stage 3 Screening Layer: adversarial Advocate/Skeptic/Judge ScreeningPacket (v1.0.0 on gemini-4-neon), human-in-the-loop ScreeningLabel feedback records, and calibrated JudgingModelPolicy specs targeting gemini-decision-1.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "screening_packet": {
+      "$ref": "#/$defs/ScreeningPacket"
+    },
+    "screening_batch": {
+      "$ref": "#/$defs/ScreeningBatch"
+    },
+    "screening_label": {
+      "$ref": "#/$defs/ScreeningLabel"
+    },
+    "judging_model_policy": {
+      "$ref": "#/$defs/JudgingModelPolicy"
+    }
+  },
+  "$defs": {
+    "SourceDiscoveryEntry": {
+      "type": "object",
+      "description": "High-signal source logged to the shared Source Discovery Log for reuse across Discovery and Investigator agents.",
+      "required": ["url", "source_channel", "why_useful"],
+      "additionalProperties": false,
+      "properties": {
+        "url": { "type": "string", "format": "uri" },
+        "source_channel": {
+          "type": "string",
+          "enum": [
+            "youtube_live_session",
+            "diy_venue_calendar",
+            "diy_venue_flyer_ocr",
+            "bandcamp_local_arrival",
+            "open_mic_lineup",
+            "bgv_or_session_credit_graph",
+            "musicbrainz",
+            "event_listing",
+            "other"
+          ]
+        },
+        "title_or_node": { "type": ["string", "null"] },
+        "why_useful": { "type": "string" },
+        "discovered_by": {
+          "type": "string",
+          "enum": ["stage_1_discovery", "stage_2_investigator"]
+        }
+      }
+    },
+    "MediaLink": {
+      "type": "object",
+      "description": "Queued public media link checked via metadata/oEmbed (zero audio/video decoding required in v1).",
+      "required": ["url", "title", "oembed_live_embeddable"],
+      "additionalProperties": false,
+      "properties": {
+        "url": { "type": "string", "format": "uri" },
+        "title": { "type": "string" },
+        "uploader_channel": { "type": ["string", "null"] },
+        "duration_seconds": { "type": ["integer", "null"], "minimum": 0 },
+        "oembed_live_embeddable": { "type": "boolean" }
+      }
+    },
+    "ShowRecord": {
+      "type": "object",
+      "required": ["venue", "city", "date"],
+      "additionalProperties": false,
+      "properties": {
+        "venue": { "type": "string" },
+        "city": { "type": "string" },
+        "date": { "type": "string" },
+        "billing_slot": {
+          "type": ["string", "null"],
+          "enum": ["headliner", "direct_support", "opener", "showcase", "open_mic", "festival", "unknown", null]
+        },
+        "source_url": { "type": ["string", "null"], "format": "uri" }
+      }
+    },
+    "NotableCommenter": {
+      "type": "object",
+      "required": ["handle", "role_or_context"],
+      "additionalProperties": false,
+      "properties": {
+        "handle": { "type": "string" },
+        "channel_url": { "type": ["string", "null"], "format": "uri" },
+        "role_or_context": { "type": "string" },
+        "comment_excerpt": { "type": ["string", "null"] }
+      }
+    },
+    "CollaboratorCredit": {
+      "type": "object",
+      "required": ["name", "role"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "source_url": { "type": ["string", "null"], "format": "uri" }
+      }
+    },
+    "ProcessStepTrace": {
+      "type": "object",
+      "description": "Verifiable execution log entry used by Stage 2 process evals to confirm the agent ran each required step.",
+      "required": ["step", "tool", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "step": { "type": "string" },
+        "tool": { "type": "string" },
+        "status": { "type": "string", "enum": ["ok", "empty", "skipped", "error"] },
+        "evidence_urls": {
+          "type": "array",
+          "default": [],
+          "items": { "type": "string", "format": "uri" }
+        },
+        "notes": { "type": ["string", "null"] }
+      }
+    },
+    "InvestigatorDossier": {
+      "type": "object",
+      "description": "Stage 2 Investigator output for one subject: 22 feasible, objective factual datapoints across 5 groups, plus process trace. Zero ranking or scoring.",
+      "required": [
+        "lead_id",
+        "identity_and_contact",
+        "source_and_media_queue",
+        "public_footprint",
+        "comment_forensics",
+        "live_history_and_credits",
+        "process_trace"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "lead_id": { "type": "string", "minLength": 1 },
+        "identity_and_contact": {
+          "type": "object",
+          "required": [
+            "stage_name",
+            "aliases",
+            "pronouns",
+            "project_type",
+            "home_city",
+            "home_neighborhood",
+            "platform_urls",
+            "musicbrainz_mbid",
+            "has_public_business_contact",
+            "contact_route_type"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "stage_name": { "type": "string", "minLength": 1 },
+            "aliases": { "type": "array", "items": { "type": "string" } },
+            "pronouns": { "type": ["string", "null"] },
+            "project_type": {
+              "type": "string",
+              "enum": ["solo_vocalist", "duo", "band", "collective", "unknown"]
+            },
+            "home_city": { "type": ["string", "null"] },
+            "home_neighborhood": { "type": ["string", "null"] },
+            "platform_urls": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "youtube": { "type": ["string", "null"], "format": "uri" },
+                "instagram": { "type": ["string", "null"], "format": "uri" },
+                "tiktok": { "type": ["string", "null"], "format": "uri" },
+                "spotify": { "type": ["string", "null"], "format": "uri" },
+                "apple_music": { "type": ["string", "null"], "format": "uri" },
+                "soundcloud": { "type": ["string", "null"], "format": "uri" },
+                "bandcamp": { "type": ["string", "null"], "format": "uri" },
+                "linktree": { "type": ["string", "null"], "format": "uri" }
+              }
+            },
+            "musicbrainz_mbid": { "type": ["string", "null"] },
+            "has_public_business_contact": { "type": "boolean" },
+            "contact_route_type": {
+              "type": "string",
+              "enum": ["bio_email", "mgmt_email", "open_dm", "none"]
+            }
+          }
+        },
+        "source_and_media_queue": {
+          "type": "object",
+          "required": [
+            "source_channel",
+            "seed_source_url",
+            "attribution_status",
+            "bio_text",
+            "primary_genre",
+            "subgenres",
+            "media_links"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "source_channel": { "type": "string" },
+            "seed_source_url": { "type": "string", "format": "uri" },
+            "attribution_status": { "type": "string", "enum": ["verified", "uncertain"] },
+            "bio_text": { "type": ["string", "null"] },
+            "primary_genre": { "type": ["string", "null"] },
+            "subgenres": { "type": "array", "items": { "type": "string" } },
+            "media_links": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/MediaLink" }
+            }
+          }
+        },
+        "public_footprint": {
+          "type": "object",
+          "required": ["footprint_regime", "public_reach", "top_release_view_share_pct"],
+          "additionalProperties": false,
+          "properties": {
+            "footprint_regime": {
+              "type": "string",
+              "enum": ["pre_dsp_underground", "early_dsp_inflection", "established_streaming", "unknown"]
+            },
+            "public_reach": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "youtube_subscribers": { "type": ["integer", "null"], "minimum": 0 },
+                "top_video_views": { "type": ["integer", "null"], "minimum": 0 },
+                "bandcamp_releases_count": { "type": ["integer", "null"], "minimum": 0 },
+                "bandcamp_supporters_count": { "type": ["integer", "null"], "minimum": 0 },
+                "released_tracks_count": { "type": ["integer", "null"], "minimum": 0 }
+              }
+            },
+            "top_release_view_share_pct": {
+              "type": ["number", "null"],
+              "minimum": 0,
+              "maximum": 100
+            }
+          }
+        },
+        "comment_forensics": {
+          "type": "object",
+          "required": ["comment_intent_counts", "notable_commenters"],
+          "additionalProperties": false,
+          "properties": {
+            "comment_intent_counts": {
+              "type": "object",
+              "required": [
+                "sample_size",
+                "release_requests",
+                "live_show_requests",
+                "genuine_praise",
+                "jokes_or_spam"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "sample_size": { "type": "integer", "minimum": 0 },
+                "release_requests": { "type": "integer", "minimum": 0 },
+                "live_show_requests": { "type": "integer", "minimum": 0 },
+                "genuine_praise": { "type": "integer", "minimum": 0 },
+                "jokes_or_spam": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "notable_commenters": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/NotableCommenter" }
+            }
+          }
+        },
+        "live_history_and_credits": {
+          "type": "object",
+          "required": [
+            "show_history",
+            "upcoming_shows",
+            "highest_venue_cap_observed",
+            "public_team_mentions",
+            "collaborator_credits"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "show_history": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/ShowRecord" }
+            },
+            "upcoming_shows": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/ShowRecord" }
+            },
+            "highest_venue_cap_observed": {
+              "type": ["integer", "null"],
+              "minimum": 0
+            },
+            "public_team_mentions": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "management": { "type": ["string", "null"] },
+                "booking_agent": { "type": ["string", "null"] },
+                "label": { "type": ["string", "null"] },
+                "distributor": { "type": ["string", "null"] }
+              }
+            },
+            "collaborator_credits": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/CollaboratorCredit" }
+            }
+          }
+        },
+        "process_trace": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/ProcessStepTrace" }
+        },
+        "newly_discovered_sources": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/SourceDiscoveryEntry" }
+        },
+        "missing_fields": {
+          "type": "array",
+          "default": [],
+          "description": "Fields explicitly checked by tools that had no public data available.",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "CaseEvidenceItem": {
+      "type": "object",
+      "description": "Grounded pro or con argument linked to one of the 5 shared dossier input skills.",
+      "required": ["skill", "title", "evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "skill": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "AdvocateCase": {
+      "type": "object",
+      "description": "Adversarial Advocate steelman case highlighting concrete upside in the dossier.",
+      "required": ["headline", "pros", "standout_hook"],
+      "additionalProperties": false,
+      "properties": {
+        "headline": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pros": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CaseEvidenceItem" }
+        },
+        "standout_hook": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "SkepticCase": {
+      "type": "object",
+      "description": "Adversarial Skeptic stress-test surfacing concentration risks, attribution/reachability friction, missing evidence flags, and dealbreaker checks.",
+      "required": ["headline", "cons", "missing_evidence_flags", "dealbreakers_checked"],
+      "additionalProperties": false,
+      "properties": {
+        "headline": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cons": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CaseEvidenceItem" }
+        },
+        "missing_evidence_flags": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "dealbreakers_checked": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "RubricScoreEntry": {
+      "type": "object",
+      "required": ["score", "max_score", "skill", "note"],
+      "additionalProperties": false,
+      "properties": {
+        "score": {
+          "type": "integer",
+          "enum": [0, 1, 2]
+        },
+        "max_score": {
+          "type": "integer",
+          "const": 2
+        },
+        "skill": {
+          "type": "string",
+          "minLength": 1
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "RubricScores": {
+      "type": "object",
+      "description": "Exact 5-criterion rubric breakdown summing to total_score (0..10).",
+      "required": [
+        "identity_reachability",
+        "live_vocal_proof",
+        "early_window_depth",
+        "listener_pull_cosigns",
+        "stage_momentum_whitespace"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "identity_reachability": { "$ref": "#/$defs/RubricScoreEntry" },
+        "live_vocal_proof": { "$ref": "#/$defs/RubricScoreEntry" },
+        "early_window_depth": { "$ref": "#/$defs/RubricScoreEntry" },
+        "listener_pull_cosigns": { "$ref": "#/$defs/RubricScoreEntry" },
+        "stage_momentum_whitespace": { "$ref": "#/$defs/RubricScoreEntry" }
+      }
+    },
+    "JudgeDecision": {
+      "type": "object",
+      "description": "Calibrated Stage 3 Judge synthesis over Advocate and Skeptic cases.",
+      "required": [
+        "verdict",
+        "total_score",
+        "max_score",
+        "confidence",
+        "rationale",
+        "rubric_scores"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": ["elevate", "watch", "pass"]
+        },
+        "total_score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "max_score": {
+          "type": "integer",
+          "const": 10
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rubric_scores": {
+          "$ref": "#/$defs/RubricScores"
+        }
+      }
+    },
+    "ScreeningPacket": {
+      "type": "object",
+      "description": "Stage 3 Screening output packet combining the immutable Stage 2 dossier snapshot, Advocate case, Skeptic case, and calibrated Judge decision.",
+      "required": [
+        "packet_id",
+        "contract_version",
+        "run_id",
+        "lead_id",
+        "stage_name",
+        "screened_at",
+        "screening_model",
+        "dossier_snapshot",
+        "advocate_case",
+        "skeptic_case",
+        "judge_decision"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "packet_id": { "type": "string", "minLength": 1 },
+        "contract_version": { "type": "string", "const": "1.0.0" },
+        "run_id": { "type": "string", "minLength": 1 },
+        "lead_id": { "type": "string", "minLength": 1 },
+        "stage_name": { "type": "string", "minLength": 1 },
+        "screened_at": { "type": "string", "format": "date-time" },
+        "screening_model": { "type": "string", "const": "gemini-4-neon" },
+        "dossier_snapshot": { "$ref": "#/$defs/InvestigatorDossier" },
+        "advocate_case": { "$ref": "#/$defs/AdvocateCase" },
+        "skeptic_case": { "$ref": "#/$defs/SkepticCase" },
+        "judge_decision": { "$ref": "#/$defs/JudgeDecision" }
+      }
+    },
+    "ScreeningBatch": {
+      "type": "object",
+      "description": "Batch wrapper of Stage 3 ScreeningPacket v1.0.0 records.",
+      "required": ["contract_version", "run_id", "screened_at", "packets"],
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": { "type": "string", "const": "1.0.0" },
+        "run_id": { "type": "string", "minLength": 1 },
+        "screened_at": { "type": "string", "format": "date-time" },
+        "packets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ScreeningPacket" }
+        }
+      }
+    },
+    "ScreeningLabel": {
+      "type": "object",
+      "description": "Human A&R swipe/review label recorded against a ScreeningPacket to train and evaluate JudgingModelPolicy.",
+      "required": [
+        "label_id",
+        "packet_id",
+        "lead_id",
+        "stage_name",
+        "model_verdict",
+        "model_total_score",
+        "human_verdict",
+        "agreed_with_model",
+        "reason",
+        "labeled_at",
+        "training_features"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "label_id": { "type": "string", "minLength": 1 },
+        "packet_id": { "type": "string", "minLength": 1 },
+        "lead_id": { "type": "string", "minLength": 1 },
+        "stage_name": { "type": "string", "minLength": 1 },
+        "model_verdict": {
+          "type": "string",
+          "enum": ["elevate", "watch", "pass"]
+        },
+        "model_total_score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "human_verdict": {
+          "type": "string",
+          "enum": ["elevate", "watch", "pass"]
+        },
+        "agreed_with_model": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "labeled_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "training_features": {
+          "type": "object"
+        }
+      }
+    },
+    "JudgingModelPolicy": {
+      "type": "object",
+      "description": "Versioned calibrated judging policy targeting gemini-decision-1 optimized from human ScreeningLabel feedback.",
+      "required": [
+        "policy_id",
+        "version",
+        "target_model",
+        "optimizer",
+        "questions_config",
+        "demos",
+        "train_count",
+        "val_accuracy",
+        "is_active",
+        "created_at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "policy_id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "target_model": { "type": "string", "const": "gemini-decision-1" },
+        "optimizer": { "type": "string", "minLength": 1 },
+        "questions_config": {
+          "type": ["object", "array"]
+        },
+        "demos": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "train_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "val_accuracy": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "is_active": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}
