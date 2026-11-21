@@ -30,6 +30,7 @@ Always follow [`.agents/skills/main-sync/SKILL.md`](./.agents/skills/main-sync/S
 - **Track B · Code Sync (`--code`, Always on Feature Branches → PR to `main`)**:
   - Runtime code and tests (`simon/**`, `tests/**`, `examples/**`) **never** commit directly to `main` and **never** ride along in Steward doc syncs.
   - Follow [governance/git-flow.md](./governance/git-flow.md): run every code/test task on a feature branch (`intake/<slug>`, `decision/<slug>`, `outcome/<slug>`, `feat/<slug>`, `fix/<slug>`) via `python3 .agents/scripts/sync_main.py --code --branch <domain>/<slug> --paths <files...> -m "feat(intake): ..."`, then open a PR to `main` (`gh pr create`).
+  - **Auto-Merge PRs Without Asking:** Once tests and PR checks pass, merge the PR into `main` immediately (`gh pr merge <num> --squash`). Do **not** ask the user for permission to merge.
 
 ## 4. Background Project Manager (Steward) — Every Chat Window
 - In **every chat window**, whenever documents, research, artifacts, plans, architectural findings, decisions, or code milestones are produced, launch a **background `Project Manager (Steward)` subagent** (`invoke_subagent` following `.agents/skills/project-manager/SKILL.md` + `.agents/skills/main-sync/SKILL.md`) to:
