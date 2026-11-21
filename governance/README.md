@@ -7,6 +7,7 @@ flowchart LR
     GOV["governance/\nDurable Charters"] --> GIT["git-flow.md\nmain + Feature Branches"]
     GOV --> DOM["pipeline-domains.md\nIntake · Decision · Outcome"]
     GOV --> LIFE["agent-lifecycle.md\nCreate · Deploy · Invoke · Observe"]
+    GOV --> DESIGN["agent-design.md\nTools · Mounts · Network · Config"]
     GOV --> SAFE["agent-ops-and-safety.md\nManaged Agents & Safety"]
     GOV --> STEW["knowledge-and-stewardship.md\nKnowledge Model & Agents"]
 ```
@@ -20,5 +21,6 @@ flowchart LR
 | **[git-flow.md](./git-flow.md)** | `main` + feature branches for every code task (`intake/*`, `decision/*`, `outcome/*`), with direct `main` doc sync |
 | **[pipeline-domains.md](./pipeline-domains.md)** | Ownership and contracts across **Intake (Scouting)**, **Decision Engine**, and **Outcome (TBD)** |
 | **[agent-lifecycle.md](./agent-lifecycle.md)** | End-to-end Managed Agent **Create → Deploy (CI/CD) → Invoke/Scale (Fleet) → Observe** charter |
+| **[agent-design.md](./agent-design.md)** | Reference guide for agent tools (`code_execution`, `mcp_server`, `function`), mounts, zero-trust secrets, and model config |
 | **[agent-ops-and-safety.md](./agent-ops-and-safety.md)** | Managed Agent ID prefixes, zero-trust sandboxes, artist PII protection, and human-approval gates |
 | **[knowledge-and-stewardship.md](./knowledge-and-stewardship.md)** | Bucket boundaries, Steward (`project-manager`), and System Improver (`process-observer`) |
