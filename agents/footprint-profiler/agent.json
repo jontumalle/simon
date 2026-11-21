@@ -1,9 +1,11 @@
 {
   "id": "simon-footprint-profiler",
+  "description": "Stage 2 Phase B parallel agent: inventories zero-decode oEmbed media links and computes public reach, concentration share, and footprint regime in Python.",
   "base_agent": "antigravity-preview-09-2026",
   "agent_config": {
     "type": "antigravity",
-    "model": "gemini-4-hydrogen"
+    "model": "gemini-4-hydrogen",
+    "max_total_tokens": "64000"
   },
   "system_instruction_file": "SYSTEM.md",
   "tools": [
@@ -11,6 +13,9 @@
     {"type": "code_execution"}
   ],
   "base_environment": {
-    "type": "remote"
+    "type": "remote",
+    "env": {
+      "SIMON_DOMAIN": "music"
+    }
   }
 }
