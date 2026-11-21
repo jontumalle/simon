@@ -261,6 +261,89 @@ def parse_jsonld_music_events(raw_html: str, source_url: str) -> List[Dict[str, 
     return shows
 
 
+def fetch_youtube_comments_keyless(
+    watch_url: str,
+    text_fetcher: TextFetcher = default_text_fetcher,
+    max_comments: int = 50,
+    timeout: float = 10.0,
+) -> List[Dict[str, Any]]:
+    """Fetch public YouTube comments without an API key via YouTube's public innertube endpoint."""
+    raw_html = text_fetcher(watch_url)
+    if not raw_html:
+        return []
+    key_match = re.search(r'"INNERTUBE_API_KEY"\s*:\s*"([^"]+)"', raw_html)
+    tokens = re.findall(r'"continuationCommand"\s*:\s*\{\s*"token"\s*:\s*"([^"]+)"', raw_html)
+    if not key_match or not tokens:
+        return []
+
+    api_key = key_match.group(1)
+    # Comment continuation tokens are compact (<400 chars); try them first
+    candidate_tokens = [t for t in tokens if len(t) < 400] + [t for t in tokens if len(t) >= 400]
+
+    for token in candidate_tokens[:4]:
+        payload = json.dumps(
+            {
+                "context": {
+                    "client": {
+                        "clientName": "WEB",
+                        "clientVersion": "2.20241101.00.00",
+                        "hl": "en",
+                        "gl": "US",
+                    }
+                },
+                "continuation": token,
+            }
+        ).encode("utf-8")
+        req = Request(
+            f"https://www.youtube.com/youtubei/v1/next?key={quote(api_key)}",
+            data=payload,
+            headers={
+                "User-Agent": USER_AGENT,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+        except (HTTPError, URLError, TimeoutError, ValueError, json.JSONDecodeError):
+            continue
+
+        comments: List[Dict[str, Any]] = []
+        mutations = (
+            (data.get("frameworkUpdates") or {})
+            .get("entityBatchUpdate", {})
+            .get("mutations")
+            or []
+        )
+        for mut in mutations:
+            entity = (mut.get("payload") or {}).get("commentEntityPayload")
+            if not isinstance(entity, dict):
+                continue
+            props = entity.get("properties") or {}
+            author_obj = entity.get("author") or {}
+            text = ((props.get("content") or {}).get("content") or "").strip()
+            if not text:
+                continue
+            author = str(author_obj.get("displayName") or "unknown")
+            channel_id = author_obj.get("channelId")
+            comments.append(
+                {
+                    "text": text,
+                    "author": author,
+                    "channel_url": f"https://www.youtube.com/channel/{channel_id}" if channel_id else None,
+                    "is_verified": bool(author_obj.get("isVerified") or author_obj.get("isCreator")),
+                    "role_hint": "creator_or_verified" if (author_obj.get("isVerified") or author_obj.get("isCreator")) else None,
+                }
+            )
+            if len(comments) >= max_comments:
+                break
+        if comments:
+            return comments
+    return []
+
+
 def scrub_emails(text: Optional[str]) -> Optional[str]:
     """Remove raw email addresses from public text so PII never leaks into dossiers."""
     if not text:
@@ -470,6 +553,32 @@ def parse_public_team_mentions(text: str) -> Dict[str, Optional[str]]:
         for dist in ("DistroKid", "AWAL", "Stem", "TuneCore", "CD Baby", "UnitedMasters", "Amuse"):
             if re.search(rf"\b{re.escape(dist)}\b", text, re.IGNORECASE):
                 mentions["distributor"] = dist
+                break
+
+    # Check explicit major/indie label names or copyright lines if label wasn't prefixed
+    if not mentions["label"]:
+        known_labels = (
+            "Sony Music Entertainment",
+            "RCA Records",
+            "Columbia Records",
+            "Atlantic Records",
+            "Republic Records",
+            "Interscope Records",
+            "Universal Music Group",
+            "Warner Records",
+            "Def Jam",
+            "Capitol Records",
+            "Sub Pop",
+            "4AD",
+            "Matador Records",
+            "Secretly Canadian",
+            "Domino Recording",
+            "Ninja Tune",
+            "Stones Throw",
+        )
+        for lbl in known_labels:
+            if re.search(rf"\b{re.escape(lbl)}\b", text, re.IGNORECASE):
+                mentions["label"] = lbl
                 break
     return mentions
 
@@ -882,7 +991,25 @@ class MusicDomainPack:
     # ------------------------------------------------------------------
     def run_signal_forensics(self, identity_bundle: Dict[str, Any]) -> Dict[str, Any]:
         seed_url = identity_bundle["source_and_media_queue"]["seed_source_url"]
-        comments = self.comment_fixtures.get(seed_url, [])
+        yt_url = identity_bundle["identity_and_contact"]["platform_urls"].get("youtube")
+        target_url = seed_url
+
+        if self.comment_fixtures:
+            comments = self.comment_fixtures.get(seed_url, [])
+        else:
+            comments = []
+            # Prefer a canonical YouTube watch URL for keyless innertube comment fetch
+            yt_watch = None
+            for candidate in (seed_url, yt_url):
+                if candidate and extract_video_id(candidate):
+                    yt_watch = canonical_watch_url(candidate)
+                    break
+            if yt_watch:
+                target_url = yt_watch
+                comments = fetch_youtube_comments_keyless(
+                    yt_watch, text_fetcher=self.text_fetcher, max_comments=50
+                )
+
         counts, notable = classify_comments_single_pass(comments, max_sample=50)
         missing: List[str] = []
         if counts["sample_size"] == 0:
@@ -894,7 +1021,7 @@ class MusicDomainPack:
                 "step": "3_signal_forensics",
                 "tool": "classify_comments_single_pass",
                 "status": "ok" if counts["sample_size"] > 0 else "empty",
-                "evidence_urls": [seed_url] if counts["sample_size"] > 0 and seed_url else [],
+                "evidence_urls": [target_url] if counts["sample_size"] > 0 and target_url else [],
                 "notes": f"Classified {counts['sample_size']} comment(s) in 1 pass.",
             },
             "missing_fields": missing,
@@ -907,8 +1034,26 @@ class MusicDomainPack:
     def map_track_record_generic(self, identity_bundle: Dict[str, Any]) -> Dict[str, Any]:
         bio_text = identity_bundle["source_and_media_queue"].get("bio_text") or ""
         seed_url = identity_bundle["source_and_media_queue"].get("seed_source_url")
-        mentions = parse_public_team_mentions(bio_text)
-        credits = parse_collaborator_credits(bio_text, seed_url)
+        yt_url = identity_bundle["identity_and_contact"]["platform_urls"].get("youtube")
+
+        combined_text = bio_text
+        evidence_urls: List[str] = []
+        if seed_url:
+            evidence_urls.append(seed_url)
+
+        # Live YouTube description scan (keyless) when running without fixtures
+        if not self.page_fixtures and yt_url and extract_video_id(yt_url):
+            yt_watch = canonical_watch_url(yt_url)
+            watch_html = self.text_fetcher(yt_watch)
+            if watch_html:
+                desc = parse_youtube_watch_metadata(watch_html).get("description") or ""
+                if desc:
+                    combined_text = (combined_text + "\n" + desc).strip()
+                    if yt_watch not in evidence_urls:
+                        evidence_urls.append(yt_watch)
+
+        mentions = parse_public_team_mentions(combined_text)
+        credits = parse_collaborator_credits(combined_text, yt_url or seed_url)
         missing: List[str] = []
         for field_name, value in mentions.items():
             if value is None:
@@ -920,8 +1065,8 @@ class MusicDomainPack:
                 "step": "4a_track_record_generic",
                 "tool": "extract_team_mentions_and_credits",
                 "status": "ok" if (any(mentions.values()) or credits) else "empty",
-                "evidence_urls": [seed_url] if seed_url and (any(mentions.values()) or credits) else [],
-                "notes": f"Found {sum(1 for v in mentions.values() if v)} team mention(s) and {len(credits)} bio credit(s).",
+                "evidence_urls": evidence_urls if (any(mentions.values()) or credits) else [],
+                "notes": f"Found {sum(1 for v in mentions.values() if v)} team mention(s) and {len(credits)} bio/video credit(s).",
             },
             "missing_fields": missing,
             "newly_discovered_sources": [],
@@ -939,8 +1084,81 @@ class MusicDomainPack:
         discovered_sources: List[Dict[str, Any]] = []
         seen_src = set()
 
-        # Live tour-page inspection when no show fixtures are provided
+        # Live tour-page & MusicBrainz recording/event lookups when no show fixtures are provided
         if not self.show_fixtures:
+            mbid = identity_bundle["identity_and_contact"].get("musicbrainz_mbid")
+            if mbid and not self.musicbrainz_fixtures:
+                # 1. Recording-level collaborator credits (producers, writers, engineers, musicians)
+                rec_url = (
+                    "https://musicbrainz.org/ws/2/recording?"
+                    + urlencode({"artist": mbid, "inc": "artist-rels", "limit": "10", "fmt": "json"})
+                )
+                rec_data = self.json_fetcher(rec_url)
+                if isinstance(rec_data, dict):
+                    seen_cred = set()
+                    for rec in rec_data.get("recordings") or []:
+                        rec_id = rec.get("id")
+                        rec_src = (
+                            f"https://musicbrainz.org/recording/{quote(str(rec_id))}"
+                            if rec_id
+                            else f"https://musicbrainz.org/artist/{quote(str(mbid))}"
+                        )
+                        for rel in rec.get("relations") or []:
+                            art = rel.get("artist") if isinstance(rel, dict) else None
+                            if not isinstance(art, dict):
+                                continue
+                            name = str(art.get("name") or "").strip()
+                            role = str(rel.get("type") or "collaborator").strip()
+                            if (
+                                name
+                                and name.lower() != stage_name.lower()
+                                and (name.lower(), role.lower()) not in seen_cred
+                            ):
+                                seen_cred.add((name.lower(), role.lower()))
+                                domain_credits.append(
+                                    {"name": name, "role": role, "source_url": rec_src}
+                                )
+                                if len(domain_credits) >= 15:
+                                    break
+                        if len(domain_credits) >= 15:
+                            break
+
+                # 2. Public MusicBrainz live event history
+                evt_url = (
+                    "https://musicbrainz.org/ws/2/event?"
+                    + urlencode({"artist": mbid, "inc": "place-rels", "limit": "10", "fmt": "json"})
+                )
+                evt_data = self.json_fetcher(evt_url)
+                if isinstance(evt_data, dict):
+                    for evt in evt_data.get("events") or []:
+                        evt_id = evt.get("id")
+                        evt_src = (
+                            f"https://musicbrainz.org/event/{quote(str(evt_id))}"
+                            if evt_id
+                            else f"https://musicbrainz.org/artist/{quote(str(mbid))}"
+                        )
+                        begin = ((evt.get("life-span") or {}).get("begin") or "").strip()
+                        venue_name = str(evt.get("name") or "").strip()
+                        city_name = "Unknown"
+                        for rel in evt.get("relations") or []:
+                            place = rel.get("place") if isinstance(rel, dict) else None
+                            if isinstance(place, dict) and place.get("name"):
+                                venue_name = str(place["name"])
+                                area = place.get("area")
+                                if isinstance(area, dict) and area.get("name"):
+                                    city_name = str(area["name"])
+                                break
+                        if venue_name and begin:
+                            show_history.append(
+                                {
+                                    "venue": venue_name,
+                                    "city": city_name,
+                                    "date": begin,
+                                    "billing_slot": "unknown",
+                                    "source_url": evt_src,
+                                }
+                            )
+
             for tour_url in hints.get("tour_urls") or []:
                 tour_html = self.text_fetcher(tour_url)
                 if tour_html:
