@@ -102,6 +102,20 @@ Averaging critic scores rewards polite, derivative `7.4/10` singers and buries p
 
 ## 4. Database Evolution Path: MVP `simon/store.py` (v0) → Canonical Talent Graph (v1)
 
+```mermaid
+erDiagram
+    TALENT_ENTITY ||--o{ DISCOVERY_PROVENANCE : "surfaced_via"
+    TALENT_ENTITY ||--o{ MEDIA_ASSET_REF : "queues_raw_media"
+    TALENT_ENTITY ||--o| STAGE2_CRAFT_PROFILE : "rolls_up"
+    MEDIA_ASSET_REF ||--o| CLIP_DIGESTION_RECORD : "digested_into"
+    CLIP_DIGESTION_RECORD ||--|{ TIMESTAMPED_OBSERVATION : "cites_MM_SS"
+    TALENT_ENTITY ||--o| STAGE3_SCOUT_ENRICHMENT : "enriched_with"
+    TALENT_ENTITY ||--o{ STAGE4_TASTE_ASSESSMENT : "evaluated_by"
+    TASTE_MANDATE ||--o{ STAGE4_TASTE_ASSESSMENT : "governs"
+    STAGE4_TASTE_ASSESSMENT ||--|{ CRITIC_BALLOT : "aggregates_independent"
+    STAGE4_TASTE_ASSESSMENT ||--o{ ENRICHMENT_TASK : "dispatches_feedback"
+```
+
 The parallel MVP SQLite schema in [simon/store.py](../../simon/store.py) maps **1:1 without breaking changes** into the canonical persistent graph:
 
 | MVP v0 Table (`simon/store.py`, Run-Scoped) | Full Agency v1 Table (Entity-Scoped + Mandate-Scoped) | Upgrade Delta |

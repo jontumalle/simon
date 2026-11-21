@@ -90,6 +90,10 @@ job = client.interactions.create(
 result = client.interactions.get(job.id)
 ```
 
+> **Live Runtime Gotchas (`v1beta/interactions`, verified in `10a043d`)**:
+> - **Managed Agents reject `store=False`**: Passing `"store": false` with `"agent": "antigravity-preview-09-2026"` returns HTTP 400 (`This agent cannot be used with store = false`). Always omit `store: false` (or pass `"store": true`) alongside `"background": true`, then poll `GET /v1beta/interactions/{id}` until `status == "completed"` and inspect both `outputs` and `steps` when extracting final agent text.
+> - **Traceable `v1_...` IDs on direct model calls**: Ephemeral `"store": false` model calls (`"model": "gemini-4-hydrogen"`) omit `result["id"]` in the response payload. Pass `"store": true` whenever you want persistent `v1_...` interaction IDs recorded in SQLite audit traces (`simon/gemini.py`).
+
 ### 2.4 CLI Operations (`gemini-api` v0.5.0)
 Google's official `gemini-api` CLI (`github.com/google-gemini/gemini-api-cli`) lets humans and local coding agents inspect, create, and test Managed Agents directly from the shell (note: subcommand is `agent` singular, and `analyze -i` supports local audio AND YouTube URLs directly!):
 ```sh
