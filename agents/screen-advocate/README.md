@@ -1,12 +1,12 @@
 # `screen-advocate` (`simon-screen-advocate`)
 
-**Stage 3 Parallel Screening Critic — Talent Advocate (`gemini-4-neon`)**
+**Stage 3 Parallel Screening Critic — Talent Advocate (`gemini-4-carbon`)**
 
 Inspects all 5 blocks of a Stage 2 `InvestigatorDossier` (`identity_and_contact`, `source_and_media_queue`, `public_footprint`, `comment_forensics`, `live_history_and_credits`), builds the strongest factual upside case (`pros` + `standout_hook`), publishes human-first Field News (`--stage critic`), validates its output with `verify_advocate.py`, and returns `advocate_case` JSON.
 
 ## Sandbox Configuration
 - **Base Agent**: `antigravity-preview-09-2026`
-- **Model**: `gemini-4-neon` (`max_total_tokens: "64000"`)
+- **Model**: `gemini-4-carbon` (`max_total_tokens: "64000"`)
 - **Tools**: `code_execution`
 - **Shared Skills**: `simon-db`, `field-reporting` (plus `dossier-*` domain lenses post-merge)
 - **Local Skill**: `skills/advocate-rubric/` (`verify_advocate.py`)

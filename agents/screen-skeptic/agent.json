@@ -1,10 +1,10 @@
 {
   "id": "simon-screen-skeptic",
-  "description": "Stage 3 parallel screening critic (gemini-4-neon): audits all 5 Stage 2 InvestigatorDossier blocks for concrete risks, dealbreakers, and missing evidence without inventing fake flaws.",
+  "description": "Stage 3 parallel screening critic (gemini-4-carbon): audits all 5 Stage 2 InvestigatorDossier blocks for concrete risks, dealbreakers, and missing evidence without inventing fake flaws.",
   "base_agent": "antigravity-preview-09-2026",
   "agent_config": {
     "type": "antigravity",
-    "model": "gemini-4-neon",
+    "model": "gemini-4-carbon",
     "max_total_tokens": "64000"
   },
   "system_instruction_file": "SYSTEM.md",

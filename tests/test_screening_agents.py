@@ -116,19 +116,22 @@ class TestScreeningAgentPackages(unittest.TestCase):
         "screen-advocate": (
             "simon-screen-advocate",
             ".agents/skills/advocate-rubric/scripts/verify_advocate.py",
+            "gemini-4-carbon",
         ),
         "screen-skeptic": (
             "simon-screen-skeptic",
             ".agents/skills/skeptic-rubric/scripts/verify_skeptic.py",
+            "gemini-4-carbon",
         ),
         "screening-judge": (
             "simon-screening-judge",
             ".agents/skills/judge-rubric/scripts/verify_judgment.py",
+            "gemini-4-neon",
         ),
     }
 
     def test_compile_all_three_neon_screening_agents(self) -> None:
-        for pkg_name, (expected_id, expected_script_mount) in self.EXPECTED_AGENTS.items():
+        for pkg_name, (expected_id, expected_script_mount, expected_model) in self.EXPECTED_AGENTS.items():
             with self.subTest(agent=pkg_name):
                 agent_dir = AGENTS_DIR / pkg_name
                 compiled = compile_agent_package(agent_dir, prefix="staging-")
@@ -140,7 +143,7 @@ class TestScreeningAgentPackages(unittest.TestCase):
                     payload["agent_config"],
                     {
                         "type": "antigravity",
-                        "model": "gemini-4-neon",
+                        "model": expected_model,
                         "max_total_tokens": "64000",
                     },
                 )
