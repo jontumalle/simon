@@ -85,6 +85,14 @@
     "output": {
       "description": "The agent's full stored domain output payload (e.g., DiscoveryHandoff v1.0.0 or InvestigatorDossier)."
     },
+    "archived": {
+      "type": "boolean",
+      "description": "True when soft-archived via Clear / Start Over so historical runs stay recoverable."
+    },
+    "archived_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
     "created_at": {
       "type": "string",
       "format": "date-time"

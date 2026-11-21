@@ -334,12 +334,92 @@ def _sync_worker_agent_report(
         "steps": steps,
         "findings": findings,
         "output": worker.get("output_json") if worker.get("output_json") is not None else (existing.get("output") if existing else None),
-        "created_at": str((existing or {}).get("created_at") or now),
-        "updated_at": now,
+        "archived": bool((existing or {}).get("archived", False)),
+        "archived_at": (existing or {}).get("archived_at"),
+        "created_at": str((existing or {}).get("created_at") or worker.get("created_at") or now),
+        "updated_at": str(worker.get("updated_at") or now),
     }
     clean_report = sanitize_agent_report(report_payload)
     save_agent_document(store, "agent_reports", clean_report, doc_id=report_id)
     return clean_report
+
+
+def backfill_historical_reports(store: SimonStore, limit: int = 50) -> int:
+    """Idempotently project legacy `fleet_runs` discovery batches into human-first `agent_reports`.
+
+    Never overwrites or un-archives reports that already exist in `agent_reports`.
+    """
+    existing_rows = list_agent_documents(store, "agent_reports", limit=500)
+    existing_ids = set()
+    for row in existing_rows:
+        doc = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else row
+        if isinstance(doc, dict) and doc.get("report_id"):
+            existing_ids.add(str(doc["report_id"]))
+
+    created = 0
+    fleet_docs = list_agent_documents(store, "fleet_runs", limit=limit)
+    for row in fleet_docs:
+        batch = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else row
+        if not isinstance(batch, dict):
+            continue
+        workers = batch.get("workers")
+        if not isinstance(workers, list) or not workers:
+            continue
+        batch_id = str(batch.get("batch_id") or batch.get("_doc_id") or "").strip()
+        if not batch_id:
+            continue
+        brief = str(batch.get("search_brief") or DEFAULT_DISCOVERY_BRIEF)
+        mode = str(batch.get("mode") or "live")
+        batch_created = batch.get("created_at")
+        batch_updated = batch.get("updated_at") or batch_created
+        for idx, worker in enumerate(workers):
+            if not isinstance(worker, dict):
+                continue
+            w_copy = dict(worker)
+            w_copy.setdefault("index", idx)
+            report_id = str(w_copy.get("report_id") or f"rep_{batch_id}_w{idx + 1}")
+            if report_id in existing_ids:
+                continue
+            w_copy["report_id"] = report_id
+            if batch_created and not w_copy.get("created_at"):
+                w_copy["created_at"] = batch_created
+            if batch_updated and not w_copy.get("updated_at"):
+                w_copy["updated_at"] = batch_updated
+            _sync_worker_agent_report(store, batch_id=batch_id, brief=brief, worker=w_copy, mode=mode)
+            existing_ids.add(report_id)
+            created += 1
+    return created
+
+
+def archive_agent_reports(
+    store: SimonStore,
+    report_ids: Optional[List[str]] = None,
+    batch_id: Optional[str] = None,
+    archived: bool = True,
+) -> Dict[str, Any]:
+    """Soft-archive (Clear / Start Over) or restore `agent_reports` without deleting history."""
+    backfill_historical_reports(store)
+    target_ids = {str(rid).strip() for rid in (report_ids or []) if str(rid).strip()}
+    docs = list_agent_documents(store, "agent_reports", limit=500)
+    now = _utc_now_iso()
+    updated = 0
+    for row in docs:
+        doc = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else row
+        if not isinstance(doc, dict) or not doc.get("report_id"):
+            continue
+        rid = str(doc["report_id"])
+        if target_ids and rid not in target_ids:
+            continue
+        if batch_id and doc.get("batch_id") != batch_id:
+            continue
+        if bool(doc.get("archived", False)) == bool(archived):
+            continue
+        clean = sanitize_agent_report(doc)
+        clean["archived"] = bool(archived)
+        clean["archived_at"] = now if archived else None
+        save_agent_document(store, "agent_reports", clean, doc_id=rid)
+        updated += 1
+    return {"ok": True, "updated_count": updated, "archived": bool(archived)}
 
 
 def list_agent_reports(
@@ -347,16 +427,20 @@ def list_agent_reports(
     batch_id: Optional[str] = None,
     status: Optional[str] = None,
     stage: Optional[str] = None,
+    include_archived: bool = False,
     limit: int = 50,
 ) -> List[Dict[str, Any]]:
     """List human-first AgentReport documents with all telemetry stripped."""
-    docs = list_agent_documents(store, "agent_reports", limit=max(limit, 100))
+    backfill_historical_reports(store)
+    docs = list_agent_documents(store, "agent_reports", limit=max(limit, 200))
     reports: List[Dict[str, Any]] = []
     for row in docs:
         doc = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else row
         if not isinstance(doc, dict) or not doc.get("report_id"):
             continue
         clean = sanitize_agent_report(doc)
+        if not include_archived and bool(clean.get("archived", False)):
+            continue
         if batch_id and clean.get("batch_id") != batch_id:
             continue
         if status and clean.get("status") != status:
@@ -1355,6 +1439,11 @@ FIELD_NEWS_HTML = f"""<!DOCTYPE html>
             <input type="checkbox" id="autoPollToggle" checked />
             <span>Live Auto-Update</span>
           </label>
+          <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.84rem; cursor:pointer;">
+            <input type="checkbox" id="showArchivedToggle" />
+            <span>Show archived</span>
+          </label>
+          <button id="clearFieldBtn" class="btn" type="button">Clear / Start Over</button>
           <span id="livePollBadge" class="pill blue">Idle</span>
         </div>
       </div>
@@ -1449,8 +1538,11 @@ FIELD_NEWS_HTML = f"""<!DOCTYPE html>
         // Trigger a gentle live refresh on the batch if it has active scouts
         await fetch(`/api/discovery/batches/${{encodeURIComponent(currentBatchId)}}`).catch(() => null);
       }}
-      const qs = currentBatchId ? `?batch_id=${{encodeURIComponent(currentBatchId)}}` : '';
-      const res = await fetch(`/api/field-news${{qs}}`);
+      const qs = new URLSearchParams();
+      if (currentBatchId) qs.set('batch_id', currentBatchId);
+      if (el('showArchivedToggle') && el('showArchivedToggle').checked) qs.set('include_archived', '1');
+      const queryStr = qs.toString() ? `?${{qs.toString()}}` : '';
+      const res = await fetch(`/api/field-news${{queryStr}}`);
       if (!res.ok) return;
       const data = await res.json();
       const reports = data.reports || [];
@@ -1495,6 +1587,18 @@ FIELD_NEWS_HTML = f"""<!DOCTYPE html>
     el('batchSelect').onchange = async () => {{ currentBatchId = el('batchSelect').value; await loadFieldNews(); }};
     el('refreshBtn').onclick = loadFieldNews;
     el('autoPollToggle').onchange = resetPolling;
+    el('showArchivedToggle').onchange = loadFieldNews;
+    el('clearFieldBtn').onclick = async () => {{
+      const scopeLabel = currentBatchId ? 'this batch' : 'all active field dispatches';
+      if (!confirm(`Archive ${{scopeLabel}} to start fresh? (You can restore them anytime via "Show archived".)`)) return;
+      const payload = currentBatchId ? {{ batch_id: currentBatchId, archived: true }} : {{ archived: true }};
+      await fetch('/api/reports/archive', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify(payload),
+      }});
+      await loadFieldNews();
+    }};
 
     loadBatches().then(resetPolling);
   </script>
@@ -1534,6 +1638,11 @@ REPORTS_HTML = f"""<!DOCTYPE html>
             <option value="blocked">Blocked</option>
           </select>
           <button id="refreshReportsBtn" class="btn" type="button">Refresh Reports</button>
+          <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.84rem; cursor:pointer;">
+            <input type="checkbox" id="showArchivedReportsToggle" />
+            <span>Show archived</span>
+          </label>
+          <button id="clearReportsBtn" class="btn" type="button">Clear / Start Over</button>
         </div>
       </div>
       <div id="reportsMeta" style="font-size:0.9rem; color:var(--muted);">Loading stored scouting reports…</div>
@@ -1608,11 +1717,14 @@ REPORTS_HTML = f"""<!DOCTYPE html>
           <section class="card" id="${{esc(r.report_id)}}" style="${{highlightStyle}}">
             <div class="section-head">
               <div>
-                <h2 style="margin:0;">${{esc(r.agent_name)}} <span class="pill">${{esc(r.stage)}}</span> ${{statusPill(r.status)}}</h2>
+                <h2 style="margin:0;">${{esc(r.agent_name)}} <span class="pill">${{esc(r.stage)}}</span> ${{statusPill(r.status)}} ${{r.archived ? '<span class="pill warn">archived</span>' : ''}}</h2>
                 <div style="font-size:0.95rem; font-weight:600; margin-top:6px;">${{esc(r.headline || '')}}</div>
                 <div style="font-size:0.84rem; color:var(--muted); margin-top:2px;">Brief: ${{esc(r.brief || '')}}</div>
               </div>
-              <div style="display:flex; gap:6px; flex-wrap:wrap;">${{sourcesHtml}}</div>
+              <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                ${{sourcesHtml}}
+                ${{r.archived ? `<button class="btn" type="button" onclick="restoreReport('${{esc(r.report_id)}}')">Restore</button>` : ''}}
+              </div>
             </div>
             <div style="margin-bottom:14px;">
               <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; color:var(--muted); margin-bottom:8px;">Findings (${{findings.length}})</div>
@@ -1627,11 +1739,21 @@ REPORTS_HTML = f"""<!DOCTYPE html>
       }}).join('');
     }}
 
+    async function restoreReport(reportId) {{
+      await fetch('/api/reports/archive', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ report_ids: [reportId], archived: false }}),
+      }});
+      await loadReports();
+    }}
+
     async function loadReports() {{
       const qs = new URLSearchParams();
       if (filterBatchId) qs.set('batch_id', filterBatchId);
       const st = el('statusFilter').value;
       if (st) qs.set('status', st);
+      if (el('showArchivedReportsToggle') && el('showArchivedReportsToggle').checked) qs.set('include_archived', '1');
       const url = '/api/reports' + (qs.toString() ? `?${{qs.toString()}}` : '');
       const res = await fetch(url);
       if (!res.ok) return;
@@ -1641,6 +1763,18 @@ REPORTS_HTML = f"""<!DOCTYPE html>
 
     el('statusFilter').onchange = loadReports;
     el('refreshReportsBtn').onclick = loadReports;
+    el('showArchivedReportsToggle').onchange = loadReports;
+    el('clearReportsBtn').onclick = async () => {{
+      const scopeLabel = filterBatchId ? 'this batch' : 'all active scouting reports';
+      if (!confirm(`Archive ${{scopeLabel}} to start fresh? (Historical runs remain recoverable via "Show archived".)`)) return;
+      const payload = filterBatchId ? {{ batch_id: filterBatchId, archived: true }} : {{ archived: true }};
+      await fetch('/api/reports/archive', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify(payload),
+      }});
+      await loadReports();
+    }};
     loadReports();
   </script>
 </body>

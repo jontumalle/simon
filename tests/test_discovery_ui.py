@@ -436,6 +436,114 @@ class TestDiscoveryUIAndTraces(unittest.TestCase):
         self.assertEqual(fn_payload["reports"][0]["report_id"], "rep_inv_1")
         self.assertEqual(fn_payload["reports"][0]["stage"], "investigator")
 
+    def test_historical_fleet_runs_backfill_and_soft_archive(self) -> None:
+        store = self.store
+        legacy_batch = {
+            "batch_id": "disc_legacy001",
+            "kind": "discovery_batch",
+            "mode": "live",
+            "agent_id": "staging-simon-discovery-scout",
+            "search_brief": "Historical NYC indie soul vocalists",
+            "created_at": "2026-11-20T18:00:00Z",
+            "updated_at": "2026-11-20T18:05:00Z",
+            "workers": [
+                {
+                    "index": 0,
+                    "worker_id": "agent_01",
+                    "interaction_id": "int_legacy_hidden",
+                    "environment_id": "env_legacy_hidden",
+                    "status": "completed",
+                    "assigned_sources": [
+                        {
+                            "source_id": "yt_sofar_sounds",
+                            "name": "Sofar Sounds",
+                            "url": "https://www.youtube.com/@SofarSounds",
+                            "source_channel": "youtube_live_session",
+                            "city": "Global",
+                        }
+                    ],
+                    "contract_valid": True,
+                    "lead_count": 1,
+                    "output_json": {
+                        "contract_version": "1.0.0",
+                        "run_id": "disc_legacy001_w1",
+                        "search_brief": "Historical NYC indie soul vocalists",
+                        "requested_count": 1,
+                        "leads": [
+                            {
+                                "lead_id": "lead_hist_01",
+                                "stage_name": "Elena Soto",
+                                "seed_sources": [
+                                    {
+                                        "url": "https://www.youtube.com/watch?v=3-K26i1go0s",
+                                        "source_channel": "youtube_live_session",
+                                        "seed_query_or_venue_node": "Sofar Sounds",
+                                    }
+                                ],
+                                "attribution_status": "verified",
+                                "context_snippet": "Acoustic vocal set in Brooklyn.",
+                            }
+                        ],
+                        "discovered_sources": [],
+                    },
+                }
+            ],
+        }
+        save_agent_document(store, "fleet_runs", legacy_batch, doc_id="disc_legacy001")
+
+        # 1. GET /api/reports automatically backfills legacy fleet_runs without telemetry
+        code, _, body = dispatch_http_request(store, "GET", "/api/reports")
+        self.assertEqual(code, 200)
+        payload = json.loads(body)
+        self.assertEqual(payload["count"], 1)
+        rep = payload["reports"][0]
+        self.assertEqual(rep["report_id"], "rep_disc_legacy001_w1")
+        self.assertEqual(rep["findings"][0]["title"], "Elena Soto")
+        self.assertEqual(rep["output"]["leads"][0]["stage_name"], "Elena Soto")
+        self.assertNotIn("interaction_id", rep)
+        self.assertNotIn("environment_id", rep)
+        self.assertNotIn("metadata", rep)
+
+        # 2. POST /api/reports/archive (Clear / Start Over) hides reports by default
+        code_a, _, body_a = dispatch_http_request(
+            store,
+            "POST",
+            "/api/reports/archive",
+            json.dumps({"archived": True}).encode("utf-8"),
+        )
+        self.assertEqual(code_a, 200)
+        self.assertEqual(json.loads(body_a)["updated_count"], 1)
+
+        # Default GET /api/reports is now clean (0 active reports) and does NOT re-create archived report
+        code_empty, _, body_empty = dispatch_http_request(store, "GET", "/api/reports")
+        self.assertEqual(code_empty, 200)
+        self.assertEqual(json.loads(body_empty)["count"], 0)
+
+        # include_archived=1 reveals historical archived reports
+        code_inc, _, body_inc = dispatch_http_request(store, "GET", "/api/reports?include_archived=1")
+        self.assertEqual(code_inc, 200)
+        inc_payload = json.loads(body_inc)
+        self.assertEqual(inc_payload["count"], 1)
+        self.assertTrue(inc_payload["reports"][0]["archived"])
+
+        # Restore brings it back
+        code_res, _, body_res = dispatch_http_request(
+            store,
+            "POST",
+            "/api/reports/archive",
+            json.dumps({"report_ids": ["rep_disc_legacy001_w1"], "archived": False}).encode("utf-8"),
+        )
+        self.assertEqual(code_res, 200)
+        self.assertEqual(json.loads(body_res)["updated_count"], 1)
+        code_after, _, body_after = dispatch_http_request(store, "GET", "/api/reports")
+        self.assertEqual(json.loads(body_after)["count"], 1)
+
+        # UI controls present on /field-news and /reports
+        for route in ("/field-news", "/reports"):
+            _, _, html = dispatch_http_request(store, "GET", route)
+            self.assertIn(b"Clear / Start Over", html)
+            self.assertIn(b"Show archived", html)
+
 
 if __name__ == "__main__":
     unittest.main()
