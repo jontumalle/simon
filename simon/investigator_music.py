@@ -13,16 +13,17 @@ process evals run deterministically without live network access.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import html as html_lib
 import json
 import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urljoin
 from urllib.request import Request, urlopen
 
 from .youtube import canonical_watch_url, extract_video_id
 
-USER_AGENT = "SimonScoutInvestigator/1.0 (https://github.com/jontumalle/simon)"
+USER_AGENT = "SimonScoutInvestigator/1.0 (+https://github.com/jontumalle/simon)"
 
 EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 URL_RE = re.compile(r"https?://[^\s<>'\"()]+")
@@ -120,7 +121,7 @@ TextFetcher = Callable[[str], Optional[str]]
 JsonFetcher = Callable[[str], Optional[Dict[str, Any]]]
 
 
-def default_text_fetcher(url: str, timeout: float = 8.0) -> Optional[str]:
+def default_text_fetcher(url: str, timeout: float = 10.0) -> Optional[str]:
     req = Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urlopen(req, timeout=timeout) as resp:
@@ -129,8 +130,19 @@ def default_text_fetcher(url: str, timeout: float = 8.0) -> Optional[str]:
         return None
 
 
-def default_json_fetcher(url: str, timeout: float = 8.0) -> Optional[Dict[str, Any]]:
-    raw = default_text_fetcher(url, timeout=timeout)
+def default_json_fetcher(url: str, timeout: float = 10.0) -> Optional[Dict[str, Any]]:
+    req = Request(
+        url,
+        headers={
+            "User-Agent": USER_AGENT,
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8", errors="ignore")
+    except (HTTPError, URLError, TimeoutError, ValueError):
+        return None
     if not raw:
         return None
     try:
@@ -138,6 +150,115 @@ def default_json_fetcher(url: str, timeout: float = 8.0) -> Optional[Dict[str, A
         return parsed if isinstance(parsed, dict) else None
     except json.JSONDecodeError:
         return None
+
+
+def extract_clean_bio_from_html(raw_html: str, max_chars: int = 900) -> str:
+    """Convert raw HTML into clean, readable meta + visible text (no markup or scripts)."""
+    if not raw_html:
+        return ""
+    if "<html" not in raw_html.lower() and "<!doctype" not in raw_html.lower() and "<body" not in raw_html.lower():
+        return re.sub(r"\s+", " ", raw_html).strip()[:max_chars]
+
+    snippets: List[str] = []
+    for pat in (
+        r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)["\']',
+        r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']+)["\']',
+        r"<title[^>]*>([^<]+)</title>",
+    ):
+        for match in re.finditer(pat, raw_html, re.IGNORECASE):
+            cleaned = html_lib.unescape(match.group(1)).strip()
+            if cleaned and cleaned not in snippets:
+                snippets.append(cleaned)
+
+    body = re.sub(r"<(script|style|noscript|svg)[^>]*>.*?</\1>", " ", raw_html, flags=re.IGNORECASE | re.DOTALL)
+    body = re.sub(r"<[^>]+>", " ", body)
+    body = html_lib.unescape(re.sub(r"\s+", " ", body)).strip()
+    if body:
+        snippets.append(body[:600])
+    return " | ".join(snippets)[:max_chars]
+
+
+def extract_hrefs_from_html(raw_html: str, base_url: str) -> List[str]:
+    """Extract absolute URLs from both raw URLs and relative href attributes."""
+    found: List[str] = list(URL_RE.findall(raw_html or ""))
+    for match in re.finditer(r'href=["\']([^"\'#]+)["\']', raw_html or "", re.IGNORECASE):
+        href = match.group(1).strip()
+        if not href or href.startswith(("mailto:", "tel:", "javascript:")):
+            continue
+        if href.endswith((".css", ".js", ".png", ".jpg", ".ico", ".svg", ".json")):
+            continue
+        abs_url = urljoin(base_url, href)
+        if abs_url.startswith(("http://", "https://")) and abs_url not in found:
+            found.append(abs_url)
+    return found
+
+
+def parse_youtube_watch_metadata(raw_html: str) -> Dict[str, Any]:
+    """Extract zero-decode public metadata from YouTube watch HTML (ytInitialPlayerResponse)."""
+    if not raw_html:
+        return {}
+    meta: Dict[str, Any] = {}
+    views_match = re.search(r'"viewCount"\s*:\s*"(\d+)"', raw_html)
+    if views_match:
+        meta["view_count"] = int(views_match.group(1))
+    len_match = re.search(r'"lengthSeconds"\s*:\s*"(\d+)"', raw_html)
+    if len_match:
+        meta["duration_seconds"] = int(len_match.group(1))
+    desc_match = re.search(r'"shortDescription"\s*:\s*"((?:[^"\\]|\\.)*)"', raw_html)
+    if desc_match:
+        try:
+            meta["description"] = json.loads(f'"{desc_match.group(1)}"')
+        except json.JSONDecodeError:
+            pass
+    sub_match = re.search(r'"subscriberCountText"\s*:\s*\{[^}]*"simpleText"\s*:\s*"([^"]+)"', raw_html)
+    if sub_match:
+        raw_sub = sub_match.group(1).upper().replace("SUBSCRIBERS", "").strip()
+        num_match = re.match(r"([\d.]+)\s*([KM]?)", raw_sub)
+        if num_match:
+            val = float(num_match.group(1))
+            mult = {"K": 1_000, "M": 1_000_000, "": 1}[num_match.group(2)]
+            meta["youtube_subscribers"] = int(val * mult)
+    return meta
+
+
+def parse_jsonld_music_events(raw_html: str, source_url: str) -> List[Dict[str, Any]]:
+    """Extract schema.org MusicEvent records from public tour/event pages."""
+    shows: List[Dict[str, Any]] = []
+    if not raw_html:
+        return shows
+    for match in re.finditer(
+        r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+        raw_html,
+        re.IGNORECASE | re.DOTALL,
+    ):
+        try:
+            payload = json.loads(match.group(1).strip())
+        except json.JSONDecodeError:
+            continue
+        items = payload if isinstance(payload, list) else [payload]
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            if item.get("@type") != "MusicEvent":
+                continue
+            loc = item.get("location") if isinstance(item.get("location"), dict) else {}
+            addr = loc.get("address") if isinstance(loc.get("address"), dict) else {}
+            venue = str(loc.get("name") or item.get("name") or "").strip()
+            city = str(addr.get("addressLocality") or "").strip()
+            region = str(addr.get("addressRegion") or "").strip()
+            city_full = f"{city}, {region}".strip(", ") if city else (region or "Unknown")
+            start = str(item.get("startDate") or "")[:10]
+            if venue and start:
+                shows.append(
+                    {
+                        "venue": venue,
+                        "city": city_full,
+                        "date": start,
+                        "billing_slot": "unknown",
+                        "source_url": str(item.get("url") or source_url),
+                    }
+                )
+    return shows
 
 
 def scrub_emails(text: Optional[str]) -> Optional[str]:
@@ -406,6 +527,8 @@ class MusicDomainPack:
     bandcamp_fixtures: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     comment_fixtures: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
     show_fixtures: Dict[str, Dict[str, List[Dict[str, Any]]]] = field(default_factory=dict)
+    # Private per-run hints shared across Phase A -> Phase B (never leaked into dossier schema)
+    _runtime_hints: Dict[str, Dict[str, Any]] = field(default_factory=dict, repr=False)
 
     # ------------------------------------------------------------------
     # Agent 1: identity-resolver (1a Generic -> 1b Music Domain)
@@ -415,6 +538,8 @@ class MusicDomainPack:
         primary_seed = seed_sources[0] if seed_sources else {}
         seed_url = primary_seed.get("url", "")
         stage_name = str(lead.get("stage_name") or "").strip()
+        lead_key = str(lead.get("lead_id") or stage_name).lower()
+        hints = self._runtime_hints.setdefault(lead_key, {"tour_urls": [], "extra_credits": [], "extra_desc": ""})
 
         page = self.page_fixtures.get(seed_url)
         evidence_urls: List[str] = []
@@ -429,8 +554,14 @@ class MusicDomainPack:
             html = self.text_fetcher(seed_url)
             if html:
                 evidence_urls.append(seed_url)
-                raw_bio = html[:4000]
-                outbound_urls.extend(URL_RE.findall(html))
+                raw_bio = extract_clean_bio_from_html(html)
+                extracted_links = extract_hrefs_from_html(html, seed_url)
+                outbound_urls.extend(extracted_links)
+                for link in extracted_links:
+                    low = link.lower()
+                    if any(tok in low for tok in ("/tour", "/shows", "/live", "bandsintown", "songkick", "seated.com")):
+                        if link not in hints["tour_urls"]:
+                            hints["tour_urls"].append(link)
 
         # Follow one hop into Linktree / bio aggregator if present
         platform_urls = classify_platform_urls(outbound_urls)
@@ -509,13 +640,15 @@ class MusicDomainPack:
         aliases = list(generic_identity.get("aliases") or [])
         mb_evidence: List[str] = []
         mb_status = "empty"
+        lead_key = str(lead.get("lead_id") or stage_name).lower()
+        hints = self._runtime_hints.setdefault(lead_key, {"tour_urls": [], "extra_credits": [], "extra_desc": ""})
 
         mb_data = self.musicbrainz_fixtures.get(stage_name.lower())
-        mb_url = (
-            "https://musicbrainz.org/ws/2/artist/?"
-            + urlencode({"query": f'artist:"{stage_name}"', "fmt": "json", "limit": "3"})
-        )
         if mb_data is None and not self.musicbrainz_fixtures:
+            mb_url = (
+                "https://musicbrainz.org/ws/2/artist/?"
+                + urlencode({"query": f"artist:{stage_name}", "fmt": "json", "limit": "3"})
+            )
             mb_data = self.json_fetcher(mb_url)
 
         if isinstance(mb_data, dict):
@@ -525,11 +658,75 @@ class MusicDomainPack:
                 mbid = top.get("id")
                 mb_status = "ok" if mbid else "empty"
                 if mbid:
-                    mb_evidence.append(f"https://musicbrainz.org/artist/{quote(str(mbid))}")
+                    mb_artist_url = f"https://musicbrainz.org/artist/{quote(str(mbid))}"
+                    mb_evidence.append(mb_artist_url)
+                # Map MusicBrainz artist type if bio didn't specify project_type
+                if project_type == "unknown":
+                    mb_type = str(top.get("type") or "").lower()
+                    if mb_type == "person":
+                        project_type = "solo_vocalist"
+                    elif mb_type == "group":
+                        project_type = "band"
+                # Fallback home_city from MusicBrainz begin-area / area
+                if not generic_identity.get("home_city"):
+                    begin_area = (top.get("begin-area") or {}).get("name")
+                    area = (top.get("area") or {}).get("name")
+                    if begin_area:
+                        generic_identity["home_city"] = str(begin_area)
+                        if "identity_and_contact.home_city" in generic_identity["missing_fields"]:
+                            generic_identity["missing_fields"].remove("identity_and_contact.home_city")
+                    elif area:
+                        generic_identity["home_city"] = str(area)
+                        if "identity_and_contact.home_city" in generic_identity["missing_fields"]:
+                            generic_identity["missing_fields"].remove("identity_and_contact.home_city")
+                # Pull genres/tags from MusicBrainz if bio didn't specify them
+                if not primary_genre and top.get("tags"):
+                    sorted_tags = sorted(
+                        (t for t in top["tags"] if isinstance(t, dict) and t.get("name")),
+                        key=lambda t: int(t.get("count") or 0),
+                        reverse=True,
+                    )
+                    tag_names = [str(t["name"]).title() for t in sorted_tags]
+                    if tag_names:
+                        primary_genre = tag_names[0]
+                        subgenres = tag_names[1:4]
                 for alias in top.get("aliases") or []:
                     alias_name = alias.get("name") if isinstance(alias, dict) else str(alias)
                     if alias_name and alias_name not in aliases and alias_name.lower() != stage_name.lower():
                         aliases.append(alias_name)
+
+                # Second MusicBrainz lookup for official URL relationships & artist credits (live only)
+                if mbid and not self.musicbrainz_fixtures:
+                    detail_url = (
+                        f"https://musicbrainz.org/ws/2/artist/{quote(str(mbid))}"
+                        "?inc=url-rels+artist-rels+tags&fmt=json"
+                    )
+                    detail = self.json_fetcher(detail_url)
+                    if isinstance(detail, dict):
+                        rel_urls: List[str] = []
+                        for rel in detail.get("relations") or []:
+                            if not isinstance(rel, dict):
+                                continue
+                            if rel.get("url") and isinstance(rel["url"], dict):
+                                res_url = rel["url"].get("resource")
+                                if isinstance(res_url, str):
+                                    rel_urls.append(res_url)
+                            elif rel.get("artist") and isinstance(rel["artist"], dict):
+                                rel_artist_name = rel["artist"].get("name")
+                                rel_type = str(rel.get("type") or "collaborator")
+                                if rel_artist_name:
+                                    hints["extra_credits"].append(
+                                        {
+                                            "name": str(rel_artist_name),
+                                            "role": rel_type,
+                                            "source_url": f"https://musicbrainz.org/artist/{quote(str(mbid))}",
+                                        }
+                                    )
+                        if rel_urls:
+                            merged_platforms = classify_platform_urls(rel_urls)
+                            for k, v in merged_platforms.items():
+                                if v and not generic_identity["platform_urls"].get(k):
+                                    generic_identity["platform_urls"][k] = v
 
         missing: List[str] = []
         if not mbid:
@@ -579,24 +776,41 @@ class MusicDomainPack:
         yt_subscribers: Optional[int] = page.get("youtube_subscribers")
         evidence_urls: List[str] = []
 
+        lead_key = str(identity_bundle.get("lead_id") or "").lower()
+        hints = self._runtime_hints.setdefault(lead_key, {"tour_urls": [], "extra_credits": [], "extra_desc": ""})
+
         for url in candidate_urls:
             oembed = self.oembed_fixtures.get(url)
+            watch_meta: Dict[str, Any] = {}
             if oembed is None and not self.oembed_fixtures:
                 oembed_url = f"https://www.youtube.com/oembed?url={quote(url, safe='')}&format=json"
                 oembed = self.json_fetcher(oembed_url)
+                watch_html = self.text_fetcher(url)
+                if watch_html:
+                    watch_meta = parse_youtube_watch_metadata(watch_html)
+                    if watch_meta.get("description"):
+                        hints["extra_desc"] = (hints.get("extra_desc", "") + "\n" + watch_meta["description"]).strip()
+                    if yt_subscribers is None and isinstance(watch_meta.get("youtube_subscribers"), int):
+                        yt_subscribers = watch_meta["youtube_subscribers"]
             if isinstance(oembed, dict):
                 evidence_urls.append(url)
+                duration_sec = oembed.get("duration_seconds")
+                if duration_sec is None:
+                    duration_sec = watch_meta.get("duration_seconds")
                 media_links.append(
                     {
                         "url": url,
                         "title": str(oembed.get("title") or "Untitled video"),
                         "uploader_channel": oembed.get("author_name"),
-                        "duration_seconds": oembed.get("duration_seconds"),
+                        "duration_seconds": duration_sec,
                         "oembed_live_embeddable": bool(oembed.get("embeddable", True)),
                     }
                 )
-                if isinstance(oembed.get("view_count"), int):
-                    view_counts.append(oembed["view_count"])
+                vc = oembed.get("view_count")
+                if not isinstance(vc, int):
+                    vc = watch_meta.get("view_count")
+                if isinstance(vc, int):
+                    view_counts.append(vc)
 
         top_views = max(view_counts) if view_counts else None
         missing: List[str] = []
@@ -715,10 +929,35 @@ class MusicDomainPack:
 
     def map_track_record_domain(self, identity_bundle: Dict[str, Any]) -> Dict[str, Any]:
         stage_name = identity_bundle["identity_and_contact"]["stage_name"]
+        lead_key = str(identity_bundle.get("lead_id") or stage_name).lower()
+        hints = self._runtime_hints.get(lead_key) or {}
         fixture = self.show_fixtures.get(stage_name.lower()) or {}
         show_history = list(fixture.get("show_history") or [])
         upcoming_shows = list(fixture.get("upcoming_shows") or [])
-        domain_credits = list(fixture.get("collaborator_credits") or [])
+        domain_credits = list(fixture.get("collaborator_credits") or []) + list(hints.get("extra_credits") or [])
+
+        discovered_sources: List[Dict[str, Any]] = []
+        seen_src = set()
+
+        # Live tour-page inspection when no show fixtures are provided
+        if not self.show_fixtures:
+            for tour_url in hints.get("tour_urls") or []:
+                tour_html = self.text_fetcher(tour_url)
+                if tour_html:
+                    parsed_events = parse_jsonld_music_events(tour_html, tour_url)
+                    upcoming_shows.extend(parsed_events)
+                    if tour_url not in seen_src:
+                        seen_src.add(tour_url)
+                        discovered_sources.append(
+                            {
+                                "url": tour_url,
+                                "source_channel": "event_listing",
+                                "title_or_node": f"{stage_name} Tour Page",
+                                "why_useful": "Official artist tour/shows page discovered from seed website.",
+                                "discovered_by": "stage_2_investigator",
+                            }
+                        )
+
         highest_cap = lookup_highest_venue_cap(show_history)
 
         evidence_urls = [
@@ -726,9 +965,9 @@ class MusicDomainPack:
             for s in (show_history + upcoming_shows + domain_credits)
             if isinstance(s, dict) and s.get("source_url")
         ]
-        # Log any discovered venue calendar/listing sources for reuse
-        discovered_sources: List[Dict[str, Any]] = []
-        seen_src = set()
+        if discovered_sources:
+            evidence_urls.extend(d["url"] for d in discovered_sources if d.get("url"))
+
         for show in show_history + upcoming_shows:
             src = show.get("source_url")
             if src and src not in seen_src:
