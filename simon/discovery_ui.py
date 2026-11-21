@@ -1010,11 +1010,45 @@ _NAV_CSS = """
     color: var(--text); cursor: pointer;
   }
   .nav-theme-btn:hover { border-color: var(--accent); }
+  .nav-primary-shell { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .nav-primary-tabs {
+    display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap;
+    background: var(--panel-2, var(--surface-2)); border: 1px solid var(--border);
+    padding: 3px; border-radius: 11px;
+  }
+  .nav-primary-tab {
+    padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 600;
+    color: var(--muted); text-decoration: none; border: 1px solid transparent;
+    transition: all 0.14s ease;
+  }
+  .nav-primary-tab:hover { color: var(--text); text-decoration: none; }
+  .nav-primary-tab.active {
+    background: var(--panel, var(--surface)); color: var(--text);
+    border-color: var(--border); box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  }
+  .nav-tools-menu { position: relative; }
+  .nav-tools-menu summary {
+    list-style: none; padding: 6px 11px; border-radius: 8px; font-size: 0.78rem; font-weight: 600;
+    border: 1px solid var(--border); background: var(--panel-2, var(--surface-2)); color: var(--text);
+    cursor: pointer; user-select: none;
+  }
+  .nav-tools-menu summary::-webkit-details-marker { display: none; }
+  .nav-tools-menu summary:hover { border-color: var(--accent); }
+  .nav-tools-popover {
+    position: absolute; right: 0; top: calc(100% + 8px); width: 320px; z-index: 60;
+    background: var(--panel, var(--surface)); border: 1px solid var(--border);
+    border-radius: 14px; padding: 12px; box-shadow: 0 18px 42px rgba(0,0,0,0.22);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .nav-tools-popover .nav-sections { flex-direction: column; align-items: stretch; gap: 8px; }
+  .nav-tools-popover .nav-group { flex-direction: column; align-items: stretch; gap: 2px; padding: 8px; }
+  .nav-tools-popover .nav-group-label { border-right: none; padding: 0 4px 4px; margin-bottom: 2px; border-bottom: 1px solid var(--border); }
+  .nav-tools-popover .nav-group a { padding: 6px 8px; font-size: 0.8rem; }
 """
 
 
 def render_top_nav(active_path: str) -> str:
-    """Render the shared three-section top navigation (Discovery, Investigation, Screening)."""
+    """Render the unified 4-stage Studio navigation + Tools directory across all pages."""
     def _link(href: str, label: str, elem_id: str = "") -> str:
         cls = ' class="active"' if active_path == href else ""
         id_attr = f' id="{elem_id}"' if elem_id else ""
@@ -1040,24 +1074,11 @@ def render_top_nav(active_path: str) -> str:
             _link("/taste-profile", "8. Taste Profile", "tasteProfileNavLink"),
         ]
     )
-    theme_btn = (
-        ""
-        if active_path == "/"
-        else (
-            '<button type="button" id="simonNavThemeBtn" class="nav-theme-btn" '
-            'title="Toggle Editorial Light / Studio Dark">☀ Light</button>'
-            "<script>(function(){"
-            "var k='simon_theme',b=document.getElementById('simonNavThemeBtn');"
-            "function ap(t){document.documentElement.setAttribute('data-theme',t);"
-            "try{localStorage.setItem(k,t);}catch(e){}"
-            "if(b)b.textContent=t==='dark'?'☾ Studio Dark':'☀ Light';}"
-            "var cur='light';try{cur=localStorage.getItem(k)||'light';}catch(e){}"
-            "ap(cur);"
-            "if(b)b.addEventListener('click',function(){ap((document.documentElement.getAttribute('data-theme')||'light')==='dark'?'light':'dark');});"
-            "})();</script>"
-        )
+    studio_tools_links = (
+        '<a href="/?tab=pipeline">Pipeline Stepper</a>'
+        '<a href="/?tab=lab">Agent Lab</a>'
     )
-    return (
+    directory_nav = (
         '<nav class="nav-sections" aria-label="Simon Pipeline Navigation">'
         '<div class="nav-group stage-discovery">'
         '<span class="nav-group-label">Discovery</span>'
@@ -1070,9 +1091,49 @@ def render_top_nav(active_path: str) -> str:
         '<div class="nav-group stage-screening">'
         '<span class="nav-group-label">Screening</span>'
         f"{screening_links}"
+        f"{studio_tools_links}"
         "</div>"
-        f"{theme_btn}"
         "</nav>"
+    )
+
+    if active_path == "/":
+        return directory_nav
+
+    def _stage(href: str, label: str, is_active: bool) -> str:
+        cls = " active" if is_active else ""
+        return f'<a href="{href}" class="nav-primary-tab{cls}">{label}</a>'
+
+    primary_tabs = "".join(
+        [
+            _stage("/?tab=discovery", "Discovery", active_path in ("/discovery", "/field-news", "/reports")),
+            _stage("/investigate", "Investigate", active_path == "/investigate"),
+            _stage("/screen", "Screening", active_path in ("/screen", "/screening")),
+            _stage("/taste-profile", "Taste Profile", active_path == "/taste-profile"),
+            _stage("/?tab=review", "Talent Review", active_path == "/"),
+        ]
+    )
+    theme_btn = (
+        '<button type="button" id="simonNavThemeBtn" class="nav-theme-btn" '
+        'title="Toggle Editorial Light / Studio Dark">☀ Light</button>'
+        "<script>(function(){"
+        "var k='simon_theme',b=document.getElementById('simonNavThemeBtn');"
+        "function ap(t){document.documentElement.setAttribute('data-theme',t);"
+        "try{localStorage.setItem(k,t);}catch(e){}"
+        "if(b)b.textContent=t==='dark'?'☾ Studio Dark':'☀ Light';}"
+        "var cur='light';try{cur=localStorage.getItem(k)||'light';}catch(e){}"
+        "ap(cur);"
+        "if(b)b.addEventListener('click',function(){ap((document.documentElement.getAttribute('data-theme')||'light')==='dark'?'light':'dark');});"
+        "})();</script>"
+    )
+    return (
+        '<div class="nav-primary-shell">'
+        f'<nav class="nav-primary-tabs" aria-label="Primary Pipeline Stages">{primary_tabs}</nav>'
+        '<details class="nav-tools-menu">'
+        '<summary>Tools ▾</summary>'
+        f'<div class="nav-tools-popover">{directory_nav}</div>'
+        "</details>"
+        f"{theme_btn}"
+        "</div>"
     )
 
 
@@ -2339,12 +2400,43 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
             ${{platformLinks ? `<div style="display:flex; gap:6px; flex-wrap:wrap;">${{platformLinks}}</div>` : ''}}
             ${{mediaLinks ? `<div style="display:flex; flex-direction:column; gap:6px;">${{mediaLinks}}</div>` : ''}}
             <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">${{showsHtml}}</div>
-            <details>
-              <summary style="cursor:pointer; font-size:0.84rem; color:var(--teal); font-weight:600;">Inspect Full Factual Dossier JSON</summary>
-              <pre class="json-view">${{esc(JSON.stringify(d, null, 2))}}</pre>
-            </details>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between; padding-top:4px; border-top:1px solid var(--border);">
+              <details style="flex:1;">
+                <summary style="cursor:pointer; font-size:0.84rem; color:var(--teal); font-weight:600;">Inspect Full Factual Dossier JSON</summary>
+                <pre class="json-view">${{esc(JSON.stringify(d, null, 2))}}</pre>
+              </details>
+              <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                <button type="button" class="btn primary run-screen-btn" data-screen-lead="${{esc(d.lead_id || '')}}" style="font-size:0.78rem; padding:5px 10px;">Run Screening →</button>
+                <a class="btn" href="/screen?lead=${{encodeURIComponent(d.lead_id || '')}}" style="font-size:0.78rem; padding:5px 10px;">Open Screening Deck →</a>
+              </div>
+            </div>
           </div>`;
       }}).join('');
+
+      document.querySelectorAll('.run-screen-btn').forEach((btn) => {{
+        btn.onclick = async () => {{
+          const lid = btn.dataset.screenLead;
+          const dossier = visible.find((x) => (x.lead_id || '') === lid) || null;
+          btn.disabled = true;
+          btn.textContent = 'Running Screening…';
+          try {{
+            const res = await fetch('/api/screening/run', {{
+              method: 'POST',
+              headers: {{ 'Content-Type': 'application/json' }},
+              body: JSON.stringify({{ lead_id: lid || undefined, dossier, live: false }}),
+            }});
+            if (res.ok) {{
+              window.location.href = `/screen?lead=${{encodeURIComponent(lid || '')}}`;
+              return;
+            }}
+            btn.textContent = 'Screening failed — Open Deck';
+          }} catch (e) {{
+            btn.textContent = 'Network error';
+          }} finally {{
+            btn.disabled = false;
+          }}
+        }};
+      }});
     }}
 
     async function loadDesk() {{

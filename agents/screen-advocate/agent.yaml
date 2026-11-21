@@ -1,9 +1,9 @@
 id: simon-screen-advocate
-description: "Stage 3 parallel screening critic (gemini-4-neon): builds the strongest evidence-backed Advocate case (Pros & Standout Hook) across all 5 Stage 2 InvestigatorDossier blocks."
+description: "Stage 3 parallel screening critic (gemini-4-carbon): builds the strongest evidence-backed Advocate case (Pros & Standout Hook) across all 5 Stage 2 InvestigatorDossier blocks."
 base_agent: antigravity-preview-09-2026
 agent_config:
   type: antigravity
-  model: gemini-4-neon
+  model: gemini-4-carbon
   max_total_tokens: "64000"
 system_instruction_file: SYSTEM.md
 tools:
