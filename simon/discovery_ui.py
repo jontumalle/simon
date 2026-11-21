@@ -165,37 +165,37 @@ def _human_steps_for_worker(
             {
                 "step_number": 1,
                 "phase": "looking_at",
-                "title": f"Scanning {src_names}",
-                "looking_at": f"Inspecting {src_names} against brief: {brief}",
-                "finding": f"Checked {len(assigned)} assigned source(s) for active vocalists and public clips.",
-                "analysis": "Focused on objective public bills and verifiable artist attribution.",
+                "title": f"Checked {src_names}",
+                "looking_at": f"Checked {src_names} against your brief: {brief}",
+                "finding": f"Scanned {len(assigned)} source(s) for active vocalists and public clips.",
+                "analysis": "Kept only public bills with clear artist attribution.",
                 "status": "done",
                 "updated_at": now,
             },
             {
                 "step_number": 2,
                 "phase": "finding",
-                "title": f"Discovered {len(findings)} subject(s)",
-                "looking_at": f"Cross-checking public seed links from {src_names}",
-                "finding": f"Found {len(findings)} distinct lead(s): {names_preview}.",
-                "analysis": "Each subject has at least one public seed link with clear context.",
+                "title": f"Found {len(findings)} artist(s)",
+                "looking_at": f"Checked public links from {src_names}",
+                "finding": f"Found {len(findings)} lead(s): {names_preview}.",
+                "analysis": "Each artist has at least one public link and clear context.",
                 "status": "done",
                 "updated_at": now,
             },
             {
                 "step_number": 3,
                 "phase": "analysis",
-                "title": "Verified & deduplicated leads",
-                "looking_at": "Checking attribution, URL hygiene, and unranked neutrality",
+                "title": "Checked & deduplicated leads",
+                "looking_at": "Checked artist attribution, link hygiene, and unranked output.",
                 "finding": (
                     "All leads passed DiscoveryHandoff v1.0.0 checks."
                     if worker.get("contract_valid")
-                    else "Completed with contract notes to review."
+                    else "Run finished with contract notes to review."
                 ),
                 "analysis": (
-                    "Zero scoring or ranking applied; ready for Stage 2 investigation."
+                    "No scores or ranks added. Ready for Stage 2 investigation."
                     if worker.get("contract_valid")
-                    else "; ".join(worker.get("contract_errors") or ["Review output payload."])
+                    else "; ".join(worker.get("contract_errors") or ["Review the output payload."])
                 ),
                 "status": "done" if worker.get("contract_valid") else "blocked",
                 "updated_at": now,
@@ -1044,7 +1044,56 @@ _NAV_CSS = """
   .nav-tools-popover .nav-group { flex-direction: column; align-items: stretch; gap: 2px; padding: 8px; }
   .nav-tools-popover .nav-group-label { border-right: none; padding: 0 4px 4px; margin-bottom: 2px; border-bottom: 1px solid var(--border); }
   .nav-tools-popover .nav-group a { padding: 6px 8px; font-size: 0.8rem; }
+  .subflow-nav {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+    padding: 8px 12px; margin-bottom: 16px; border-radius: 12px;
+    background: var(--panel, var(--surface)); border: 1px solid var(--border);
+  }
+  .subflow-label {
+    font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); padding-right: 8px; border-right: 1px solid var(--border);
+  }
+  .subflow-steps { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1; }
+  .subflow-step {
+    padding: 5px 11px; border-radius: 8px; font-size: 0.8rem; font-weight: 600;
+    color: var(--muted); text-decoration: none; border: 1px solid transparent;
+    transition: all 0.14s ease;
+  }
+  .subflow-step:hover { color: var(--text); border-color: var(--border); text-decoration: none; }
+  .subflow-step.active {
+    background: var(--accent-soft, rgba(217,119,6,0.12)); color: var(--accent);
+    border-color: var(--accent);
+  }
+  .subflow-arrow { color: var(--muted); font-size: 0.8rem; user-select: none; }
+  .subflow-next {
+    padding: 5px 11px; border-radius: 8px; font-size: 0.8rem; font-weight: 700;
+    color: var(--text); text-decoration: none; border: 1px solid var(--border);
+    background: var(--panel-2, var(--surface-2));
+  }
+  .subflow-next:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
 """
+
+
+def render_discovery_subnav(active_path: str) -> str:
+    """Render the persistent Discovery sub-flow bar across Discovery, Field News, and Scouting Reports."""
+    def _step(href: str, label: str, elem_id: str, is_active: bool) -> str:
+        cls = " active" if is_active else ""
+        return f'<a href="{href}" id="{elem_id}" class="subflow-step{cls}">{label}</a>'
+
+    steps = (
+        _step("/?tab=discovery", "1. Sources &amp; Dispatch", "subflowDiscoveryLink", active_path in ("/", "/discovery"))
+        + '<span class="subflow-arrow" aria-hidden="true">→</span>'
+        + _step("/field-news", "2. Field News", "subflowFieldNewsLink", active_path == "/field-news")
+        + '<span class="subflow-arrow" aria-hidden="true">→</span>'
+        + _step("/reports", "3. Scouting Reports", "subflowReportsLink", active_path == "/reports")
+    )
+    return (
+        '<nav class="subflow-nav" aria-label="Discovery Sub-Flow">'
+        '<span class="subflow-label">Discovery Flow</span>'
+        f'<div class="subflow-steps">{steps}</div>'
+        '<a href="/investigate" class="subflow-next">Next: Investigate →</a>'
+        "</nav>"
+    )
 
 
 def render_top_nav(active_path: str) -> str:
@@ -1124,6 +1173,8 @@ def render_top_nav(active_path: str) -> str:
         "var cur='light';try{cur=localStorage.getItem(k)||'light';}catch(e){}"
         "ap(cur);"
         "if(b)b.addEventListener('click',function(){ap((document.documentElement.getAttribute('data-theme')||'light')==='dark'?'light':'dark');});"
+        "document.addEventListener('click',function(e){document.querySelectorAll('.nav-tools-menu[open]').forEach(function(m){if(!m.contains(e.target))m.removeAttribute('open');});});"
+        "document.addEventListener('keydown',function(e){if(e.key==='Escape'){document.querySelectorAll('.nav-tools-menu[open]').forEach(function(m){m.removeAttribute('open');});}});"
         "})();</script>"
     )
     return (
@@ -1423,10 +1474,11 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
     <header>
       <div class="brand">
         <h1>Simon <span class="pill amber">1. Discovery Dashboard</span></h1>
-        <p>Decide what you want to scout: set your brief, pick active sources, dispatch scouts, and follow their live progress in <strong>Field News</strong>.</p>
+        <p>Pick your sources, write a brief, and send scouts. Track live progress in <strong>Field News</strong>.</p>
       </div>
       {render_top_nav("/discovery")}
     </header>
+    {render_discovery_subnav("/discovery")}
 
     <div id="banner" class="banner"></div>
 
@@ -1516,6 +1568,8 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       const q = `?batch=${{encodeURIComponent(batchId)}}`;
       if (el('tracesNavLink')) el('tracesNavLink').href = `/field-news${{q}}`;
       if (el('reportsNavLink')) el('reportsNavLink').href = `/reports${{q}}`;
+      if (el('subflowFieldNewsLink')) el('subflowFieldNewsLink').href = `/field-news${{q}}`;
+      if (el('subflowReportsLink')) el('subflowReportsLink').href = `/reports${{q}}`;
       if (el('followFieldNewsBtn')) el('followFieldNewsBtn').href = `/field-news${{q}}`;
       if (el('openReportsBtn')) el('openReportsBtn').href = `/reports${{q}}`;
       if (el('postDispatchLinks')) el('postDispatchLinks').style.display = 'inline-flex';
@@ -1788,10 +1842,11 @@ FIELD_NEWS_HTML = f"""<!DOCTYPE html>
     <header>
       <div class="brand">
         <h1>Simon <span class="pill ok">2. Field News</span></h1>
-        <p>Agents in motion: live human-first updates on what each scout is looking at, what they are finding, and their analysis through the process.</p>
+        <p>Live updates from active scouts: what each scout checks, finds, and notes in real time.</p>
       </div>
       {render_top_nav("/field-news")}
     </header>
+    {render_discovery_subnav("/field-news")}
 
     <section class="card">
       <div class="section-head">
@@ -1916,6 +1971,15 @@ FIELD_NEWS_HTML = f"""<!DOCTYPE html>
       if (el('reportsNavLink') && currentBatchId) {{
         el('reportsNavLink').href = `/reports?batch=${{encodeURIComponent(currentBatchId)}}`;
       }}
+      if (el('subflowReportsLink') && currentBatchId) {{
+        el('subflowReportsLink').href = `/reports?batch=${{encodeURIComponent(currentBatchId)}}`;
+      }}
+      try {{
+        const u = new URL(window.location.href);
+        if (currentBatchId) u.searchParams.set('batch', currentBatchId);
+        else u.searchParams.delete('batch');
+        window.history.replaceState({{}}, '', u.toString());
+      }} catch (e) {{}}
     }}
 
     async function loadBatches() {{
@@ -1986,10 +2050,11 @@ REPORTS_HTML = f"""<!DOCTYPE html>
     <header>
       <div class="brand">
         <h1>Simon <span class="pill blue">3. Scouting Reports</span></h1>
-        <p>Human-first scouting reports with verified findings, process summaries, and stored agent outputs ready for review.</p>
+        <p>Saved scouting reports with checked leads, step-by-step notes, and raw JSON outputs.</p>
       </div>
       {render_top_nav("/reports")}
     </header>
+    {render_discovery_subnav("/reports")}
 
     <section class="card">
       <div class="section-head">
@@ -2021,6 +2086,9 @@ REPORTS_HTML = f"""<!DOCTYPE html>
     const params = new URLSearchParams(window.location.search);
     const filterBatchId = params.get('batch') || '';
     const focusReportId = params.get('report') || '';
+    if (filterBatchId && el('subflowFieldNewsLink')) {{
+      el('subflowFieldNewsLink').href = `/field-news?batch=${{encodeURIComponent(filterBatchId)}}`;
+    }}
 
     function statusPill(status) {{
       if (status === 'completed') return '<span class="pill ok">completed</span>';
@@ -2162,7 +2230,7 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
     <header>
       <div class="brand">
         <h1>Simon <span class="pill ok">4. Investigator Desk</span></h1>
-        <p>Stage 2 Investigation: inspect verified leads from Discovery, follow live Investigator Field News, and review objective factual dossiers (zero ranking or scoring).</p>
+        <p>Check Stage 1 leads, run Stage 2 investigators, and read factual artist dossiers. No scores or ranks.</p>
       </div>
       {render_top_nav("/investigate")}
     </header>
@@ -2573,7 +2641,7 @@ EVALS_HTML = f"""<!DOCTYPE html>
     <header>
       <div class="brand">
         <h1>Simon <span class="pill blue">6. Evals (Vertex AI)</span></h1>
-        <p>Run 3-layer rubrics across every Simon Managed Agent, track Vertex AI Gen AI Evaluation Service scorecards, and catch live regressions.</p>
+        <p>Run 3-layer rubrics on each Simon agent, view Vertex AI scorecards, and catch regressions.</p>
       </div>
       {render_top_nav("/evals")}
     </header>

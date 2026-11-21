@@ -61,15 +61,16 @@
     applyTheme(cur === 'dark' ? 'light' : 'dark');
   });
 
-  // --- TOP TABS & URL STATE SYNC ---
+  // --- TOP TABS & EXPLICIT URL/HISTORY STATE MACHINE ---
   const TAB_LABELS = {
     discovery: 'Discovery',
     review: 'Talent Review',
     pipeline: 'Pipeline Stepper',
     lab: 'Agent Lab',
   };
+  const VALID_TABS = new Set(Object.keys(TAB_LABELS));
 
-  function syncUrlState(tabName) {
+  function syncUrlState(tabName, pushHistory = false) {
     try {
       const url = new URL(window.location.href);
       url.searchParams.set('tab', tabName);
@@ -89,42 +90,75 @@
         url.searchParams.delete('lead');
         url.searchParams.delete('subject');
       }
-      window.history.replaceState({}, '', url.toString());
+      const nextHref = url.toString();
+      if (pushHistory && nextHref !== window.location.href) {
+        window.history.pushState({ tab: tabName, phase: state.activePhaseId, subtab: state.activeSubtab }, '', nextHref);
+      } else {
+        window.history.replaceState({ tab: tabName, phase: state.activePhaseId, subtab: state.activeSubtab }, '', nextHref);
+      }
     } catch (e) {
       // Ignore history errors in restricted frames
     }
   }
 
-  function switchTab(tabName, updateUrl = true) {
-    state.activeTab = tabName;
+  function switchTab(tabName, updateUrl = true, pushHistory = false) {
+    const safeTab = VALID_TABS.has(tabName) ? tabName : 'review';
+    state.activeTab = safeTab;
     document.querySelectorAll('.tab-panel').forEach((p) => p.classList.add('hidden'));
-    const target = $('tab-' + tabName);
+    const target = $('tab-' + safeTab);
     if (target) target.classList.remove('hidden');
     document.querySelectorAll('[data-tab]').forEach((btn) => {
       if (btn.classList.contains('nav-tab')) {
-        btn.classList.toggle('active', btn.dataset.tab === tabName);
+        btn.classList.toggle('active', btn.dataset.tab === safeTab);
       }
     });
     if ($('reviewTopbarControls')) {
-      $('reviewTopbarControls').classList.toggle('hidden', tabName !== 'review');
+      $('reviewTopbarControls').classList.toggle('hidden', safeTab !== 'review');
     }
-    const label = TAB_LABELS[tabName] || 'Studio';
+    const label = TAB_LABELS[safeTab] || 'Studio';
     if ($('brandSubLabel')) {
       $('brandSubLabel').textContent = label;
     }
-    document.title = `Simon · 5. Vocal Studio · ${label}`;
+    document.title = `Simon · ${label}`;
     const moreMenu = $('moreMenu');
     if (moreMenu) moreMenu.removeAttribute('open');
-    if (updateUrl) syncUrlState(tabName);
+    if (updateUrl) syncUrlState(safeTab, pushHistory);
   }
   document.querySelectorAll('[data-tab]').forEach((btn) => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab, true, true));
   });
 
-  // --- DRAWERS ---
+  window.addEventListener('popstate', () => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab') || 'review';
+    const phase = params.get('phase');
+    const subtab = params.get('subtab') || 'shortlist';
+    if (phase && state.phases.some((p) => p.id === phase)) {
+      selectPhase(phase);
+    }
+    if (tab === 'review') {
+      selectSubtab(subtab, false);
+    }
+    switchTab(tab, false, false);
+  });
+
+  // --- DRAWERS & POPOVER DISMISSAL ---
   function closeDrawers() {
     ['profileDrawer', 'briefDrawer', 'traceDrawer'].forEach((id) => $(id).classList.add('hidden'));
   }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeDrawers();
+      const m = $('moreMenu');
+      if (m) m.removeAttribute('open');
+    }
+  });
+  document.addEventListener('click', (e) => {
+    const m = $('moreMenu');
+    if (m && m.hasAttribute('open') && !m.contains(e.target)) {
+      m.removeAttribute('open');
+    }
+  });
   document.querySelectorAll('[data-close-drawer]').forEach((btn) => {
     btn.addEventListener('click', closeDrawers);
   });
@@ -162,6 +196,8 @@
     const q = `?batch=${encodeURIComponent(batchId)}`;
     if ($('tracesNavLink')) $('tracesNavLink').href = `/field-news${q}`;
     if ($('reportsNavLink')) $('reportsNavLink').href = `/reports${q}`;
+    if ($('subflowFieldNewsLink')) $('subflowFieldNewsLink').href = `/field-news${q}`;
+    if ($('subflowReportsLink')) $('subflowReportsLink').href = `/reports${q}`;
     if ($('discTopFieldNewsLink')) $('discTopFieldNewsLink').href = `/field-news${q}`;
     if ($('discTopReportsLink')) $('discTopReportsLink').href = `/reports${q}`;
     if ($('discFollowFieldNewsBtn')) $('discFollowFieldNewsBtn').href = `/field-news${q}`;
@@ -1072,19 +1108,39 @@
     $('phaseInputHint').textContent = cur.input_hint;
   }
 
+  function resetPhaseOutputPanel() {
+    $('phaseRunMeta').textContent = 'Not run yet';
+    $('phaseChecks').innerHTML = '';
+    $('phaseOutputCards').innerHTML = '<div class="muted" style="font-size:12.5px;">Run this phase to inspect agent outputs, checks, and next-stage handoff.</div>';
+    $('phaseRawJson').textContent = '{}';
+    const batchLinks = $('phaseBatchLinks');
+    if (batchLinks) {
+      batchLinks.innerHTML = '';
+      batchLinks.classList.add('hidden');
+    }
+  }
+
   function selectPhase(phaseId, customInput = null) {
-    state.activePhaseId = phaseId;
+    const validPhase = state.phases.some((p) => p.id === phaseId) ? phaseId : (state.phases[0] ? state.phases[0].id : '1_discovery');
+    state.activePhaseId = validPhase;
     renderPipelineStepper();
-    const cur = state.phases.find((p) => p.id === phaseId);
+    const cur = state.phases.find((p) => p.id === validPhase);
     if (cur) {
       $('phaseInputJson').value = JSON.stringify(customInput || cur.default_input, null, 2);
     }
     if ($('phaseSourceBridgeBar')) {
-      $('phaseSourceBridgeBar').classList.toggle('hidden', phaseId !== '1_discovery');
+      $('phaseSourceBridgeBar').classList.toggle('hidden', validPhase !== '1_discovery');
     }
     if ($('phaseLeadBridgeBar')) {
-      const showLeads = ['2a_identity', '2b_investigators', '2c_dossier', '3_screening', '4_producer'].includes(phaseId);
+      const showLeads = ['2a_identity', '2b_investigators', '2c_dossier', '3_screening', '4_producer'].includes(validPhase);
       $('phaseLeadBridgeBar').classList.toggle('hidden', !showLeads);
+    }
+    // Explicitly sync output panel to this phase's latest checkpoint or clean empty state
+    const latestForPhase = (state.phaseRuns || []).find((r) => r.phase_id === validPhase);
+    if (latestForPhase && !customInput) {
+      renderPhaseResult(latestForPhase);
+    } else {
+      resetPhaseOutputPanel();
     }
     if (state.activeTab === 'pipeline') {
       syncUrlState('pipeline');
