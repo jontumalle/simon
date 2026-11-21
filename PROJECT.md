@@ -34,7 +34,7 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 ## Recent sessions
 *Working memory (LRU pointer cache, max 12, most recent first). Maintained by the `project-manager` skill/subagent.*
 
-- 2026-11-21 · label-signing recall eval · added 10-artist Option C benchmark & merged recall eval runner (PR #21, `e56051b`) → `pm/log/2026-11-21-label-signing-recall-eval.md`, `data/evals/label_signing_recall_eval.json`, `simon/recall_eval.py`
+- 2026-11-21 · label-signing recall eval · live 3-worker recall run (192k tokens, 24 leads), `/evals` trace selector & honest offline scoring (`602a30c`) → `pm/log/2026-11-21-label-signing-recall-eval.md`, `simon/vertex_eval.py`, `agents/discovery-scout/`
 - 2026-11-21 · multi-agent vertex evals · merged PR #20 (runner, /evals UI, 65/65 tests) & 9-agent 3-layer rubrics baseline (119 rubrics) → `pm/log/2026-11-21-discovery-vertex-evals.md`, `simon/vertex_eval.py`, `data/evals/`
 - 2026-11-21 · discovery dashboard ui · removed redundant section 3, expanded source selector with search/genres/chips/tray (PR #18) → `pm/log/2026-11-21-discovery-dashboard-ui.md`, `simon/discovery_ui.py`
 - 2026-11-21 · agency studio ui remodel · remodeled `/` into 3-tab studio (Talent Review, Phase Runner, Agent Lab), unified theme & phase runner API (PR #16) → `pm/log/2026-11-21-agency-studio-ui.md`, `simon/static/`, `simon/phases.py`
