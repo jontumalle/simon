@@ -7,6 +7,8 @@
 - **Global `always_on` Rule Configured (`~/.gemini/config/rules/plain-english.md`)**:
   - Added user-level rule `~/.gemini/config/rules/plain-english.md` (`trigger: always_on`) enforcing STE-100 + Zinsser clarity across every response.
   - Confirmed owner decision to pair the rule with an **Adaptive Exploration vs. Execution Gate**: agents propose trade-offs and ask up to 2 questions when intent has ambiguity, and execute immediately on explicit commands or inside background subagents so autonomous subagents never stall waiting for interactive input.
+- **6th Standard Added — Visual First / Mermaid Preferred (`45e4405`)**:
+  - Updated both `~/.gemini/config/rules/plain-english.md` and [`.agents/skills/plain-english/SKILL.md`](../../.agents/skills/plain-english/SKILL.md) with a 6th core standard (**Visual First · Mermaid Preferred** — draw Mermaid diagrams instead of prose walls whenever flows, systems, or trade-offs map cleanly to a diagram, quoting special-character labels) and added Mermaid steps to **Mode A** and **Mode B**.
 - **Artifact Check**:
   - Checked `/Users/kevinquizhpi/.gemini/antigravity/brain/b2a966c3-5377-4db5-9cbd-22ede23b178d`; the session wrote all durable files directly to the repository and user config without leaving standalone brain artifacts.
 - **Worktree Sync Process Note**:
