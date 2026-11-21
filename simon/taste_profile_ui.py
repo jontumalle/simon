@@ -9,7 +9,7 @@ overrides, DSPy few-shot calibration anchors, and 4-step methodology around thre
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from .db_tools import sanitize_agent_report
 from .discovery_ui import _SHARED_CSS, render_top_nav
@@ -24,15 +24,15 @@ from .screening import (
 )
 
 
-def _compute_calibration_stage(human_reviews_count: int, overrides_count: int) -> Dict[str, str]:
+def _compute_calibration_stage(human_reviews_count: int, overrides_count: int) -> dict[str, str]:
     """Classify current producer taste calibration maturity for Pillar 1 ('Where We Are')."""
     if human_reviews_count <= 0:
         return {
             "stage": "Bootstrapping",
             "tone": "amber",
             "detail": (
-                "Baseline 5-skill rubric + Neon Judge anchors active. Review candidates on Screening Deck "
-                "to teach Simon your personal taste."
+                "Starting with the 5-part A&R scorecard and starter examples. "
+                "Review artists on the Screening Deck to teach Simon your taste."
             ),
         }
     if human_reviews_count < 3 and overrides_count < 2:
@@ -40,32 +40,32 @@ def _compute_calibration_stage(human_reviews_count: int, overrides_count: int) -
             "stage": "Learning Your Taste",
             "tone": "purple",
             "detail": (
-                f"Incorporating {human_reviews_count} human review(s) and {overrides_count} override(s) "
-                "at 2.0x training weight."
+                f"Learning from {human_reviews_count} producer review(s) and "
+                f"{overrides_count} override(s) at 2x weight."
             ),
         }
     return {
         "stage": "Calibrated",
         "tone": "ok",
         "detail": (
-            f"Calibrated across {human_reviews_count} producer review(s) ({overrides_count} override(s) "
-            "baked into 0-output-token gemini-decision-1 policy)."
+            f"Tuned across {human_reviews_count} producer review(s), with "
+            f"{overrides_count} override(s) active in your Instant Taste Engine."
         ),
     }
 
 
-def _build_input_criteria_catalog(active_policy: Dict[str, Any] | None) -> List[Dict[str, Any]]:
+def _build_input_criteria_catalog(active_policy: dict[str, Any] | None) -> list[dict[str, Any]]:
     """Return structured 5-dossier-input criteria combining RUBRIC_META and active questions_config."""
     q_cfg = (active_policy or {}).get("questions_config") or {}
-    items: List[Dict[str, Any]] = []
+    items: list[dict[str, Any]] = []
     for idx, key in enumerate(RUBRIC_ORDER, start=1):
         meta = RUBRIC_META[key]
         q_entry = q_cfg.get(key) if isinstance(q_cfg.get(key), dict) else {}
         raw_criteria = q_entry.get("criteria") if isinstance(q_entry.get("criteria"), list) else []
 
-        def _tier_text(level_idx: int, fallback: str) -> str:
-            if level_idx < len(raw_criteria) and isinstance(raw_criteria[level_idx], str):
-                cleaned = raw_criteria[level_idx].strip()
+        def _tier_text(level_idx: int, fallback: str, criteria: list[Any] = raw_criteria) -> str:
+            if level_idx < len(criteria) and isinstance(criteria[level_idx], str):
+                cleaned = criteria[level_idx].strip()
                 prefix = f"{level_idx}:"
                 if cleaned.startswith(prefix):
                     return cleaned[len(prefix) :].strip()
@@ -82,7 +82,7 @@ def _build_input_criteria_catalog(active_policy: Dict[str, Any] | None) -> List[
                 "max_points": 2,
                 "instructions": str(
                     q_entry.get("instructions")
-                    or f"Score {meta['label']} ({meta['skill']}) from 0 to 2 using only grounded Stage 2 dossier facts."
+                    or f"Score {meta['label']} from 0 to 2 using only verified artist dossier facts."
                 ),
                 "tiers": {
                     "0": _tier_text(0, meta["level_0"]),
@@ -94,7 +94,7 @@ def _build_input_criteria_catalog(active_policy: Dict[str, Any] | None) -> List[
     return items
 
 
-def build_taste_profile_payload(store: Any) -> Dict[str, Any]:
+def build_taste_profile_payload(store: Any) -> dict[str, Any]:
     """Assemble combined `GET /api/taste-profile` payload, auto-compiling `policy_v1` if empty."""
     deck = list_screening_deck(store, limit=100)
     models = list_judging_models(store, limit=50)
@@ -396,6 +396,148 @@ _TASTE_PROFILE_SCRIPT = """
       return div.innerHTML;
     }
 
+    const ACRONYM_MAP = {
+      ar: 'A&R',
+      nyc: 'NYC',
+      dm: 'DM',
+      dsp: 'DSP',
+      ep: 'EP',
+      lp: 'LP',
+      pct: '%',
+    };
+
+    const BLOCK_LABELS = {
+      identity_and_contact: 'Identity & Contact',
+      source_and_media_queue: 'Media Queue',
+      public_footprint: 'Public Footprint',
+      comment_forensics: 'Listener Comments',
+      live_history_and_credits: 'Live History & Credits',
+    };
+
+    const SKILL_LABELS = {
+      'dossier-identity': 'Identity',
+      'dossier-media': 'Live Media',
+      'dossier-footprint': 'Catalog Reach',
+      'dossier-audience': 'Audience Pull',
+      'dossier-track-record': 'Live Track Record',
+    };
+
+    const RUBRIC_LABELS = {
+      identity_reachability: 'Identity & Reachability',
+      live_vocal_proof: 'Live Vocal Proof',
+      early_window_depth: 'Early-Window Catalog Depth',
+      listener_pull_cosigns: 'Listener Pull & Scene Cosigns',
+      stage_momentum_whitespace: 'Stage Momentum & A&R Whitespace',
+    };
+
+    const SOURCE_LABELS = {
+      human_override: 'Producer Override',
+      human_label: 'Producer Review',
+      judge_bootstrap: 'Starter Anchor',
+    };
+
+    function titleCaseToken(token) {
+      const lower = String(token || '').toLowerCase();
+      if (!lower) return '';
+      if (ACRONYM_MAP[lower]) return ACRONYM_MAP[lower];
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    }
+
+    function humanizeIdentifier(raw) {
+      const text = String(raw || '').trim();
+      if (!text) return '';
+      return text
+        .replace(/[_-]+/g, ' ')
+        .split(/\\s+/)
+        .map(titleCaseToken)
+        .join(' ');
+    }
+
+    function formatPolicyLabel(policyId) {
+      const raw = String(policyId || 'policy_v1').trim();
+      const match = raw.match(/^policy_v(\\d+)$/i);
+      if (match) return 'Taste Profile v' + match[1];
+      return humanizeIdentifier(raw) || 'Taste Profile v1';
+    }
+
+    function formatSourceLabel(source) {
+      const key = String(source || 'judge_bootstrap').trim().toLowerCase();
+      return SOURCE_LABELS[key] || humanizeIdentifier(key);
+    }
+
+    function formatWeight(weight) {
+      const num = weight != null ? Number(weight) : 1;
+      if (!Number.isFinite(num)) return '1x weight';
+      const clean = Number.isInteger(num) ? String(num) : num.toFixed(1).replace(/\\.0$/, '');
+      return clean + 'x weight';
+    }
+
+    function formatReviewer(handle) {
+      const raw = String(handle || '').trim();
+      if (!raw || raw.toLowerCase() === 'human_scout') return 'Producer';
+      if (!raw.includes('_') && !raw.includes('-')) return raw;
+      return humanizeIdentifier(raw);
+    }
+
+    function formatBlockLabel(blockKey) {
+      const key = String(blockKey || '').trim();
+      return BLOCK_LABELS[key] || humanizeIdentifier(key);
+    }
+
+    function formatSkillLabel(skillKey) {
+      const key = String(skillKey || '').trim();
+      return SKILL_LABELS[key] || humanizeIdentifier(key);
+    }
+
+    function humanizeText(raw) {
+      let text = String(raw || '').trim();
+      if (!text) return '';
+      // Protect URLs so query parameters are never altered.
+      const urls = [];
+      text = text.replace(/https?:\\/\\/[^\\s)]+/g, (url) => {
+        urls.push(url);
+        return '__URL_TOKEN_' + (urls.length - 1) + '__';
+      });
+
+      text = text
+        .replace(/\\s*\\(dossier-[a-z-]+\\)/gi, '')
+        .replace(/grounded Stage 2 dossier facts/gi, 'verified artist dossier facts')
+        .replace(/Stage 2 artist dossier/gi, 'artist dossier')
+        .replace(/Stage 2 dossier/gi, 'artist dossier')
+        .replace(/Stage 3 screening verdict/gi, 'screening verdict')
+        .replace(/has_public_business_contact\\s*=\\s*false/gi, 'no public business contact')
+        .replace(/has_public_business_contact\\s*=\\s*true/gi, 'public business contact available')
+        .replace(/contact_route_type\\s*=\\s*['"]open_dm['"]/gi, 'contact route: open DM')
+        .replace(/contact_route_type\\s*=\\s*['"]none['"]/gi, 'contact route: none')
+        .replace(/contact_route_type\\s*=\\s*['"]([^'"]+)['"]/gi, (_, v) => 'contact route: ' + humanizeIdentifier(v))
+        .replace(/public_team_mentions\\.label\\s*=\\s*['"]([^'"]+)['"]/gi, 'label: $1')
+        .replace(/attribution_status\\s*=\\s*['"]([^'"]+)['"]/gi, 'attribution: $1')
+        .replace(/label\\s*=\\s*null\\s*,\\s*management\\s*=\\s*null/gi, 'no label or management')
+        .replace(/top_release_view_share_pct\\s*=\\s*([0-9.]+%?)/gi, 'top release view share: $1')
+        .replace(/\\bopen_dm\\b/gi, 'open DM')
+        .replace(/\\bbio_email\\b/gi, 'bio email')
+        .replace(/\\bmissing_fields\\b/gi, 'Open Questions');
+
+      Object.keys(BLOCK_LABELS).forEach((key) => {
+        text = text.replace(new RegExp('\\\\b' + key + '\\\\b', 'g'), BLOCK_LABELS[key]);
+      });
+      Object.keys(RUBRIC_LABELS).forEach((key) => {
+        text = text.replace(new RegExp('\\\\b' + key + '\\\\b', 'g'), RUBRIC_LABELS[key]);
+      });
+
+      // Convert remaining snake_case=value metric pairs into readable phrases.
+      text = text.replace(/\\b([a-z][a-z0-9]*(?:_[a-z0-9]+)+)\\s*=\\s*['"]?([^'",;\\s)]+)['"]?/g, (_, key, val) => {
+        const cleanKey = key.replace(/_pct$/i, '').replace(/_/g, ' ');
+        const cleanVal = val.includes('_') ? humanizeIdentifier(val) : val;
+        return cleanKey + ': ' + cleanVal;
+      });
+
+      urls.forEach((url, idx) => {
+        text = text.replace('__URL_TOKEN_' + idx + '__', url);
+      });
+      return text;
+    }
+
     const FALLBACK_RUBRICS = [
       {
         index: 1,
@@ -403,11 +545,11 @@ _TASTE_PROFILE_SCRIPT = """
         label: 'Identity & Reachability',
         skill: 'dossier-identity',
         block: 'identity_and_contact',
-        instructions: 'Score Identity & Reachability (dossier-identity) from 0 to 2 using only grounded Stage 2 dossier facts.',
+        instructions: 'Score Identity & Reachability from 0 to 2 using only verified artist dossier facts.',
         tiers: {
-          '0': 'No verified identity links or public contact route (none).',
+          '0': 'No verified identity links or public contact route.',
           '1': 'Partial platform identity or open DM route, missing business email or home city.',
-          '2': 'Clear artist identity, active platform links, and direct business/mgmt contact route.'
+          '2': 'Clear artist identity, active platform links, and direct business or management contact.'
         }
       },
       {
@@ -416,11 +558,11 @@ _TASTE_PROFILE_SCRIPT = """
         label: 'Live Vocal Proof',
         skill: 'dossier-media',
         block: 'source_and_media_queue',
-        instructions: 'Score Live Vocal Proof (dossier-media) from 0 to 2 using only grounded Stage 2 dossier facts.',
+        instructions: 'Score Live Vocal Proof from 0 to 2 using only verified artist dossier facts.',
         tiers: {
-          '0': 'No embeddable performance clips in source_and_media_queue.',
-          '1': 'Single embeddable clip or uncertain performer attribution requiring second-take verification.',
-          '2': 'Verified performer attribution with 2+ embeddable live/acoustic performance clips.'
+          '0': 'No playable performance clips in the Media Queue.',
+          '1': 'Single playable clip or uncertain performer attribution that needs a second take.',
+          '2': 'Verified performer attribution with 2+ playable live or acoustic performance clips.'
         }
       },
       {
@@ -429,11 +571,11 @@ _TASTE_PROFILE_SCRIPT = """
         label: 'Early-Window Catalog Depth',
         skill: 'dossier-footprint',
         block: 'public_footprint',
-        instructions: 'Score Early-Window Catalog Depth (dossier-footprint) from 0 to 2 using only grounded Stage 2 dossier facts.',
+        instructions: 'Score Early-Window Catalog Depth from 0 to 2 using only verified artist dossier facts.',
         tiers: {
-          '0': 'Unknown footprint regime with zero public reach or catalog metrics.',
-          '1': 'Thin single-release footprint or already post-inflection established streaming act.',
-          '2': 'Pre-DSP underground or early-DSP inflection artist with multi-track depth and organic reach.'
+          '0': 'Unknown footprint with zero public reach or catalog metrics.',
+          '1': 'Thin single-release catalog or an already established streaming act.',
+          '2': 'Early underground or breakout artist with multi-track depth and organic reach.'
         }
       },
       {
@@ -442,11 +584,11 @@ _TASTE_PROFILE_SCRIPT = """
         label: 'Listener Pull & Scene Cosigns',
         skill: 'dossier-audience',
         block: 'comment_forensics',
-        instructions: 'Score Listener Pull & Scene Cosigns (dossier-audience) from 0 to 2 using only grounded Stage 2 dossier facts.',
+        instructions: 'Score Listener Pull & Scene Cosigns from 0 to 2 using only verified artist dossier facts.',
         tiers: {
-          '0': 'Zero sampled comment signal or spam-dominated comment section.',
-          '1': 'Modest organic listener praise without explicit release/live requests or peer cosigns.',
-          '2': 'Strong release/live-show demand counts and/or notable producer, musician, or curator cosigns.'
+          '0': 'Zero sampled comment signal or spam-heavy comment section.',
+          '1': 'Modest listener praise without explicit release requests, show requests, or peer cosigns.',
+          '2': 'Strong release or live-show demand and notable producer, musician, or curator cosigns.'
         }
       },
       {
@@ -455,11 +597,11 @@ _TASTE_PROFILE_SCRIPT = """
         label: 'Stage Momentum & A&R Whitespace',
         skill: 'dossier-track-record',
         block: 'live_history_and_credits',
-        instructions: 'Score Stage Momentum & A&R Whitespace (dossier-track-record) from 0 to 2 using only grounded Stage 2 dossier facts.',
+        instructions: 'Score Stage Momentum & A&R Whitespace from 0 to 2 using only verified artist dossier facts.',
         tiers: {
           '0': 'Zero documented live show history, upcoming bills, or collaborator credits.',
           '1': 'Early single-room show or credit activity, or active live act already signed to a label.',
-          '2': 'Active room/club billing momentum plus collaborator credits with unsigned label whitespace.'
+          '2': 'Active club billing momentum plus collaborator credits with unsigned label whitespace.'
         }
       }
     ];
@@ -492,7 +634,7 @@ _TASTE_PROFILE_SCRIPT = """
 
     function splitHumanGuidance(rawDesc) {
       const text = String(rawDesc || '').trim();
-      const match = text.match(/^(.*?)\\s*(Human scout\\s+\\w+\\s+guidance:\\s*.+)$/i);
+      const match = text.match(/^(.*?)\\s*Human scout\\s+\\w+\\s+guidance:\\s*(.+)$/i);
       if (!match) {
         return { baseText: text, humanGuidance: '' };
       }
@@ -525,16 +667,17 @@ _TASTE_PROFILE_SCRIPT = """
       const sel = el('policyVersionSelect');
       if (!sel) return;
       if (!models.length) {
-        sel.innerHTML = '<option value="">policy_v1 (baseline)</option>';
+        sel.innerHTML = '<option value="">Taste Profile v1 (Starter)</option>';
         return;
       }
       sel.innerHTML = models.map((m) => {
         const pid = String(m.policy_id || 'policy_v1');
+        const displayName = formatPolicyLabel(pid);
         const isAct = Boolean(m.is_active || (activePolicy && activePolicy.policy_id === pid));
         const ovCount = Number(m.override_count || 0);
         const hCount = Number(m.human_label_count || 0);
-        const tag = isAct ? ' · ACTIVE' : ' · snapshot';
-        const label = `${pid}${tag} (${hCount} human, ${ovCount} override${ovCount === 1 ? '' : 's'})`;
+        const tag = isAct ? ' · Active' : ' · Past version';
+        const label = `${displayName}${tag} (${hCount} review${hCount === 1 ? '' : 's'}, ${ovCount} override${ovCount === 1 ? '' : 's'})`;
         const selectedAttr = currentPolicy && currentPolicy.policy_id === pid ? ' selected' : '';
         return `<option value="${escapeHtml(pid)}"${selectedAttr}>${escapeHtml(label)}</option>`;
       }).join('');
@@ -551,13 +694,15 @@ _TASTE_PROFILE_SCRIPT = """
 
       const activeId = (activePolicy && activePolicy.policy_id) || summary.active_policy_id || 'policy_v1';
       const viewingId = (policy && policy.policy_id) || activeId;
+      const activeLabel = formatPolicyLabel(activeId);
+      const viewingLabel = formatPolicyLabel(viewingId);
       const isHistorical = Boolean(policy && activePolicy && policy.policy_id !== activePolicy.policy_id);
 
       const policyBadge = el('activePolicyPill');
       if (policyBadge) {
         policyBadge.textContent = isHistorical
-          ? `Inspecting ${viewingId} (Active: ${activeId})`
-          : `Active Policy: ${activeId}`;
+          ? `Viewing ${viewingLabel} (Active: ${activeLabel})`
+          : `Active: ${activeLabel}`;
       }
 
       const notice = el('historicalPolicyNotice');
@@ -565,8 +710,8 @@ _TASTE_PROFILE_SCRIPT = """
         if (isHistorical) {
           notice.style.display = 'flex';
           notice.innerHTML = `
-            <span>Inspecting historical snapshot <strong>${escapeHtml(viewingId)}</strong>. Active live policy is <strong>${escapeHtml(activeId)}</strong>.</span>
-            <button type="button" class="btn" id="jumpActivePolicyBtn" style="padding:4px 10px; font-size:0.78rem;">Return to Active (${escapeHtml(activeId)})</button>
+            <span>Viewing past version <strong>${escapeHtml(viewingLabel)}</strong>. Your active profile is <strong>${escapeHtml(activeLabel)}</strong>.</span>
+            <button type="button" class="btn" id="jumpActivePolicyBtn" style="padding:4px 10px; font-size:0.78rem;">Switch to ${escapeHtml(activeLabel)}</button>
           `;
           const jumpBtn = el('jumpActivePolicyBtn');
           if (jumpBtn) {
@@ -592,47 +737,46 @@ _TASTE_PROFILE_SCRIPT = """
       const thresholds = (policy && policy.thresholds) || {};
       const elevMin = thresholds.elevate_min_score != null ? thresholds.elevate_min_score : 7;
       const watchMin = thresholds.watch_min_score != null ? thresholds.watch_min_score : 4;
-      const optimizer = (policy && policy.optimizer) || 'dspy.BootstrapFewShot';
-      const targetModel = (policy && policy.target_model) || 'gemini-decision-1';
+      const policyCount = Number(summary.policy_count || 1);
       const compiledAt = (policy && policy.compiled_at)
         ? String(policy.compiled_at).replace('T', ' ').replace('Z', ' UTC')
         : 'Live';
 
       el('whereKpiGrid').innerHTML = `
         <div class="kpi-tile">
-          <span class="kpi-label">Selected Policy</span>
-          <span class="kpi-value">${escapeHtml(viewingId)}</span>
-          <span class="kpi-meta">${isHistorical ? 'Historical version' : 'Active live policy'} · ${escapeHtml(compiledAt)}</span>
+          <span class="kpi-label">Selected Profile</span>
+          <span class="kpi-value" style="font-size:1.05rem;">${escapeHtml(viewingLabel)}</span>
+          <span class="kpi-meta">${isHistorical ? 'Past version' : 'Active profile'} · ${escapeHtml(compiledAt)}</span>
         </div>
         <div class="kpi-tile">
           <span class="kpi-label">Calibration Stage</span>
           <span class="kpi-value">${escapeHtml(stageName)}</span>
-          <span class="kpi-meta">${escapeHtml(String(summary.policy_count || 1))} compiled version(s) in Firestore</span>
+          <span class="kpi-meta">${escapeHtml(String(policyCount))} saved ${policyCount === 1 ? 'version' : 'versions'}</span>
         </div>
         <div class="kpi-tile">
-          <span class="kpi-label">Candidates Screened</span>
+          <span class="kpi-label">Artists Screened</span>
           <span class="kpi-value">${escapeHtml(String(summary.candidates_screened || 0))}</span>
           <span class="kpi-meta">${escapeHtml(String(summary.elevate_count || 0))} Elevate · ${escapeHtml(String(summary.watch_count || 0))} Watch · ${escapeHtml(String(summary.pass_count || 0))} Pass</span>
         </div>
         <div class="kpi-tile">
-          <span class="kpi-label">Human Reviews Logged</span>
+          <span class="kpi-label">Producer Reviews</span>
           <span class="kpi-value">${escapeHtml(String(summary.human_reviews_count || 0))}</span>
-          <span class="kpi-meta">${escapeHtml(String((policy && policy.human_label_count) || 0))} compiled into ${escapeHtml(viewingId)}</span>
+          <span class="kpi-meta">${escapeHtml(String((policy && policy.human_label_count) || 0))} included in ${escapeHtml(viewingLabel)}</span>
         </div>
         <div class="kpi-tile">
-          <span class="kpi-label">Overrides Learned (2x)</span>
+          <span class="kpi-label">Producer Overrides (2x)</span>
           <span class="kpi-value">${escapeHtml(String(summary.overrides_count || 0))}</span>
-          <span class="kpi-meta">${escapeHtml(String((policy && policy.override_count) || 0))} baked into ${escapeHtml(viewingId)} prompts</span>
+          <span class="kpi-meta">${escapeHtml(String((policy && policy.override_count) || 0))} active in ${escapeHtml(viewingLabel)}</span>
         </div>
         <div class="kpi-tile">
-          <span class="kpi-label">Validation Accuracy</span>
+          <span class="kpi-label">Match Rate</span>
           <span class="kpi-value">${escapeHtml(valAcc)}</span>
           <span class="kpi-meta">Elevate &ge; ${escapeHtml(String(elevMin))}/10 · Watch ${escapeHtml(String(watchMin))}–${escapeHtml(String(Math.max(watchMin, elevMin - 1)))}/10</span>
         </div>
         <div class="kpi-tile">
-          <span class="kpi-label">Target Engine &amp; Optimizer</span>
-          <span class="kpi-value" style="font-size:0.98rem;">${escapeHtml(targetModel)}</span>
-          <span class="kpi-meta">0 output tokens · ${escapeHtml(optimizer)}</span>
+          <span class="kpi-label">Taste Engine</span>
+          <span class="kpi-value" style="font-size:0.98rem;">Instant Taste Engine</span>
+          <span class="kpi-meta">Updated from your producer reviews</span>
         </div>
       `;
     }
@@ -692,7 +836,7 @@ _TASTE_PROFILE_SCRIPT = """
       if (!learnedItems.length) {
         container.innerHTML = `
           <div style="font-size:0.86rem; color:var(--muted); display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px;">
-            <span>No explicit producer override notes recorded yet. Vote <strong>Elevate / Watch / Pass</strong> with a <em>"Why"</em> note on the Screening Deck (e.g., stage look, vocal tone, room energy) and click <strong>Re-Compile Taste Profile</strong> to bake your instincts into <code>gemini-decision-1</code> at 2.0x weight.</span>
+            <span>No producer override notes yet. Vote <strong>Elevate</strong>, <strong>Watch</strong>, or <strong>Pass</strong> with a <em>"Why"</em> note on the Screening Deck. Then click <strong>Re-Compile Taste Profile</strong> to apply your instincts at 2x weight.</span>
             <a class="btn" href="/screen">Review Artists on Screening Deck →</a>
           </div>
         `;
@@ -706,12 +850,12 @@ _TASTE_PROFILE_SCRIPT = """
               <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; flex-wrap:wrap;">
                 <span class="verdict-pill ${escapeHtml(item.verdict)}" style="padding:2px 9px; font-size:0.71rem;">${escapeHtml(item.verdict)}</span>
                 <div style="display:flex; gap:5px; flex-wrap:wrap;">
-                  ${item.isOverride ? '<span class="pill purple">2.0x Override</span>' : '<span class="pill ok">Confirmed Rule</span>'}
-                  ${item.inPolicy ? '<span class="pill blue">Compiled in Policy</span>' : '<span class="pill amber">Pending Re-Compile</span>'}
+                  ${item.isOverride ? '<span class="pill purple">Producer Override (2x)</span>' : '<span class="pill ok">Confirmed Rule</span>'}
+                  ${item.inPolicy ? '<span class="pill blue">Active in Profile</span>' : '<span class="pill amber">Pending Update</span>'}
                 </div>
               </div>
-              <div style="font-weight:700; color:var(--text);">"${escapeHtml(item.note)}"</div>
-              ${item.artist ? `<div class="mono">Taught while reviewing: ${escapeHtml(item.artist)}</div>` : ''}
+              <div style="font-weight:700; color:var(--text);">"${escapeHtml(humanizeText(item.note))}"</div>
+              ${item.artist ? `<div class="mono">From review: ${escapeHtml(item.artist)}</div>` : ''}
             </div>
           `).join('')}
         </div>
@@ -727,11 +871,13 @@ _TASTE_PROFILE_SCRIPT = """
       const watchMin = thresholds.watch_min_score != null ? thresholds.watch_min_score : 4;
 
       const parsedInst = splitChoiceInstructions(tv.instructions || '');
+      const baseInst = humanizeText(parsedInst.baseInst)
+        || 'Pick Elevate, Watch, or Pass after weighing all 5 scorecard areas and the Advocate vs. Skeptic debate.';
       el('choiceInstructionsBox').innerHTML = `
         <div style="font-size:0.86rem; color:var(--muted); margin-bottom:12px;">
-          <strong>Choice Prompt (<code>taste_verdict</code> / <code>screening_verdict</code>):</strong>
-          ${escapeHtml(parsedInst.baseInst || 'Select the calibrated Stage 3 screening verdict after weighing all 5 dossier rubrics and Advocate vs. Skeptic arguments.')}
-          ${parsedInst.overrideFeedback ? `<div style="margin-top:6px;"><span class="pill purple">Active Override Directive</span> <strong style="color:var(--text);">${escapeHtml(parsedInst.overrideFeedback)}</strong></div>` : ''}
+          <strong>How Simon calls a verdict:</strong>
+          ${escapeHtml(baseInst)}
+          ${parsedInst.overrideFeedback ? `<div style="margin-top:6px;"><span class="pill purple">Active Producer Rule</span> <strong style="color:var(--text);">${escapeHtml(humanizeText(parsedInst.overrideFeedback))}</strong></div>` : ''}
         </div>
       `;
 
@@ -739,23 +885,23 @@ _TASTE_PROFILE_SCRIPT = """
         {
           key: 'elevate',
           upper: 'ELEVATE',
-          band: `Score >= ${elevMin}/10`,
-          action: 'Immediate paid-slot / A&R callback',
-          fallback: `Total rubric score >= ${elevMin}/10 with verified vocal proof, organic listener demand or peer cosigns, and reachable unsigned whitespace.`
+          band: `${elevMin}–10 / 10`,
+          action: 'Immediate paid-slot or A&R callback',
+          fallback: `Score ${elevMin}–10 with verified vocal proof, organic listener demand or peer cosigns, and reachable unsigned whitespace.`
         },
         {
           key: 'watch',
           upper: 'WATCH',
-          band: `Score ${watchMin}..${Math.max(watchMin, elevMin - 1)}/10`,
-          action: 'Track & request 1–2 missing diligence items',
-          fallback: `Total rubric score ${watchMin}..${Math.max(watchMin, elevMin - 1)}/10 showing vocal or audience promise but missing 1-2 diligence items.`
+          band: `${watchMin}–${Math.max(watchMin, elevMin - 1)} / 10`,
+          action: 'Track and request 1–2 missing details',
+          fallback: `Score ${watchMin}–${Math.max(watchMin, elevMin - 1)} showing vocal or audience promise with 1–2 open questions.`
         },
         {
           key: 'pass',
           upper: 'PASS',
-          band: `Score <= ${watchMin - 1}/10`,
-          action: 'Hold / pass for current cycle',
-          fallback: `Total rubric score <= ${watchMin - 1}/10 or unverified attribution with thin vocal/audience evidence.`
+          band: `0–${Math.max(0, watchMin - 1)} / 10`,
+          action: 'Hold or pass for this cycle',
+          fallback: `Score 0–${Math.max(0, watchMin - 1)} or unverified attribution with thin vocal or audience evidence.`
         }
       ];
 
@@ -769,23 +915,23 @@ _TASTE_PROFILE_SCRIPT = """
               <span class="pill" style="font-family:var(--mono);">${escapeHtml(meta.band)}</span>
             </div>
             <div class="mono" style="color:var(--text); font-weight:600;">${escapeHtml(meta.action)}</div>
-            <div style="font-size:0.86rem; color:var(--text); line-height:1.5;">${escapeHtml(parts.baseText)}</div>
+            <div style="font-size:0.86rem; color:var(--text); line-height:1.5;">${escapeHtml(humanizeText(parts.baseText))}</div>
             ${parts.humanGuidance
               ? `<div class="human-guidance-callout">
-                   <div class="human-guidance-label">Learned Producer Guidance (2.0x Weight)</div>
-                   <div>${escapeHtml(parts.humanGuidance)}</div>
+                   <div class="human-guidance-label">Producer Override (2x Weight)</div>
+                   <div>${escapeHtml(humanizeText(parts.humanGuidance))}</div>
                  </div>`
-              : `<div class="mono" style="margin-top:auto;">No custom ${escapeHtml(meta.key)} override appended in this version.</div>`
+              : `<div class="mono" style="margin-top:auto;">No custom ${escapeHtml(meta.upper)} note added yet.</div>`
             }
           </div>
         `;
       }).join('');
 
-      // Binary noul gates
+      // Binary pass/fail gates
       const gateSpecs = [
-        { key: 'sufficient_live_evidence', title: 'Gate 1 · Sufficient Live Vocal Evidence', badge: 'noul · True/False' },
-        { key: 'actionable_whitespace', title: 'Gate 2 · Actionable Early-Window Whitespace', badge: 'noul · True/False' },
-        { key: 'live_signable', title: 'Composite Gate · Live Callback Signability', badge: 'noul · P(True)' }
+        { key: 'sufficient_live_evidence', title: 'Gate 1 · Verified Live Vocal Proof', badge: 'Pass / Fail' },
+        { key: 'actionable_whitespace', title: 'Gate 2 · Unsigned Early-Window Whitespace', badge: 'Pass / Fail' },
+        { key: 'live_signable', title: 'Composite Gate · Callback Readiness', badge: 'Readiness Check' }
       ];
       const renderedGates = gateSpecs
         .filter((g) => qCfg[g.key] && typeof qCfg[g.key] === 'object')
@@ -795,31 +941,32 @@ _TASTE_PROFILE_SCRIPT = """
           return `
             <div class="noul-card">
               <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-                <strong style="font-size:0.88rem;">${escapeHtml(g.title)} <code class="mono">(${escapeHtml(g.key)})</code></strong>
+                <strong style="font-size:0.88rem;">${escapeHtml(g.title)}</strong>
                 <span class="pill blue">${escapeHtml(g.badge)}</span>
               </div>
-              <div style="font-size:0.82rem; color:var(--muted);">${escapeHtml(q.instructions || '')}</div>
+              <div style="font-size:0.82rem; color:var(--muted);">${escapeHtml(humanizeText(q.instructions || ''))}</div>
               <div class="noul-tf-grid">
                 <div class="noul-tf-box true-box">
-                  <div style="font-weight:800; font-size:0.72rem; color:var(--teal); text-transform:uppercase; margin-bottom:2px;">TRUE Criteria</div>
-                  <div>${escapeHtml(crit.true_description || '')}</div>
+                  <div style="font-weight:800; font-size:0.72rem; color:var(--teal); text-transform:uppercase; margin-bottom:2px;">Passes When</div>
+                  <div>${escapeHtml(humanizeText(crit.true_description || ''))}</div>
                 </div>
                 <div class="noul-tf-box false-box">
-                  <div style="font-weight:800; font-size:0.72rem; color:var(--warn); text-transform:uppercase; margin-bottom:2px;">FALSE Criteria</div>
-                  <div>${escapeHtml(crit.false_description || '')}</div>
+                  <div style="font-weight:800; font-size:0.72rem; color:var(--warn); text-transform:uppercase; margin-bottom:2px;">Fails When</div>
+                  <div>${escapeHtml(humanizeText(crit.false_description || ''))}</div>
                 </div>
               </div>
             </div>
           `;
         }).join('');
-      el('noulGatesContainer').innerHTML = renderedGates || '<div class="mono">No binary noul gates configured.</div>';
+      el('noulGatesContainer').innerHTML = renderedGates || '<div class="mono">No hard gates configured.</div>';
 
       // Composite Fit 0..4 ladder
       const compFit = qCfg.composite_fit || {};
       const compCriteria = Array.isArray(compFit.criteria) ? compFit.criteria : [];
-      el('compositeFitInstructions').textContent = compFit.instructions || 'Rate overall calibrated Taste Engine A&R & showcase fit from 0 to 4.';
+      el('compositeFitInstructions').textContent = humanizeText(compFit.instructions)
+        || 'Rate overall A&R and showcase fit from 0 to 4.';
       el('compositeFitLadder').innerHTML = compCriteria.map((line, idx) => {
-        const text = stripTierPrefix(line, idx);
+        const text = humanizeText(stripTierPrefix(line, idx));
         return `
           <div class="ladder-step">
             <span class="ladder-score">${idx} / 4</span>
@@ -837,11 +984,11 @@ _TASTE_PROFILE_SCRIPT = """
 
       el('dossierCriteriaGrid').innerHTML = baseCatalog.map((item, idx) => {
         const qEntry = qCfg[item.key] || {};
-        const instructions = qEntry.instructions || item.instructions || '';
+        const instructions = humanizeText(qEntry.instructions || item.instructions || '');
         const rawArr = Array.isArray(qEntry.criteria) ? qEntry.criteria : [];
-        const t0 = rawArr[0] ? stripTierPrefix(rawArr[0], 0) : (item.tiers && item.tiers['0']) || '';
-        const t1 = rawArr[1] ? stripTierPrefix(rawArr[1], 1) : (item.tiers && item.tiers['1']) || '';
-        const t2 = rawArr[2] ? stripTierPrefix(rawArr[2], 2) : (item.tiers && item.tiers['2']) || '';
+        const t0 = humanizeText(rawArr[0] ? stripTierPrefix(rawArr[0], 0) : (item.tiers && item.tiers['0']) || '');
+        const t1 = humanizeText(rawArr[1] ? stripTierPrefix(rawArr[1], 1) : (item.tiers && item.tiers['1']) || '');
+        const t2 = humanizeText(rawArr[2] ? stripTierPrefix(rawArr[2], 2) : (item.tiers && item.tiers['2']) || '');
         const num = item.index || (idx + 1);
 
         return `
@@ -849,21 +996,21 @@ _TASTE_PROFILE_SCRIPT = """
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; flex-wrap:wrap;">
               <div>
                 <div style="font-weight:800; font-size:0.98rem; color:var(--text);">${escapeHtml(String(num))}. ${escapeHtml(item.label)}</div>
-                <div class="mono" style="margin-top:2px;">Stage 2 Block: <code>${escapeHtml(item.block)}</code></div>
+                <div class="mono" style="margin-top:2px;">Dossier Section: ${escapeHtml(formatBlockLabel(item.block))}</div>
               </div>
               <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-                <span class="pill blue">${escapeHtml(item.skill)}</span>
+                <span class="pill blue">${escapeHtml(formatSkillLabel(item.skill))}</span>
                 <span class="pill purple">0–2 pts</span>
               </div>
             </div>
             <div style="font-size:0.83rem; color:var(--muted);">${escapeHtml(instructions)}</div>
             <div class="criteria-tiers">
               <div class="tier-cell pt-0">
-                <span class="tier-badge">0 pt · Weak / Missing</span>
+                <span class="tier-badge">0 pt · Weak or Missing</span>
                 <span>${escapeHtml(t0)}</span>
               </div>
               <div class="tier-cell pt-1">
-                <span class="tier-badge">1 pt · Partial / Mixed</span>
+                <span class="tier-badge">1 pt · Partial or Mixed</span>
                 <span>${escapeHtml(t1)}</span>
               </div>
               <div class="tier-cell pt-2">
@@ -880,34 +1027,35 @@ _TASTE_PROFILE_SCRIPT = """
       const demos = Array.isArray(policy && policy.demos) ? policy.demos : [];
       const demoBadge = el('demosCountBadge');
       if (demoBadge) {
-        demoBadge.textContent = `${demos.length} anchor${demos.length === 1 ? '' : 's'}`;
+        demoBadge.textContent = `${demos.length} example${demos.length === 1 ? '' : 's'}`;
       }
 
       if (!demos.length) {
-        el('calibrationDemosList').innerHTML = '<div class="mono">No few-shot calibration anchors stored on this policy yet.</div>';
+        el('calibrationDemosList').innerHTML = '<div class="mono">No calibration examples saved for this version yet.</div>';
       } else {
         el('calibrationDemosList').innerHTML = demos.map((d) => {
           const verdict = String(d.target_verdict || d.verdict || 'watch').toUpperCase();
           const src = String(d.source || 'judge_bootstrap');
           const isOverride = src === 'human_override';
           const srcPillCls = isOverride ? 'purple' : (src === 'human_label' ? 'ok' : 'amber');
-          const weight = d.weight != null ? `${Number(d.weight).toFixed(1)}x wt` : '1.0x wt';
-          const pros = Array.isArray(d.pros) ? d.pros.slice(0, 2) : [];
-          const cons = Array.isArray(d.cons) ? d.cons.slice(0, 2) : [];
+          const srcLabel = formatSourceLabel(src);
+          const weightLabel = formatWeight(d.weight);
+          const pros = Array.isArray(d.pros) ? d.pros.slice(0, 2).map(humanizeText) : [];
+          const cons = Array.isArray(d.cons) ? d.cons.slice(0, 2).map(humanizeText) : [];
 
           return `
             <div class="anchor-card ${isOverride ? 'is-override' : ''}">
               <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-                <strong style="font-size:0.94rem;">${escapeHtml(d.stage_name || d.lead_id || 'Candidate')}</strong>
+                <strong style="font-size:0.94rem;">${escapeHtml(d.stage_name || d.lead_id || 'Artist')}</strong>
                 <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
                   <span class="verdict-pill ${escapeHtml(verdict)}" style="padding:2px 9px; font-size:0.72rem;">${escapeHtml(verdict)}</span>
                   <span class="pill" style="font-family:var(--mono);">${escapeHtml(String(d.total_score != null ? d.total_score : '—'))}/10</span>
-                  <span class="pill ${srcPillCls}">${escapeHtml(src)} · ${escapeHtml(weight)}</span>
+                  <span class="pill ${srcPillCls}">${escapeHtml(srcLabel)} · ${escapeHtml(weightLabel)}</span>
                 </div>
               </div>
-              ${d.reason ? `<div style="color:var(--text);"><strong>Calibration Rationale:</strong> ${escapeHtml(d.reason)}</div>` : ''}
-              ${pros.length ? `<div class="mono" style="color:var(--teal);">+ Pros: ${escapeHtml(pros.join(' · '))}</div>` : ''}
-              ${cons.length ? `<div class="mono" style="color:var(--warn);">&minus; Cons: ${escapeHtml(cons.join(' · '))}</div>` : ''}
+              ${d.reason ? `<div style="color:var(--text);"><strong>Rationale:</strong> ${escapeHtml(humanizeText(d.reason))}</div>` : ''}
+              ${pros.length ? `<div class="mono" style="color:var(--teal);">+ Strengths: ${escapeHtml(pros.join(' · '))}</div>` : ''}
+              ${cons.length ? `<div class="mono" style="color:var(--warn);">&minus; Watchouts: ${escapeHtml(cons.join(' · '))}</div>` : ''}
             </div>
           `;
         }).join('');
@@ -922,7 +1070,7 @@ _TASTE_PROFILE_SCRIPT = """
       if (!safeLabels.length) {
         el('humanReviewLogList').innerHTML = `
           <div class="anchor-card">
-            <div style="color:var(--muted);">No human reviews saved in <code>screening_labels</code> yet.</div>
+            <div style="color:var(--muted);">No producer reviews logged yet.</div>
             <div><a class="btn" href="/screen">Open Screening Deck to Vote →</a></div>
           </div>
         `;
@@ -932,25 +1080,25 @@ _TASTE_PROFILE_SCRIPT = """
           const mVerdict = lbl.model_verdict ? String(lbl.model_verdict).toUpperCase() : 'UNSET';
           const isOverride = lbl.agreed_with_model === false;
           const agreedBadge = isOverride
-            ? '<span class="pill purple">Override (2.0x)</span>'
-            : '<span class="pill ok">Agreed (1.0x)</span>';
+            ? '<span class="pill purple">Producer Override (2x)</span>'
+            : '<span class="pill ok">Agreed</span>';
           const stamp = lbl.labeled_at ? String(lbl.labeled_at).replace('T', ' ').replace('Z', ' UTC') : '';
 
           return `
             <div class="review-log-card ${isOverride ? 'is-override' : ''}">
               <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-                <strong style="font-size:0.94rem;">${escapeHtml(lbl.stage_name || lbl.lead_id || 'Candidate')}</strong>
+                <strong style="font-size:0.94rem;">${escapeHtml(lbl.stage_name || lbl.lead_id || 'Artist')}</strong>
                 <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-                  <span class="mono">Model: <strong>${escapeHtml(mVerdict)}</strong> &rarr; Human:</span>
+                  <span class="mono">Simon: <strong>${escapeHtml(mVerdict)}</strong> &rarr; You:</span>
                   <span class="verdict-pill ${escapeHtml(hVerdict)}" style="padding:2px 9px; font-size:0.72rem;">${escapeHtml(hVerdict)}</span>
                   ${agreedBadge}
                 </div>
               </div>
               <div style="color:var(--text);">
-                ${lbl.reason ? `<strong>Why:</strong> "${escapeHtml(lbl.reason)}"` : '<span class="mono">No written note attached.</span>'}
+                ${lbl.reason ? `<strong>Why:</strong> "${escapeHtml(humanizeText(lbl.reason))}"` : '<span class="mono">No note added.</span>'}
               </div>
               <div class="mono" style="display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap;">
-                <span>Reviewer: ${escapeHtml(lbl.reviewer || 'human_scout')}</span>
+                <span>Reviewer: ${escapeHtml(formatReviewer(lbl.reviewer))}</span>
                 <span>${escapeHtml(stamp)}</span>
               </div>
             </div>
@@ -1000,7 +1148,7 @@ _TASTE_PROFILE_SCRIPT = """
     el('recompileTasteBtn').onclick = async () => {
       const btn = el('recompileTasteBtn');
       btn.disabled = true;
-      showBanner('Re-compiling DSPy + gemini-decision-1 Taste Profile from human reviews…', 'info');
+      showBanner('Updating your Taste Profile from your latest producer reviews…', 'info');
       try {
         const res = await fetch('/api/screening/train', {
           method: 'POST',
@@ -1008,16 +1156,19 @@ _TASTE_PROFILE_SCRIPT = """
           body: JSON.stringify({}),
         });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'Policy compilation failed');
+        if (!res.ok) throw new Error(data.error || 'Could not update Taste Profile');
         const newPolicy = data.policy || data;
         selectedPolicyId = newPolicy.policy_id || null;
         await loadTasteProfile(true);
+        const newLabel = formatPolicyLabel(newPolicy.policy_id || '');
+        const revCount = Number(newPolicy.human_label_count || 0);
+        const ovCount = Number(newPolicy.override_count || 0);
         showBanner(
-          `Compiled active Taste Profile ${newPolicy.policy_id || ''} (${newPolicy.human_label_count || 0} human reviews, ${newPolicy.override_count || 0} overrides).`,
+          `Updated ${newLabel} (${revCount} producer review${revCount === 1 ? '' : 's'}, ${ovCount} override${ovCount === 1 ? '' : 's'}).`,
           'info'
         );
       } catch (err) {
-        showBanner(err.message || 'Failed to compile Taste Profile.', 'err');
+        showBanner(err.message || 'Could not update Taste Profile.', 'err');
       } finally {
         btn.disabled = false;
       }
@@ -1037,7 +1188,7 @@ def render_taste_profile_page() -> str:
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Simon · 8. Taste Profile &amp; Judging Methodology</title>
+  <title>Simon · 8. Taste Profile</title>
   <style>"""
         + _SHARED_CSS
         + _TASTE_PROFILE_CSS
@@ -1048,7 +1199,7 @@ def render_taste_profile_page() -> str:
     <header>
       <div class="brand">
         <h1>Simon <span class="pill purple">8. Taste Profile</span></h1>
-        <p>See how our judging model matches your taste across 5 factual skills, human overrides, and DSPy calibration.</p>
+        <p>See how Simon matches your A&amp;R taste across 5 scorecard criteria, producer overrides, and calibration examples.</p>
       </div>
       """
         + top_nav
@@ -1061,18 +1212,18 @@ def render_taste_profile_page() -> str:
     <section class="pillar-section pillar-hero" id="pillarWhereWeAre" aria-label="Where We Are">
       <div class="pillar-top">
         <div>
-          <div class="pillar-kicker">Pillar 1 · Live Calibration &amp; Pipeline Snapshot</div>
+          <div class="pillar-kicker">Pillar 1 · Live Calibration Snapshot</div>
           <h2 class="pillar-title">
             1. Where We Are
             <span id="calibrationStageBadge" class="pill amber">Stage: Loading…</span>
-            <span id="activePolicyPill" class="pill purple">Active Policy: policy_v1</span>
+            <span id="activePolicyPill" class="pill purple">Active: Taste Profile v1</span>
           </h2>
-          <p class="pillar-sub" id="whereStageDetail">Loading live Firestore screening deck, human calibration reviews, and compiled <code>gemini-decision-1</code> policy…</p>
+          <p class="pillar-sub" id="whereStageDetail">Loading your Screening Deck, producer reviews, and active Taste Profile…</p>
         </div>
 
         <div class="toolbar-actions">
-          <label for="policyVersionSelect" class="mono" style="font-weight:700;">Policy Version:</label>
-          <select id="policyVersionSelect" aria-label="Select compiled Taste Profile policy version">
+          <label for="policyVersionSelect" class="mono" style="font-weight:700;">Profile Version:</label>
+          <select id="policyVersionSelect" aria-label="Select Taste Profile version">
             <option value="">Loading versions…</option>
           </select>
           <button id="recompileTasteBtn" class="btn compile-btn" type="button">Re-Compile Taste Profile</button>
@@ -1091,13 +1242,13 @@ def render_taste_profile_page() -> str:
     <section class="pillar-section" id="pillarWhatWeCareAbout" aria-label="What We Care About">
       <div class="pillar-top">
         <div>
-          <div class="pillar-kicker">Pillar 2 · Active Criteria, Verdict Bar &amp; Learned Preferences</div>
+          <div class="pillar-kicker">Pillar 2 · Active Criteria, Verdict Bar &amp; Producer Rules</div>
           <h2 class="pillar-title">
             2. What We Care About
-            <span class="pill purple">5 Dossier Skills &times; 0–2 pts = 10 pts</span>
-            <span class="pill ok">gemini-decision-1 · 0 output tokens</span>
+            <span class="pill purple">5 Criteria &times; 0–2 pts = 10 pts</span>
+            <span class="pill ok">Instant Taste Engine</span>
           </h2>
-          <p class="pillar-sub">Every candidate is evaluated against explicit, inspectable criteria — combining baseline A&amp;R evidence rules with producer overrides learned from your votes on <code>/screen</code>.</p>
+          <p class="pillar-sub">Simon scores every artist with clear, inspectable rules. It blends baseline A&amp;R checks with overrides from your Screening Deck votes.</p>
         </div>
       </div>
 
@@ -1105,46 +1256,46 @@ def render_taste_profile_page() -> str:
       <div class="taught-box" id="whatYouTaughtUsBox">
         <div class="taught-head">
           <h3>
-            What You Taught Us (Learned Human Overrides)
+            What You Taught Us
             <span id="taughtCountBadge" class="pill purple">0 producer rules</span>
           </h3>
-          <span class="mono">Human disagreements carry <strong>2.0x weight</strong> in DSPy policy compilation</span>
+          <span class="mono">Your overrides count <strong>2x</strong> when updating your Taste Profile</span>
         </div>
-        <div id="whatYouTaughtUsContent" class="mono">Loading learned producer feedback…</div>
+        <div id="whatYouTaughtUsContent" class="mono">Loading your producer notes…</div>
       </div>
 
       <!-- Elevate / Watch / Pass Choice Cards -->
       <div class="section-head" style="margin-bottom:8px;">
-        <h2>Verdict Bar (<code>Elevate</code> &middot; <code>Watch</code> &middot; <code>Pass</code>) &amp; Human-Taught Rules</h2>
-        <span class="pill purple">ChoiceQuestion · questions_config.taste_verdict</span>
+        <h2>Verdict Bar (Elevate &middot; Watch &middot; Pass) &amp; Producer Rules</h2>
+        <span class="pill purple">3-Tier Call</span>
       </div>
       <div id="choiceInstructionsBox"></div>
       <div id="verdictCardsGrid" class="verdict-cards-grid"></div>
 
-      <!-- Global gemini-decision-1 Noul Gates + 0-4 Composite Fit Ladder -->
+      <!-- Global Hard Gates + 0-4 Showcase Fit Scale -->
       <div class="gates-grid">
         <div class="gate-panel">
           <div class="section-head" style="margin-bottom:4px;">
-            <h2 style="font-size:0.98rem;">Global Hard Gates (<code>NoulQuestion</code> · True vs. False)</h2>
-            <span class="pill blue">Zero-Token Binary Checks</span>
+            <h2 style="font-size:0.98rem;">Global Hard Gates (Pass / Fail)</h2>
+            <span class="pill blue">Must-Pass Checks</span>
           </div>
           <div id="noulGatesContainer" style="display:flex; flex-direction:column; gap:10px;"></div>
         </div>
 
         <div class="gate-panel">
           <div class="section-head" style="margin-bottom:4px;">
-            <h2 style="font-size:0.98rem;">Calibrated Composite Fit Ladder (<code>0–4</code>)</h2>
-            <span class="pill purple">ScoreQuestion · composite_fit</span>
+            <h2 style="font-size:0.98rem;">Overall Showcase Fit (0–4)</h2>
+            <span class="pill purple">0–4 Fit Scale</span>
           </div>
           <div id="compositeFitInstructions" class="mono" style="margin-bottom:4px;"></div>
           <div id="compositeFitLadder" class="ladder-list"></div>
         </div>
       </div>
 
-      <!-- The 5 Dossier Input Criteria (0-2 pts each = 10 pts total) -->
+      <!-- The 5 Artist Scorecard Criteria (0-2 pts each = 10 pts total) -->
       <div class="section-head" style="margin-top:6px;">
-        <h2>The 5 Stage 2 Dossier Input Criteria (<code>0–2</code> pts each = <code>10</code> pts total)</h2>
-        <span class="pill blue">1:1 Shared Dossier Skills</span>
+        <h2>The 5 Artist Scorecard Criteria (0–2 pts each = 10 pts)</h2>
+        <span class="pill blue">5 Core Areas</span>
       </div>
       <div id="dossierCriteriaGrid" class="dossier-criteria-grid"></div>
     </section>
@@ -1153,66 +1304,66 @@ def render_taste_profile_page() -> str:
     <section class="pillar-section" id="pillarOurMethodology" aria-label="Our Methodology">
       <div class="pillar-top">
         <div>
-          <div class="pillar-kicker">Pillar 3 · Fact-vs-Taste Architecture &amp; Audit Trail</div>
+          <div class="pillar-kicker">Pillar 3 · Fact-vs-Taste Process &amp; Audit Trail</div>
           <h2 class="pillar-title">
             3. Our Methodology: How Simon Separates Facts from Taste
-            <span class="pill ok">3-Layer Rubric Verified</span>
+            <span class="pill ok">Fact-Checked Process</span>
           </h2>
-          <p class="pillar-sub">Scouting agents never rank or editorialize during research. Subjective taste enters only in Stage 3, where adversarial arguments meet explicit human producer calibration.</p>
+          <p class="pillar-sub">Research scouts never rank artists or guess. Taste enters only during screening, where balanced debate meets your producer votes.</p>
         </div>
         <div class="toolbar-actions">
-          <a href="/evals" class="btn">Inspect 3-Layer Evals →</a>
+          <a href="/evals" class="btn">Inspect Quality Evals →</a>
           <a href="/screen" class="btn">Vote on Screening Deck →</a>
         </div>
       </div>
 
       <div class="methodology-steps-grid">
         <div class="method-step-card">
-          <span class="method-step-num">Step 1 · Stage 2 Intake</span>
-          <h3>Fact-Only Dossiers</h3>
-          <p><code>simon-scout-investigator</code> gathers 5 objective blocks (identity, media queue, footprint, comments, live history) with <strong>zero ranking</strong>. Unverified items go into <code>missing_fields</code> — abstaining honestly rather than inventing flaws.</p>
-          <span class="pill" style="margin-top:auto; align-self:flex-start;">InvestigatorDossier v1.0.0</span>
+          <span class="method-step-num">Step 1 · Artist Research</span>
+          <h3>Fact-Only Dossier</h3>
+          <p>Our research scout gathers 5 factual sections: identity, media queue, catalog reach, comments, and live history. It never ranks artists and marks unverified details as <strong>Open Questions</strong>.</p>
+          <span class="pill" style="margin-top:auto; align-self:flex-start;">Fact-Only Dossier</span>
         </div>
 
         <div class="method-step-card">
-          <span class="method-step-num">Step 2 · Adversarial Neon Debate</span>
-          <h3>Advocate vs. Skeptic &rarr; Judge</h3>
-          <p><code>simon-screen-advocate</code> steelmans upside (<code>pros[]</code> + <code>standout_hook</code>) while <code>simon-screen-skeptic</code> audits concentration &amp; dealbreakers (<code>cons[]</code>). <code>simon-screening-judge</code> (<code>gemini-4-neon</code>) synthesizes a <code>0–10</code> rubric call.</p>
-          <span class="pill amber" style="margin-top:auto; align-self:flex-start;">ScreeningPacket v1.0.0</span>
+          <span class="method-step-num">Step 2 · Balanced Debate</span>
+          <h3>Advocate &amp; Skeptic Debate</h3>
+          <p>The Advocate builds the upside case, highlighting strengths and the <strong>Standout Hook</strong>. The Skeptic flags risks and dealbreakers. The Judge then scores the artist from 0 to 10.</p>
+          <span class="pill amber" style="margin-top:auto; align-self:flex-start;">Screening Packet</span>
         </div>
 
         <div class="method-step-card">
-          <span class="method-step-num">Step 3 · Human-in-the-Loop</span>
-          <h3>Producer Overrides (2.0x Weight)</h3>
-          <p>On <a href="/screen">7. Screening Deck</a>, producers review one candidate at a time, watch live clips, and log <strong>Elevate / Watch / Pass</strong> + a <em>"Why"</em> note. Overrides carry <strong>2.0x weight</strong> to capture human instincts.</p>
-          <span class="pill purple" style="margin-top:auto; align-self:flex-start;">screening_labels · 2.0x Override</span>
+          <span class="method-step-num">Step 3 · Producer Review</span>
+          <h3>Producer Override (2x Weight)</h3>
+          <p>On <a href="/screen">7. Screening Deck</a>, you watch live clips and vote <strong>Elevate</strong>, <strong>Watch</strong>, or <strong>Pass</strong> with a <em>"Why"</em> note. Your overrides carry <strong>2x weight</strong>.</p>
+          <span class="pill purple" style="margin-top:auto; align-self:flex-start;">Producer Override (2x Weight)</span>
         </div>
 
         <div class="method-step-card">
           <span class="method-step-num">Step 4 · Instant Taste Engine</span>
-          <h3>Compiled <code>gemini-decision-1</code></h3>
-          <p><code>dspy.BootstrapFewShot</code> compiles calibrated thresholds, override rules, and few-shot anchors into <code>questions_config</code>, powering <strong>0-output-token</strong> calibrated <code>P(elevate)</code> scoring via <code>v1beta/decisions</code>.</p>
-          <span class="pill ok" style="margin-top:auto; align-self:flex-start;">gemini-decision-1 · 0 tok</span>
+          <h3>Live Taste Profile</h3>
+          <p>Simon updates your score cutoffs, producer rules, and <strong>Calibration Examples</strong> into one Taste Profile. Every new artist is scored instantly against your taste.</p>
+          <span class="pill ok" style="margin-top:auto; align-self:flex-start;">Instant Taste Engine</span>
         </div>
       </div>
 
-      <!-- Calibration Anchors & Live Human Review Log -->
+      <!-- Calibration Examples & Producer Review Log -->
       <div class="calibration-split-grid">
         <div class="gate-panel">
           <div class="section-head" style="margin-bottom:4px;">
-            <h2 style="font-size:0.98rem;">DSPy Bootstrapped Calibration Anchors (<code>demos[]</code>)</h2>
-            <span id="demosCountBadge" class="pill purple">0 anchors</span>
+            <h2 style="font-size:0.98rem;">Calibration Examples</h2>
+            <span id="demosCountBadge" class="pill purple">0 examples</span>
           </div>
-          <div class="mono" style="margin-bottom:4px;">Few-shot examples selected by <code>dspy.BootstrapFewShot</code> for the selected policy version (<code>human_override</code> prioritized at 2.0x).</div>
+          <div class="mono" style="margin-bottom:4px;">Reference artists guiding this Taste Profile. Your overrides carry 2x weight.</div>
           <div id="calibrationDemosList" class="anchor-list"></div>
         </div>
 
         <div class="gate-panel">
           <div class="section-head" style="margin-bottom:4px;">
-            <h2 style="font-size:0.98rem;">Live Human Producer Review Log (<code>screening_labels</code>)</h2>
+            <h2 style="font-size:0.98rem;">Producer Review Log</h2>
             <span id="labelsCountBadge" class="pill ok">0 reviews</span>
           </div>
-          <div class="mono" style="margin-bottom:4px;">Audit log of every producer decision comparing model verdict vs. human call and recorded <em>"Why"</em> rationale.</div>
+          <div class="mono" style="margin-bottom:4px;">Every producer vote comparing Simon's call, your final call, and your <em>"Why"</em> note.</div>
           <div id="humanReviewLogList" class="review-log-list"></div>
         </div>
       </div>
