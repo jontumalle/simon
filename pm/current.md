@@ -3,6 +3,10 @@
 *Updated: 2026-11-21*
 
 ## Live Now
+- **Public Staging App on Cloud Run + Firestore (PR #4, `feat/cloudrun-firestore-cicd`)**:
+  - **Public URL**: `https://simon-staging-139550420825.us-east1.run.app` (no auth required, GCP `gemini4nyc26nyc-2203`, `us-east1`).
+  - **Verified Live**: HTTP 200 on `/` (Web Studio UI), `/api/health` (`store_backend: firestore`), `/api/status` (`has_api_key: true`), `/api/agents` (all 9 `staging-simon-*` agents), `/api/db/source_registry` (25 seeded NYC sources), and `/api/agent-runs`. Documented in [RESOURCES.md](../RESOURCES.md) and [README.md](../README.md).
+  - **Note**: PR #4 is still open — merge it into `main` so `main` matches the deployed Cloud Run service and CI/CD pipeline.
 - **Managed Agents Deploy CLI, Fleet API & Live GitHub Actions CI/CD (`d1e61d0`, PR #2)**:
   - **Deploy & Fleet Runtime (`simon/deploy.py`, `simon/fleet.py`, `simon/web.py`, `simon/__main__.py`)**: Zero-dependency `python3 -m simon deploy` compiles `agents/<name>/` (`agent.json`/`agent.yaml`, `SYSTEM.md` → `system_instruction` + `.agents/AGENTS.md`, `skills/**` → `.agents/skills/**`), checks reserved prefixes, applies `SIMON_AGENT_PREFIX`, and upserts to `/v1beta/agents`; `python3 -m simon fleet` + `GET /api/agents` + `POST /api/fleet/run` scale 1 deployed blueprint across `N` concurrent `background=True` sandboxes with `max_concurrency`, 429 exponential-backoff retry, optional `webhook_config`, and `--wait` polling. **19/19** unit tests passing (including 7 new tests in `tests/test_deploy_and_fleet.py`).
   - **First Live CI/CD Deployment Verified (`.github/workflows/deploy-agents.yml`, [run `44943614744`](https://github.com/jontumalle/simon/actions/runs/44943614744))**: PRs run unit tests + `--dry-run`; pushes to `main` deploy `staging-` and pushes to `prod` deploy `prod-` (plus `workflow_dispatch`). All 5 curated agents created live on `/v1beta/agents` (`staging-simon-booking-critic`, `staging-simon-discovery-scout`, `staging-simon-performance-critic`, `staging-simon-showcase-producer`, `staging-simon-synthesis-scout`), confirming `gemini-4-hydrogen` and `gemini-4-carbon` live on `/v1beta/agents`.

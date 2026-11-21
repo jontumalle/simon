@@ -5,7 +5,40 @@
 
 ---
 
-## 1. Quick Agent Verification Command
+## 1. Live Deployed Environments
+
+| Environment | URL | Access | Backend & Project | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| **Staging (Cloud Run)** | `https://simon-staging-139550420825.us-east1.run.app` | **Public** (no auth required) | Firestore `(default)` in GCP `gemini4nyc26nyc-2203` (`us-east1`) | Serves the Web Studio UI, `/api/agents`, `/api/fleet/run`, `/api/agent-runs`, and `/api/db/<collection>`. `GEMINI_API_KEY` is mounted from Secret Manager. Deployed from PR #4 (`feat/cloudrun-firestore-cicd`). |
+
+### Quick Staging Smoke Tests (Browser or Terminal)
+- **Web UI**: Open `https://simon-staging-139550420825.us-east1.run.app` in any browser.
+- **Health & Status**:
+  ```sh
+  BASE_URL="https://simon-staging-139550420825.us-east1.run.app"
+  curl -sS "$BASE_URL/api/health" && echo ""
+  curl -sS "$BASE_URL/api/status" && echo ""
+  ```
+- **Deployed Managed Agents (9 `staging-simon-*` agents)**:
+  ```sh
+  curl -sS "$BASE_URL/api/agents" | jq '.agents[].deployed_id'
+  ```
+- **Firestore DB Gateway (25 seeded NYC sources & agent traces)**:
+  ```sh
+  curl -sS "$BASE_URL/api/db/source_registry" | jq '{collection, count}'
+  curl -sS "$BASE_URL/api/agent-runs" | jq '{count}'
+  ```
+- **Dry-Run Fleet Dispatch (safe, zero Gemini spend, writes trace to Firestore)**:
+  ```sh
+  curl -sS -X POST "$BASE_URL/api/fleet/run" \
+    -H "Content-Type: application/json" \
+    -d '{"agent":"discovery-scout","assignments":["NYC indie soul vocalists"],"dry_run":true}' | jq .
+  ```
+  *(Set `"dry_run": false` to trigger a live Managed Agent sandbox run.)*
+
+---
+
+## 2. Quick Agent Verification Command
 
 Run this check first to see what is already installed vs. missing on your machine:
 
@@ -18,7 +51,7 @@ done
 
 ---
 
-## 2. Core & Optional CLIs
+## 3. Core & Optional CLIs
 
 | Resource | Required? | Purpose | Reproducible Install (macOS Apple Silicon `arm64`) |
 | :--- | :---: | :--- | :--- |
@@ -32,7 +65,7 @@ done
 
 ---
 
-## 3. Python SDKs & Libraries
+## 4. Python SDKs & Libraries
 
 Create a `uv`-managed Python 3.12 virtual environment (`.venv/` is gitignored):
 
@@ -61,7 +94,7 @@ Create a `uv`-managed Python 3.12 virtual environment (`.venv/` is gitignored):
 
 ---
 
-## 4. Environment Variables (`.env` / Shell — Gitignored)
+## 5. Environment Variables (`.env` / Shell — Gitignored)
 
 Keep secret values in `.env` (gitignored):
 
@@ -85,7 +118,7 @@ export GOOGLE_CLOUD_PROJECT="your-gcp-project-id"
 
 ---
 
-## 5. Antigravity Plugins & MCP Servers
+## 6. Antigravity Plugins & MCP Servers
 
 Add/enable from the Antigravity Marketplace UI:
 - **Gemini API** (`antigravity-plugins-official/plugin/gemini-api`) — Official skills & live schemas for Interactions API, Managed Agents, and `gemini-api` CLI.
@@ -98,7 +131,7 @@ Configure global MCP servers in `~/.gemini/config/mcp_config.json`:
 
 ---
 
-## 6. Repo-Scoped Antigravity Hooks & `main-sync` Skill (`.agents/`)
+## 7. Repo-Scoped Antigravity Hooks & `main-sync` Skill (`.agents/`)
 
 Checked into Git so every teammate gets them automatically after `git pull`:
 - **`simon-toolchain-permissions` (`PreToolUse` → `.agents/scripts/auto_approve_toolchain.py`)** — Auto-approves (`"decision": "auto_approve"`) both **Knowledge Model / Steward documentation writes** (`PROJECT.md`, `AGENTS.md`, `RESOURCES.md`, `pm/**`, `notes/**`, `ideas/**`, `data/**`, `agents/**`, `.agents/**`, `*.md`) and safe invocations of the CLIs in this manifest (`git`, `gh`, `uv`, `python3`, `pytest`, `ruff`, `gemini-api`, `gcloud`, `ffmpeg`/`ffprobe`, `yt-dlp`, `jq`), while falling back to Antigravity's default permission prompt on runtime code writes outside default policy, `--skip-verify` / `--all` syncs, destructive flags, or unrecognized binaries.

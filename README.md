@@ -8,6 +8,35 @@ Simon is a live showcase producer that discovers overlooked singers and pays the
 
 The public organizer brief invites ambitious Gemini 4 projects across advanced reasoning, visual coding, robotics, and world models. The [official event listing](https://events.cerebralvalley.ai/e/gemini-4-nyc) also lists $5,000 for Best Use of Managed Agents and $2,500 in Shop Cash for Best Use of Shopify. The public materials provide broad themes and prize categories. A separate set of mandatory problem statements could not be verified publicly.
 
+## Live Staging App (Public)
+
+Simon's staging app is live on Google Cloud Run with Firestore persistence and `GEMINI_API_KEY` mounted from Secret Manager:
+
+- **URL:** `https://simon-staging-139550420825.us-east1.run.app` (public, no login required)
+- **GCP Project / Region:** `gemini4nyc26nyc-2203` / `us-east1` (platform code in PR #4, `feat/cloudrun-firestore-cicd`)
+
+### Quick Ways to Test Staging
+
+1. **Browser:** Open `https://simon-staging-139550420825.us-east1.run.app` to use the Taste-Brief Web Studio, inspect saved runs, and view agent run traces.
+2. **API Smoke Tests:**
+   ```sh
+   BASE_URL="https://simon-staging-139550420825.us-east1.run.app"
+   curl -sS "$BASE_URL/api/health"                      # {"ok": true, "store_backend": "firestore"}
+   curl -sS "$BASE_URL/api/status"                      # checks has_api_key + store_backend
+   curl -sS "$BASE_URL/api/agents"                      # lists all 9 staging-simon-* agents
+   curl -sS "$BASE_URL/api/db/source_registry"          # reads 25 seeded NYC sources from Firestore
+   curl -sS "$BASE_URL/api/agent-runs"                  # lists persisted agent run traces
+   ```
+3. **Dry-Run Agent Dispatch (no API cost):**
+   ```sh
+   curl -sS -X POST "https://simon-staging-139550420825.us-east1.run.app/api/fleet/run" \
+     -H "Content-Type: application/json" \
+     -d '{"agent":"discovery-scout","assignments":["NYC indie soul vocalists"],"dry_run":true}'
+   ```
+   Change `"dry_run": false` to run a live Managed Agent sandbox.
+
+---
+
 ## Run the Taste-Brief Vocal Scout MVP
 
 Simon's Taste-Brief MVP takes a natural-language taste brief, discovers public YouTube performances via a **Gemini Managed Agent** (`simon-discovery-scout`) + zero-signup `YouTubeConnector`, evaluates clips directly in **Gemini 4 Hydrogen** for timestamped musical choices (`phrasing`, `dynamics`, `interpretation`, `arrangement`) and recording context (`live` / `studio` / `unclear`), triggers a second-take lookup when evidence is thin, stores normalized records in SQLite (`local/simon.db`), and synthesizes a **<= 3 singer Listening Shortlist** via `simon-synthesis-scout`.
