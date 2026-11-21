@@ -181,6 +181,57 @@ class TestFirestoreAndPlatform(unittest.TestCase):
         listed = json.loads(body.decode("utf-8"))
         self.assertEqual(len(listed["fleet_runs"]), 1)
         self.assertEqual(listed["fleet_runs"][0]["fleet_run_id"], fleet_resp["fleet_run_id"])
+        self.assertIn("run_id", fleet_resp)
+        self.assertEqual(len(fleet_resp["agent_run_ids"]), 1)
+
+        arun_id = fleet_resp["agent_run_ids"][0]
+        status, _, body = dispatch_http_request(store, "GET", f"/api/agent-runs/{arun_id}")
+        self.assertEqual(status, 200)
+        arun = json.loads(body.decode("utf-8"))
+        self.assertEqual(arun["run_id"], fleet_resp["run_id"])
+        self.assertEqual(len(arun["traces"]), 1)
+
+        # Append a trace span
+        trace_req = json.dumps(
+            {
+                "agent_run_id": arun_id,
+                "status": "completed",
+                "trace": {"kind": "source_query", "summary": "Queried 13 NYC venue calendars"},
+                "output": {"leads_found": 5},
+            }
+        ).encode("utf-8")
+        status, _, body = dispatch_http_request(store, "POST", "/api/agent-runs", trace_req)
+        self.assertEqual(status, 200)
+        updated = json.loads(body.decode("utf-8"))
+        self.assertEqual(updated["status"], "completed")
+        self.assertEqual(len(updated["traces"]), 2)
+        self.assertEqual(updated["output"]["leads_found"], 5)
+
+    def test_seed_and_query_discovery_sources(self) -> None:
+        fake_client = _FakeFirestoreClient()
+        store = FirestoreStore(project="gemini4nyc26nyc-2203", client=fake_client)
+
+        status, _, body = dispatch_http_request(store, "POST", "/api/sources/seed")
+        self.assertEqual(status, 200)
+        seeded = json.loads(body.decode("utf-8"))
+        self.assertEqual(seeded["seeded_count"], 36)
+        self.assertEqual(seeded["collection"], "source_registry")
+
+        status, _, body = dispatch_http_request(
+            store, "GET", "/api/sources?city=New+York&channel=diy_venue_calendar"
+        )
+        self.assertEqual(status, 200)
+        filtered = json.loads(body.decode("utf-8"))
+        self.assertGreaterEqual(filtered["count"], 10)
+        for src in filtered["sources"]:
+            self.assertEqual(src["source_channel"], "diy_venue_calendar")
+
+        # Verify agent DB gateway allows reading source_registry
+        status, _, body = dispatch_http_request(store, "GET", "/api/db/source_registry?limit=5")
+        self.assertEqual(status, 200)
+        db_resp = json.loads(body.decode("utf-8"))
+        self.assertEqual(db_resp["collection"], "source_registry")
+        self.assertEqual(db_resp["count"], 5)
 
 
 if __name__ == "__main__":

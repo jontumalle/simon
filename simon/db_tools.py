@@ -12,11 +12,13 @@ import uuid
 
 ALLOWED_AGENT_COLLECTIONS = frozenset(
     {
+        "source_registry",
         "discovered_sources",
         "discovery_handoffs",
         "investigator_dossiers",
         "leads",
         "fleet_runs",
+        "agent_runs",
     }
 )
 
@@ -123,6 +125,21 @@ def validate_collection_payload(collection: str, payload: Any) -> Tuple[List[str
 
     elif collection == "fleet_runs":
         doc_id = str(payload.get("batch_id") or payload.get("id") or "").strip() or None
+
+    elif collection == "source_registry":
+        for field in ("source_id", "name", "url", "source_channel"):
+            if not str(payload.get(field) or "").strip():
+                errors.append(f"Missing required field '{field}'.")
+        channel = str(payload.get("source_channel") or "").strip()
+        if channel and channel not in VALID_SOURCE_CHANNELS:
+            errors.append(f"Invalid source_channel '{channel}'.")
+        doc_id = str(payload.get("source_id") or "").strip() or None
+
+    elif collection == "agent_runs":
+        for field in ("run_id", "agent_id", "status"):
+            if not str(payload.get(field) or "").strip():
+                errors.append(f"Missing required field '{field}'.")
+        doc_id = str(payload.get("agent_run_id") or payload.get("doc_id") or "").strip() or None
 
     return errors, doc_id
 

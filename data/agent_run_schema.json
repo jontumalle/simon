@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://simon.local/schemas/agent_run_schema.json",
+  "title": "Simon Agent Run & Trace Schema",
+  "description": "Data model for tracking every Managed Agent execution, parent run_id correlation, Gemini interaction_id, and step-by-step trace spans in Firestore/SQLite.",
+  "type": "object",
+  "required": [
+    "agent_run_id",
+    "run_id",
+    "agent_id",
+    "stage",
+    "status",
+    "started_at",
+    "traces"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "agent_run_id": {
+      "type": "string",
+      "description": "Unique ID for this single Managed Agent execution (e.g. arun_a1b2c3d4e5)."
+    },
+    "run_id": {
+      "type": "string",
+      "description": "Parent orchestration or pipeline run ID grouping all agent runs in one workflow (e.g. run_a1b2c3d4e5)."
+    },
+    "parent_agent_run_id": {
+      "type": ["string", "null"],
+      "description": "Optional upstream agent_run_id when chained across stages (e.g. Stage 1 Discovery -> Stage 2 Investigator)."
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Deployed Managed Agent ID (e.g. staging-simon-discovery-scout)."
+    },
+    "interaction_id": {
+      "type": ["string", "null"],
+      "description": "Gemini /v1beta/interactions/{id} identifier for correlating remote sandbox execution."
+    },
+    "stage": {
+      "type": "string",
+      "enum": ["discovery", "investigator", "critic", "synthesis", "fleet", "custom"]
+    },
+    "target": {
+      "type": ["string", "null"],
+      "description": "Target artist, search lane, or assignment label."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["queued", "running", "completed", "failed", "dry_run"]
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "duration_ms": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "input": {
+      "description": "Opaque assignment or prompt payload sent to the Managed Agent."
+    },
+    "output": {
+      "description": "Structured JSON or text output returned by the Managed Agent."
+    },
+    "error": {
+      "type": ["string", "null"]
+    },
+    "traces": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/TraceSpan"
+      }
+    }
+  },
+  "$defs": {
+    "TraceSpan": {
+      "type": "object",
+      "required": ["step_id", "timestamp", "kind", "summary"],
+      "additionalProperties": true,
+      "properties": {
+        "step_id": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "kind": {
+          "type": "string",
+          "enum": ["dispatch", "source_query", "tool_call", "poll", "webhook", "output", "error"]
+        },
+        "summary": { "type": "string" },
+        "metadata": { "type": "object" }
+      }
+    }
+  }
+}
