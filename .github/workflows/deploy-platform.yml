@@ -1,0 +1,96 @@
+name: Deploy Simon Platform (Cloud Run)
+
+on:
+  push:
+    branches:
+      - main
+      - prod
+    paths:
+      - "simon/**"
+      - "agents/**"
+      - "Dockerfile"
+      - "requirements.txt"
+      - "cloudbuild.yaml"
+      - ".github/workflows/deploy-platform.yml"
+  pull_request:
+    branches:
+      - main
+      - prod
+    paths:
+      - "simon/**"
+      - "Dockerfile"
+      - "requirements.txt"
+      - "cloudbuild.yaml"
+      - ".github/workflows/deploy-platform.yml"
+  workflow_dispatch:
+    inputs:
+      service_name:
+        description: "Cloud Run service name override (default: simon-staging on main, simon-prod on prod)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run unit tests
+        run: python3 -m unittest discover -s tests
+
+      - name: Validate Docker build
+        run: docker build -t simon-platform:ci .
+
+      - name: Deploy to Cloud Run (when GCP auth secrets are configured)
+        if: >-
+          github.event_name != 'pull_request' &&
+          (secrets.GCP_SA_KEY != '' || secrets.GCP_WIF_PROVIDER != '')
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Push image and deploy Cloud Run service
+        if: >-
+          github.event_name != 'pull_request' &&
+          (secrets.GCP_SA_KEY != '' || secrets.GCP_WIF_PROVIDER != '')
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'gemini4nyc26nyc-2203' }}
+          GCP_REGION: ${{ vars.GCP_REGION || 'us-east1' }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          set -euo pipefail
+          SERVICE="${{ github.event.inputs.service_name }}"
+          PREFIX="staging-"
+          if [ -z "$SERVICE" ]; then
+            if [ "${{ github.ref_name }}" = "prod" ]; then
+              SERVICE="simon-prod"
+              PREFIX="prod-"
+            else
+              SERVICE="simon-staging"
+              PREFIX="staging-"
+            fi
+          fi
+          IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/simon/simon-platform:${GITHUB_SHA}"
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+          docker tag simon-platform:ci "$IMAGE"
+          docker push "$IMAGE"
+          gcloud run deploy "$SERVICE" \
+            --image="$IMAGE" \
+            --region="$GCP_REGION" \
+            --project="$GCP_PROJECT_ID" \
+            --platform=managed \
+            --allow-unauthenticated \
+            --port=8080 \
+            --set-env-vars="SIMON_STORE_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=${GCP_PROJECT_ID},SIMON_AGENT_PREFIX=${PREFIX},GEMINI_API_KEY=${GEMINI_API_KEY}"

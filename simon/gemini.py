@@ -77,36 +77,65 @@ def _extract_interaction_text(result: Dict[str, Any]) -> str:
 
 
 def summarize_interaction_steps(result: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Condense /v1beta/interactions steps/outputs so judges can inspect Managed Agent execution."""
+    """Condense /v1beta/interactions steps/outputs so users can watch every agent step live."""
     summarized: List[Dict[str, Any]] = []
     raw_items = result.get("steps") or result.get("outputs") or []
     for index, step in enumerate(raw_items):
         if not isinstance(step, dict):
             continue
-        step_type = str(step.get("type", "step"))
+        step_type = str(step.get("type") or "step")
         entry: Dict[str, Any] = {"index": index + 1, "type": step_type}
+        tools: List[str] = []
+        previews: List[str] = []
+
+        if step.get("name"):
+            tools.append(str(step["name"]))
         if step.get("text"):
-            txt = str(step["text"]).strip()
-            entry["preview"] = txt[:280] + ("…" if len(txt) > 280 else "")
+            previews.append(str(step["text"]).strip())
+        if step.get("summary"):
+            previews.append(str(step["summary"]).strip())
+        if isinstance(step.get("arguments"), dict) and step["arguments"]:
+            previews.append(json.dumps(step["arguments"], ensure_ascii=False))
+        if step.get("code"):
+            previews.append(str(step["code"]).strip())
+        if step.get("result"):
+            res_val = step["result"]
+            previews.append(
+                json.dumps(res_val, ensure_ascii=False)
+                if isinstance(res_val, (dict, list))
+                else str(res_val).strip()
+            )
+        if step.get("query"):
+            previews.append(f"query: {step['query']}")
+        if step.get("url"):
+            previews.append(f"url: {step['url']}")
+
         content = step.get("content")
         if isinstance(content, list):
-            texts = [
-                str(part.get("text", "")).strip()
-                for part in content
-                if isinstance(part, dict) and part.get("text")
-            ]
-            if texts:
-                joined = " ".join(texts)
-                entry["preview"] = joined[:280] + ("…" if len(joined) > 280 else "")
-            tool_uses = [
-                part.get("name") or part.get("type")
-                for part in content
-                if isinstance(part, dict) and part.get("type") not in ("text", None)
-            ]
-            if tool_uses:
-                entry["tools"] = [str(t) for t in tool_uses if t]
-        elif step.get("name"):
-            entry["name"] = str(step["name"])
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                p_type = str(part.get("type") or "")
+                if part.get("text"):
+                    previews.append(str(part["text"]).strip())
+                if part.get("summary"):
+                    previews.append(str(part["summary"]).strip())
+                if part.get("code"):
+                    previews.append(str(part["code"]).strip())
+                if part.get("query"):
+                    previews.append(f"query: {part['query']}")
+                if p_type and p_type not in ("text",):
+                    tools.append(str(part.get("name") or p_type))
+                if isinstance(part.get("arguments"), dict) and part["arguments"]:
+                    previews.append(json.dumps(part["arguments"], ensure_ascii=False))
+
+        if tools:
+            entry["tools"] = list(dict.fromkeys(tools))
+        if previews:
+            joined = " · ".join(p for p in previews if p)
+            entry["preview"] = joined[:360] + ("…" if len(joined) > 360 else "")
+        elif step_type not in ("text", "model_output"):
+            entry["preview"] = f"Executed {step_type}"
         summarized.append(entry)
     return summarized
 

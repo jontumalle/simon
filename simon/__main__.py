@@ -1,14 +1,16 @@
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import json
+import os
 from pathlib import Path
 import sys
 
 from .deploy import deploy_agents
 from .fleet import dispatch_fleet
 from .gemini import Gemini
+from .registry import seed_discovery_sources
 from .scout import DEFAULT_TASTE_BRIEF, load_dotenv_if_present, run_scout
-from .store import SimonStore
+from .store import SimonStore, create_store
 from .web import serve_web
 
 
@@ -242,16 +244,58 @@ def main(argv=None):
         return
 
     if raw_args and raw_args[0] == "serve":
+        env_port = os.environ.get("PORT")
+        default_host = "0.0.0.0" if env_port else "127.0.0.1"
+        default_port = int(env_port) if env_port else 8765
         parser = argparse.ArgumentParser(
             prog="python3 -m simon serve",
-            description="Launch Simon's interactive Taste-Brief Vocal Scout web demo.",
+            description="Launch the Simon platform HTTP server and UI.",
         )
-        parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1).")
-        parser.add_argument("--port", type=int, default=8765, help="Bind port (default: 8765).")
-        parser.add_argument("--db", type=Path, default=None, help="Optional SQLite database path.")
+        parser.add_argument("--host", default=default_host, help=f"Bind host (default: {default_host}).")
+        parser.add_argument("--port", type=int, default=default_port, help=f"Bind port (default: {default_port}).")
+        parser.add_argument("--db", type=Path, default=None, help="Optional SQLite database path (overrides backend).")
+        parser.add_argument(
+            "--backend",
+            choices=("sqlite", "firestore"),
+            default=None,
+            help="Store backend override (default: SIMON_STORE_BACKEND env or sqlite).",
+        )
         args = parser.parse_args(raw_args[1:])
-        store = SimonStore(args.db) if args.db else SimonStore()
+        load_dotenv_if_present()
+        if args.db is not None:
+            store = SimonStore(args.db)
+        else:
+            store = create_store(backend=args.backend)
         serve_web(host=args.host, port=args.port, store=store)
+        return
+
+    if raw_args and raw_args[0] == "seed":
+        parser = argparse.ArgumentParser(
+            prog="python3 -m simon seed",
+            description="Idempotently seed curated reference data into Simon's database (SQLite or Firestore).",
+        )
+        parser.add_argument(
+            "--file",
+            type=Path,
+            default=None,
+            help="Optional path to reference seed JSON (default: data/reference/discovery_sources_seed.json).",
+        )
+        parser.add_argument("--db", type=Path, default=None, help="Optional SQLite database path (overrides backend).")
+        parser.add_argument(
+            "--backend",
+            choices=("sqlite", "firestore"),
+            default=None,
+            help="Store backend override (default: SIMON_STORE_BACKEND env or sqlite).",
+        )
+        args = parser.parse_args(raw_args[1:])
+        load_dotenv_if_present()
+        store = SimonStore(args.db) if args.db is not None else create_store(backend=args.backend)
+        try:
+            summary = seed_discovery_sources(store, seed_path=args.file)
+        except (OSError, UnicodeError, ValueError, KeyError, TypeError, RuntimeError) as exc:
+            parser.exit(1, f"Simon seed failed: {exc}\n")
+        summary["store_backend"] = getattr(store, "backend", "sqlite")
+        print(json.dumps(summary, indent=2, ensure_ascii=False))
         return
 
     parser = argparse.ArgumentParser(

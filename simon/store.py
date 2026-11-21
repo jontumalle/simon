@@ -6,7 +6,9 @@ for persisting query, evidence, and synthesis outputs in a lightweight local dat
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import sqlite3
 from typing import Any, Dict, List, Optional
@@ -83,11 +85,21 @@ CREATE TABLE IF NOT EXISTS artist_assessments (
     source_links_json TEXT NOT NULL,
     PRIMARY KEY (run_id, assessment_id)
 );
+
+CREATE TABLE IF NOT EXISTS documents (
+    collection TEXT NOT NULL,
+    doc_id TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    PRIMARY KEY (collection, doc_id)
+);
 """
 
 
 class SimonStore:
     """Normalized SQLite storage for ScoutRun records and evidence queries."""
+
+    backend = "sqlite"
 
     def __init__(self, db_path: Optional[Path | str] = None):
         self.db_path = str(db_path) if db_path is not None else str(DEFAULT_DB_PATH)
@@ -277,3 +289,69 @@ class SimonStore:
         finally:
             if self.db_path != ":memory:":
                 conn.close()
+
+    def save_document(self, collection: str, doc_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        payload = dict(data)
+        payload.setdefault("doc_id", doc_id)
+        updated_at = datetime.now(timezone.utc).isoformat()
+        payload["updated_at"] = updated_at
+        conn = self._connect()
+        try:
+            with conn:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO documents (collection, doc_id, updated_at, payload_json)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (collection, doc_id, updated_at, json.dumps(payload, ensure_ascii=False)),
+                )
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+        return payload
+
+    def get_document(self, collection: str, doc_id: str) -> Optional[Dict[str, Any]]:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT payload_json FROM documents WHERE collection = ? AND doc_id = ?",
+                (collection, doc_id),
+            ).fetchone()
+            return json.loads(row["payload_json"]) if row else None
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+    def list_documents(self, collection: str, limit: int = 20) -> List[Dict[str, Any]]:
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                """
+                SELECT payload_json FROM documents
+                WHERE collection = ?
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                (collection, limit),
+            ).fetchall()
+            return [json.loads(row["payload_json"]) for row in rows]
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+
+
+def create_store(
+    db_path: Optional[Path | str] = None,
+    backend: Optional[str] = None,
+) -> Any:
+    """Create the active persistence store (`sqlite` locally or `firestore` on Cloud Run)."""
+    selected = (backend or os.environ.get("SIMON_STORE_BACKEND") or "sqlite").strip().lower()
+    if selected == "firestore":
+        from .firestore_store import FirestoreStore
+
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCP_PROJECT_ID") or None
+        database = os.environ.get("FIRESTORE_DATABASE") or "(default)"
+        return FirestoreStore(project=project, database=database)
+    if selected == "sqlite":
+        return SimonStore(db_path=db_path)
+    raise ValueError(f"Unsupported SIMON_STORE_BACKEND={selected!r}; expected 'sqlite' or 'firestore'.")
