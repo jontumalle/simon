@@ -1,9 +1,11 @@
 {
   "id": "simon-discovery-scout",
+  "description": "Stage 1 Discovery (Lead Gen) agent: queries simon-db for active sources, runs Layer 2 music source playbooks to find N unranked artists with objective seed sources, verifies DiscoveryHandoff v1.0.0, and saves handoffs and newly discovered sources back to simon-db.",
   "base_agent": "antigravity-preview-09-2026",
   "agent_config": {
     "type": "antigravity",
-    "model": "gemini-4-hydrogen"
+    "model": "gemini-4-hydrogen",
+    "max_total_tokens": "64000"
   },
   "system_instruction_file": "SYSTEM.md",
   "tools": [
@@ -20,6 +22,7 @@
   "base_environment": {
     "type": "remote",
     "env": {
+      "SIMON_DOMAIN": "music",
       "SIMON_DB_URL": "https://simon-staging-139550420825.us-east1.run.app"
     }
   },
