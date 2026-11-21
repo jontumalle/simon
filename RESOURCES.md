@@ -74,6 +74,8 @@ export SIMON_AGENT_PREFIX="kevin-"   # e.g. "kevin-", "jt-", or "prod-"
 
 # Model & harness defaults
 export GEMINI_AGENT="antigravity-preview-09-2026"
+export SIMON_DISCOVERY_AGENT="antigravity-preview-09-2026"   # or deployed simon-discovery-scout ID
+export SIMON_SYNTHESIS_AGENT="antigravity-preview-09-2026"   # or deployed simon-synthesis-scout ID
 export GEMINI_AUDIO_MODEL="gemini-4-hydrogen"
 export GEMINI_PRODUCER_MODEL="gemini-4-carbon"
 

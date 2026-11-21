@@ -13,6 +13,7 @@ Each curated agent lives in its own subdirectory (`agents/<agent-name>/`) and mo
 ```text
 agents/<agent-name>/
 ├── agent.yaml        # Control-plane spec -> maps 1:1 to POST /v1beta/agents
+├── agent.json        # JSON mirror for automated CLI / CI loaders
 ├── SYSTEM.md         # System instruction & mounted as .agents/AGENTS.md in sandbox
 ├── skills/           # Optional sandbox skills -> mounted to .agents/skills/<skill>/
 │   └── <skill-name>/
@@ -29,7 +30,8 @@ Use `SIMON_AGENT_PREFIX` (`kevin-`, `jt-`, `prod-`) when syncing to `/v1beta/age
 
 | Directory / Agent | Harness & Model | Network | Role | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| `acoustic-scout` | `deep-research-preview-04-2026` / `gemini-4-hydrogen` | Allowlisted | Discovers opt-in open-mic/local vocalists & extracts timestamped audio observations | Planned |
-| `performance-critic` | `antigravity-preview-09-2026` (`gemini-4-hydrogen`) | `disabled` | Independent vocal phrasing, dynamics, waveform/single-take forensics & performance critique | Planned |
-| `booking-critic` | `antigravity-preview-09-2026` (`gemini-4-hydrogen`) | `disabled` | Independent stage setup, slot length, original-song fit & practical open questions | Planned |
-| `showcase-producer` | `antigravity-preview-09-2026` (`gemini-4-carbon`) | `disabled` / Allowlisted | Arbitrates critic disagreements, checks showcase unit economics, drafts `pending_human_review` offer | Planned |
+| `discovery-scout` | `antigravity-preview-09-2026` (`gemini-4-hydrogen`) | Search + oEmbed | Searches public YouTube venues, sessions & open mics from a taste brief; groups by performer & flags uncertain attribution | **Active (MVP)** |
+| `synthesis-scout` | `antigravity-preview-09-2026` (`gemini-4-carbon`) | `disabled` | Compares `gemini-4-hydrogen` clip evidence, triggers second-take loop when thin, outputs <=3 singer listening shortlist | **Active (MVP)** |
+| `performance-critic` | `antigravity-preview-09-2026` (`gemini-4-hydrogen`) | `disabled` | Independent vocal phrasing, dynamics, waveform/single-take forensics & performance critique (*First Listen NYC* showcase flow) | Seeded |
+| `booking-critic` | `antigravity-preview-09-2026` (`gemini-4-hydrogen`) | `disabled` | Independent stage setup, slot length, original-song fit & practical open questions (*First Listen NYC* showcase flow) | Seeded |
+| `showcase-producer` | `antigravity-preview-09-2026` (`gemini-4-carbon`) | `disabled` / Allowlisted | Arbitrates critic disagreements, checks showcase unit economics, drafts `pending_human_review` offer | Seeded |

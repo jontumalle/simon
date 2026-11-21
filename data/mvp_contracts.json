@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Simon Taste-Brief Vocal Scout MVP Pipeline Contracts",
+  "description": "Abstract input/output contracts across Simon's 3 pipeline units (aligned with the Wispr Flow 'Minimal Agent Development Pipeline' breakdown).",
+  "units": {
+    "unit_1_discovery_and_extraction": {
+      "input": {
+        "taste_brief": {
+          "brief_id": "string",
+          "prompt": "string (e.g. 'Find singers who reinterpret familiar songs through phrasing or arrangement.')"
+        }
+      },
+      "discovery_output_artist_leads": {
+        "lead_id": "string",
+        "stage_name": "string",
+        "source_links": ["https://www.youtube.com/watch?v=<11-char-id>"],
+        "attribution_status": "verified | uncertain",
+        "attribution_notes": "string"
+      },
+      "evaluator_output_clip_evidence": {
+        "clip_id": "string",
+        "lead_id": "string",
+        "source_url": "https://www.youtube.com/watch?v=<11-char-id>",
+        "recording_context": "live | studio | unclear",
+        "recording_context_notes": "string",
+        "evaluated_model": "gemini-4-hydrogen",
+        "observations": [
+          {
+            "observation_id": "string",
+            "source_url": "https://www.youtube.com/watch?v=<11-char-id>",
+            "play_url": "https://www.youtube.com/watch?v=<11-char-id>&t=<seconds>s",
+            "timestamp": "M:SS",
+            "seconds": 0,
+            "dimension": "phrasing | dynamics | interpretation | arrangement",
+            "musical_choice": "string"
+          }
+        ]
+      }
+    },
+    "unit_2_synthesis_and_second_take_loop": {
+      "feedback_condition": "When a promising lead has clip_count == 1 or non-live recording_context, query Discovery + YouTubeConnector for a 2nd public clip and evaluate via gemini-4-hydrogen before final synthesis.",
+      "output_artist_assessment": {
+        "assessment_id": "string",
+        "brief_id": "string",
+        "lead_id": "string",
+        "clip_count": 1,
+        "single_clip_flag": true,
+        "uncertain_attribution_flag": false,
+        "fit_rationale": "string",
+        "open_questions": ["string"],
+        "source_links": ["https://www.youtube.com/watch?v=<11-char-id>"]
+      }
+    },
+    "unit_3_persistence_and_shortlist_ui": {
+      "sqlite_tables": [
+        "scout_runs",
+        "artist_leads",
+        "clip_evidence",
+        "clip_observations",
+        "artist_assessments"
+      ],
+      "output_listening_shortlist_max_3": {
+        "rank": "1..3",
+        "stage_name": "string",
+        "play_first_url": "https://www.youtube.com/watch?v=<11-char-id>&t=<seconds>s",
+        "play_first_timestamp": "M:SS",
+        "why_it_fits": "string",
+        "what_to_hear_next": "string",
+        "listen_next_url": "string | null",
+        "single_clip_flag": "boolean",
+        "uncertain_attribution_flag": "boolean"
+      }
+    }
+  }
+}

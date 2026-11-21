@@ -8,7 +8,34 @@ Simon is a live showcase producer that discovers overlooked singers and pays the
 
 The public organizer brief invites ambitious Gemini 4 projects across advanced reasoning, visual coding, robotics, and world models. The [official event listing](https://events.cerebralvalley.ai/e/gemini-4-nyc) also lists $5,000 for Best Use of Managed Agents and $2,500 in Shop Cash for Best Use of Shopify. The public materials provide broad themes and prize categories. A separate set of mandatory problem statements could not be verified publicly.
 
-## Run the starter
+## Run the Taste-Brief Vocal Scout MVP
+
+Simon's Taste-Brief MVP takes a natural-language taste brief, discovers public YouTube performances via a **Gemini Managed Agent** (`simon-discovery-scout`) + zero-signup `YouTubeConnector`, evaluates clips directly in **Gemini 4 Hydrogen** for timestamped musical choices (`phrasing`, `dynamics`, `interpretation`, `arrangement`) and recording context (`live` / `studio` / `unclear`), triggers a second-take lookup when evidence is thin, stores normalized records in SQLite (`local/simon.db`), and synthesizes a **<= 3 singer Listening Shortlist** via `simon-synthesis-scout`.
+
+### 1. Interactive Web Studio (Recommended Demo)
+
+```sh
+python3 -m simon serve --port 8765
+```
+
+Open `http://127.0.0.1:8765` to enter a taste brief, inspect the **Managed Agent & Evaluator Trace**, and click **Play First (@ MM:SS)** to jump straight to the exact musical moment Simon described. Works immediately with verified public YouTube clips in demo mode, and switches to live Gemini 4 + Managed Agent calls automatically when `GEMINI_API_KEY` is set in `.env` or your shell.
+
+### 2. CLI Taste-Brief Scout
+
+```sh
+# Verified public YouTube demo run (persists records to local/simon.db)
+python3 -m simon scout --brief "Find singers who reinterpret familiar songs through phrasing or arrangement."
+
+# Full live run (Managed Agent discovery + public YouTube search/oEmbed + Gemini 4 Hydrogen video input + Managed Agent synthesis)
+export GEMINI_API_KEY="your-api-key"
+python3 -m simon scout --live --brief "Stripped-back soul with distinctive phrasing"
+```
+
+*(Platform note: Gemini supports public YouTube URLs directly as video inputs, whereas SoundCloud's API terms prohibit feeding API-accessed tracks into AI models.)*
+
+---
+
+## Run the *First Listen NYC* Showcase Starter
 
 From the repository root with Python 3.9 or later:
 

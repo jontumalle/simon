@@ -1,0 +1,383 @@
+{
+  "brief": {
+    "brief_id": "brief_demo01",
+    "prompt": "Find singers who reinterpret familiar songs through distinctive phrasing, micro-dynamics, or stripped-back live arrangements."
+  },
+  "artist_leads": [
+    {
+      "lead_id": "lead_01",
+      "stage_name": "Olivia Dean",
+      "source_links": [
+        "https://www.youtube.com/watch?v=3-K26i1go0s",
+        "https://www.youtube.com/watch?v=BcQnHzrc24Y"
+      ],
+      "attribution_status": "verified",
+      "attribution_notes": "Credited as 'Olivia Dean' across both Mahogany Sessions and BBC Radio 1 Live Lounge broadcasts.",
+      "videos": [
+        {
+          "video_id": "3-K26i1go0s",
+          "url": "https://www.youtube.com/watch?v=3-K26i1go0s",
+          "title": "Olivia Dean - Wish I Didn't Miss You (Angie Stone) | Mahogany Session",
+          "channel": "Mahogany",
+          "duration": "3:50",
+          "query_used": "Mahogany Session soul cover live phrasing"
+        },
+        {
+          "video_id": "BcQnHzrc24Y",
+          "url": "https://www.youtube.com/watch?v=BcQnHzrc24Y",
+          "title": "Olivia Dean - Love Me Not in the Live Lounge",
+          "channel": "BBCRadio1VEVO",
+          "duration": "3:18",
+          "query_used": "Olivia Dean live cover session second take"
+        }
+      ]
+    },
+    {
+      "lead_id": "lead_02",
+      "stage_name": "Allen Stone",
+      "source_links": [
+        "https://www.youtube.com/watch?v=Bb07cO7lX_0",
+        "https://www.youtube.com/watch?v=RftqJrM4Aj4"
+      ],
+      "attribution_status": "verified",
+      "attribution_notes": "Credited as 'Allen Stone' on Mahogany live session and official artist channel.",
+      "videos": [
+        {
+          "video_id": "Bb07cO7lX_0",
+          "url": "https://www.youtube.com/watch?v=Bb07cO7lX_0",
+          "title": "Allen Stone - Is This Love (Bob Marley Cover) | Mahogany Session",
+          "channel": "Mahogany",
+          "duration": "4:46",
+          "query_used": "Bob Marley cover stripped back soul live session"
+        },
+        {
+          "video_id": "RftqJrM4Aj4",
+          "url": "https://www.youtube.com/watch?v=RftqJrM4Aj4",
+          "title": "Allen Stone - Is This Love (Official Video) (Bob Marley Cover)",
+          "channel": "AllenStoneVEVO",
+          "duration": "4:04",
+          "query_used": "Allen Stone second take comparison"
+        }
+      ]
+    },
+    {
+      "lead_id": "lead_03",
+      "stage_name": "YEBBA",
+      "source_links": [
+        "https://www.youtube.com/watch?v=RXwE1G7_U9M"
+      ],
+      "attribution_status": "verified",
+      "attribution_notes": "Credited as 'YEBBA' on official Sofar Sounds NYC live session.",
+      "videos": [
+        {
+          "video_id": "RXwE1G7_U9M",
+          "url": "https://www.youtube.com/watch?v=RXwE1G7_U9M",
+          "title": "YEBBA - My Mind | Sofar NYC",
+          "channel": "Sofar Sounds",
+          "duration": "6:10",
+          "query_used": "Sofar Sounds live soul singer phrasing NYC"
+        }
+      ]
+    },
+    {
+      "lead_id": "lead_04",
+      "stage_name": "Acantha Lang",
+      "source_links": [
+        "https://www.youtube.com/watch?v=XIIYcEz1u28",
+        "https://www.youtube.com/watch?v=kVUq2wgHW0Q"
+      ],
+      "attribution_status": "uncertain",
+      "attribution_notes": "Audience capture 'Acantha Lang at Sofar Sounds NYC' uploaded by third-party channel 'Hiddentravel' alongside Sofar London band session; confirm exact backing lineup and cover repertoire.",
+      "videos": [
+        {
+          "video_id": "XIIYcEz1u28",
+          "url": "https://www.youtube.com/watch?v=XIIYcEz1u28",
+          "title": "Acantha Lang at Sofar Sounds NYC",
+          "channel": "Hiddentravel",
+          "duration": "2:38",
+          "query_used": "Sofar Sounds NYC soul singer open room"
+        },
+        {
+          "video_id": "kVUq2wgHW0Q",
+          "url": "https://www.youtube.com/watch?v=kVUq2wgHW0Q",
+          "title": "Acantha Lang - Ride This Train | Sofar London",
+          "channel": "Sofar Sounds",
+          "duration": "6:07",
+          "query_used": "Acantha Lang Sofar Sounds"
+        }
+      ]
+    }
+  ],
+  "clip_evidence": [
+    {
+      "clip_id": "clip_01",
+      "lead_id": "lead_01",
+      "stage_name": "Olivia Dean",
+      "source_url": "https://www.youtube.com/watch?v=3-K26i1go0s",
+      "video_id": "3-K26i1go0s",
+      "title": "Olivia Dean - Wish I Didn't Miss You (Angie Stone) | Mahogany Session",
+      "channel": "Mahogany",
+      "recording_context": "live",
+      "recording_context_notes": "Single-room Mahogany live session with visible vocal mic bleed, natural room decay, and acoustic guitar accompaniment.",
+      "evaluated_model": "gemini-4-hydrogen",
+      "interaction_id": "demo-hydrogen-clip-01",
+      "observations": [
+        {
+          "observation_id": "obs_01a",
+          "timestamp": "0:34",
+          "dimension": "arrangement",
+          "musical_choice": "Replaces Angie Stone's heavy drum-loop groove with muted, syncopated acoustic guitar chord stabs, leaving wide space around the lead vocal."
+        },
+        {
+          "observation_id": "obs_01b",
+          "timestamp": "1:12",
+          "dimension": "phrasing",
+          "musical_choice": "Delays the chorus hook entrance slightly behind the guitar downbeat and clips the line endings conversationally instead of belting."
+        }
+      ]
+    },
+    {
+      "clip_id": "clip_02",
+      "lead_id": "lead_01",
+      "stage_name": "Olivia Dean",
+      "source_url": "https://www.youtube.com/watch?v=BcQnHzrc24Y",
+      "video_id": "BcQnHzrc24Y",
+      "title": "Olivia Dean - Love Me Not in the Live Lounge",
+      "channel": "BBCRadio1VEVO",
+      "recording_context": "live",
+      "recording_context_notes": "Live radio studio performance with live band interplay and unedited vocal breath transitions.",
+      "evaluated_model": "gemini-4-hydrogen",
+      "interaction_id": "demo-hydrogen-clip-02",
+      "observations": [
+        {
+          "observation_id": "obs_02a",
+          "timestamp": "0:48",
+          "dimension": "interpretation",
+          "musical_choice": "Reshapes Ravyn Lenae's brisk falsetto melody in a warmer chest-mix register with relaxed jazz-soul swing."
+        }
+      ]
+    },
+    {
+      "clip_id": "clip_03",
+      "lead_id": "lead_02",
+      "stage_name": "Allen Stone",
+      "source_url": "https://www.youtube.com/watch?v=Bb07cO7lX_0",
+      "video_id": "Bb07cO7lX_0",
+      "title": "Allen Stone - Is This Love (Bob Marley Cover) | Mahogany Session",
+      "channel": "Mahogany",
+      "recording_context": "live",
+      "recording_context_notes": "Unaccompanied solo hollowbody guitar and live room vocal in an intimate single-camera session.",
+      "evaluated_model": "gemini-4-hydrogen",
+      "interaction_id": "demo-hydrogen-clip-03",
+      "observations": [
+        {
+          "observation_id": "obs_03a",
+          "timestamp": "0:42",
+          "dimension": "phrasing",
+          "musical_choice": "Slows Bob Marley's reggae skank into a rubato 6/8 soul ballad, stretching vowel turns across barlines."
+        },
+        {
+          "observation_id": "obs_03b",
+          "timestamp": "2:38",
+          "dimension": "dynamics",
+          "musical_choice": "Builds from a hushed head-voice confession into an uncompressed gospel chest-voice peak while palm-muting the guitar."
+        }
+      ]
+    },
+    {
+      "clip_id": "clip_04",
+      "lead_id": "lead_02",
+      "stage_name": "Allen Stone",
+      "source_url": "https://www.youtube.com/watch?v=RftqJrM4Aj4",
+      "video_id": "RftqJrM4Aj4",
+      "title": "Allen Stone - Is This Love (Official Video) (Bob Marley Cover)",
+      "channel": "AllenStoneVEVO",
+      "recording_context": "studio",
+      "recording_context_notes": "Multi-tracked studio production with rhythm section, organ pad, and polished vocal compression.",
+      "evaluated_model": "gemini-4-hydrogen",
+      "interaction_id": "demo-hydrogen-clip-04",
+      "observations": [
+        {
+          "observation_id": "obs_04a",
+          "timestamp": "1:04",
+          "dimension": "arrangement",
+          "musical_choice": "Locks the same harmonic reharmonization into a slow-burn Memphis soul pocket, confirming the reinterpretation is structural rather than accidental."
+        }
+      ]
+    },
+    {
+      "clip_id": "clip_05",
+      "lead_id": "lead_03",
+      "stage_name": "YEBBA",
+      "source_url": "https://www.youtube.com/watch?v=RXwE1G7_U9M",
+      "video_id": "RXwE1G7_U9M",
+      "title": "YEBBA - My Mind | Sofar NYC",
+      "channel": "Sofar Sounds",
+      "recording_context": "live",
+      "recording_context_notes": "Intimate seated Sofar NYC room recording with audible crowd stillness and zero vocal pitch-correction artifacts.",
+      "evaluated_model": "gemini-4-hydrogen",
+      "interaction_id": "demo-hydrogen-clip-05",
+      "observations": [
+        {
+          "observation_id": "obs_05a",
+          "timestamp": "1:22",
+          "dimension": "dynamics",
+          "musical_choice": "Drops to an almost whispered pianissimo on the refrain before blooming into resonant chest tone without stepping closer to the mic."
+        },
+        {
+          "observation_id": "obs_05b",
+          "timestamp": "3:55",
+          "dimension": "phrasing",
+          "musical_choice": "Suspends the resolution with an intricate descending melisma that lands cleanly on the root as the guitar holds a bare chord."
+        }
+      ]
+    },
+    {
+      "clip_id": "clip_06",
+      "lead_id": "lead_04",
+      "stage_name": "Acantha Lang",
+      "source_url": "https://www.youtube.com/watch?v=kVUq2wgHW0Q",
+      "video_id": "kVUq2wgHW0Q",
+      "title": "Acantha Lang - Ride This Train | Sofar London",
+      "channel": "Sofar Sounds",
+      "recording_context": "live",
+      "recording_context_notes": "Live ensemble Sofar London performance with horns and rhythm section.",
+      "evaluated_model": "gemini-4-hydrogen",
+      "interaction_id": "demo-hydrogen-clip-06",
+      "observations": [
+        {
+          "observation_id": "obs_06a",
+          "timestamp": "1:08",
+          "dimension": "dynamics",
+          "musical_choice": "Drives classic Southern-soul grit against tight horn stabs with commanding call-and-response phrasing."
+        }
+      ]
+    }
+  ],
+  "assessments": [
+    {
+      "assessment_id": "assess_01",
+      "lead_id": "lead_01",
+      "shortlisted": true,
+      "fit_rationale": "Strongest two-clip evidence of deliberate song reinterpretation: both clip_01 (0:34, 1:12) and second-take clip_02 (0:48) transform well-known R&B/soul songs via laid-back pocket and stripped acoustic space.",
+      "open_questions": [
+        "Confirm whether she tours with a duo guitarist or full rhythm section for intimate room bookings."
+      ]
+    },
+    {
+      "assessment_id": "assess_02",
+      "lead_id": "lead_02",
+      "shortlisted": true,
+      "fit_rationale": "Transforms a universally familiar Bob Marley anthem into an intimate 6/8 soul ballad (clip_03 @ 0:42 & 2:38), with clip_04 (@ 1:04) confirming intentional arrangement architecture across live and studio contexts.",
+      "open_questions": [
+        "Verify original-song phrasing carries the same restraint outside cover repertoire."
+      ]
+    },
+    {
+      "assessment_id": "assess_03",
+      "lead_id": "lead_03",
+      "shortlisted": true,
+      "fit_rationale": "Extraordinary live dynamic control and phrasing elasticity in a stripped NYC listening room (clip_05 @ 1:22 & 3:55), though evaluated here from a single original ballad clip.",
+      "open_questions": [
+        "Single-clip assessment: evaluate a second clip reinterpreting a familiar standard to confirm cover/rearrangement approach."
+      ]
+    },
+    {
+      "assessment_id": "assess_04",
+      "lead_id": "lead_04",
+      "shortlisted": false,
+      "fit_rationale": "Commanding Southern-soul delivery on original material (clip_06 @ 1:08), but fuller horn-band arrangement and unverified third-party NYC clip make stripped-back reinterpretation fit less direct than top 3.",
+      "open_questions": [
+        "Resolve third-party uploader attribution on 'Hiddentravel' NYC clip and locate a duo/acoustic cover take."
+      ]
+    }
+  ],
+  "shortlist": [
+    {
+      "rank": 1,
+      "lead_id": "lead_01",
+      "play_first_clip_id": "clip_01",
+      "play_first_observation_id": "obs_01b",
+      "why_it_fits": "At 1:12 in her live Mahogany take of Angie Stone's 'Wish I Didn't Miss You', she lays behind the muted acoustic guitar groove and turns an iconic belt chorus into an intimate, conversational confession.",
+      "what_to_hear_next": "Open her BBC Live Lounge take of 'Love Me Not' (@ 0:48) to hear how she applies the same warm chest-mix swing to a modern uptempo R&B track.",
+      "listen_next_url": "https://www.youtube.com/watch?v=BcQnHzrc24Y&t=48s"
+    },
+    {
+      "rank": 2,
+      "lead_id": "lead_02",
+      "play_first_clip_id": "clip_03",
+      "play_first_observation_id": "obs_03a",
+      "why_it_fits": "At 0:42, he strips Bob Marley's 'Is This Love' down to a single hollowbody guitar and rubato 6/8 phrasing, completely reframing the lyric's emotional weight before swelling dynamically at 2:38.",
+      "what_to_hear_next": "Compare with the studio version (@ 1:04) to hear how the reharmonization translates to a full Memphis-soul rhythm section, then check an original live take.",
+      "listen_next_url": "https://www.youtube.com/watch?v=RftqJrM4Aj4&t=64s"
+    },
+    {
+      "rank": 3,
+      "lead_id": "lead_03",
+      "play_first_clip_id": "clip_05",
+      "play_first_observation_id": "obs_05a",
+      "why_it_fits": "At 1:22 in her Sofar NYC room session, she drops to a pin-drop whisper and swells into full chest resonance on a single breath, demonstrating elite live micro-dynamics without studio polish.",
+      "what_to_hear_next": "Flagged as a single-clip assessment — listen through the 3:55 unaccompanied cadenza in this clip, then scout a second live cover take to verify familiar-song rearrangement.",
+      "listen_next_url": "https://www.youtube.com/watch?v=RXwE1G7_U9M&t=235s"
+    }
+  ],
+  "trace": [
+    {
+      "step_id": "trace_01",
+      "stage": "discovery",
+      "actor": "Discovery Managed Agent (antigravity-preview-09-2026) + YouTubeConnector",
+      "status": "completed",
+      "interaction_id": "demo-agent-discovery-01",
+      "duration_ms": 2840,
+      "summary": "Searched Mahogany Sessions, Sofar Sounds, and Live Lounge public uploads; grouped clips into 4 performer leads and flagged 1 uncertain third-party attribution (Acantha Lang / Hiddentravel).",
+      "details": {
+        "queries": [
+          "Mahogany Session soul cover live phrasing",
+          "Bob Marley cover stripped back soul live session",
+          "Sofar Sounds live soul singer phrasing NYC"
+        ],
+        "leads_found": 4,
+        "uncertain_attributions": ["lead_04"]
+      }
+    },
+    {
+      "step_id": "trace_02",
+      "stage": "evaluation",
+      "actor": "Performance Evaluator (gemini-4-hydrogen · direct YouTube URL input)",
+      "status": "completed",
+      "interaction_id": "demo-hydrogen-batch-01",
+      "duration_ms": 4120,
+      "summary": "Evaluated primary public YouTube URLs directly in Gemini 4 Hydrogen, extracting timestamped phrasing/dynamics/arrangement moments and live vs. studio recording context.",
+      "details": {
+        "clips_evaluated": ["clip_01", "clip_03", "clip_05", "clip_06"],
+        "contexts": {"live": 4, "studio": 0, "unclear": 0}
+      }
+    },
+    {
+      "step_id": "trace_03",
+      "stage": "second_take_discovery",
+      "actor": "Discovery Managed Agent -> Gemini 4 Hydrogen (Thin-Evidence Loop)",
+      "status": "completed",
+      "interaction_id": "demo-agent-second-take-01",
+      "duration_ms": 3190,
+      "summary": "Triggered second-take lookup for single-clip leads: added BBC Live Lounge take for Olivia Dean (clip_02) and studio comparison take for Allen Stone (clip_04); retained single-clip flag on YEBBA (lead_03).",
+      "details": {
+        "second_takes_added": ["clip_02 (lead_01)", "clip_04 (lead_02)"],
+        "remaining_single_clip_leads": ["lead_03"]
+      }
+    },
+    {
+      "step_id": "trace_04",
+      "stage": "synthesis",
+      "actor": "Synthesis Managed Agent (antigravity-preview-09-2026 · gemini-4-carbon)",
+      "status": "completed",
+      "interaction_id": "demo-agent-synthesis-01",
+      "duration_ms": 2650,
+      "summary": "Compared 6 clip evidence records across 4 leads against the taste brief; selected top 3 shortlist with timestamped Play-First links, fit rationales, next-listen pointers, and single-clip warning.",
+      "details": {
+        "shortlisted_leads": ["lead_01", "lead_02", "lead_03"],
+        "archived_leads": ["lead_04"]
+      }
+    }
+  ]
+}

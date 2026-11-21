@@ -2,8 +2,12 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
+import sys
 
 from .gemini import Gemini
+from .scout import DEFAULT_TASTE_BRIEF, load_dotenv_if_present, run_scout
+from .store import SimonStore
+from .web import serve_web
 
 
 STAGES = {
@@ -43,6 +47,7 @@ DEMO_REPORTS = {
 
 
 def run_showcase(manifest, live):
+    load_dotenv_if_present()
     with manifest.open(encoding="utf-8") as file:
         data = json.load(file)
     brief = data["brief"]
@@ -92,11 +97,65 @@ def run_showcase(manifest, live):
     }
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Run Simon's showcase scouting graph.")
-    parser.add_argument("--live", type=Path, metavar="MANIFEST",
-                        help="Run Gemini on a local JSON manifest of opt-in auditions.")
-    args = parser.parse_args()
+def main(argv=None):
+    raw_args = list(sys.argv[1:] if argv is None else argv)
+
+    if raw_args and raw_args[0] == "scout":
+        parser = argparse.ArgumentParser(
+            prog="python3 -m simon scout",
+            description="Run Simon's Taste-Brief YouTube Scouting workflow.",
+        )
+        parser.add_argument(
+            "--brief",
+            default=DEFAULT_TASTE_BRIEF,
+            help="Taste brief describing the sound and musical choices to scout for.",
+        )
+        parser.add_argument(
+            "--live",
+            action="store_true",
+            help="Call Gemini Managed Agents, public YouTube search, and Gemini 4 Hydrogen live.",
+        )
+        parser.add_argument(
+            "--db",
+            type=Path,
+            default=None,
+            help="Optional SQLite database path (defaults to local/simon.db).",
+        )
+        args = parser.parse_args(raw_args[1:])
+        try:
+            store = SimonStore(args.db) if args.db else SimonStore()
+            run = run_scout(brief_prompt=args.brief, live=args.live, store=store)
+        except (OSError, UnicodeError, ValueError, KeyError, TypeError, RuntimeError) as exc:
+            parser.exit(1, f"Simon scout failed: {exc}\n")
+        print(json.dumps(run.to_dict(), indent=2, ensure_ascii=False))
+        return
+
+    if raw_args and raw_args[0] == "serve":
+        parser = argparse.ArgumentParser(
+            prog="python3 -m simon serve",
+            description="Launch Simon's interactive Taste-Brief Vocal Scout web demo.",
+        )
+        parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1).")
+        parser.add_argument("--port", type=int, default=8765, help="Bind port (default: 8765).")
+        parser.add_argument("--db", type=Path, default=None, help="Optional SQLite database path.")
+        args = parser.parse_args(raw_args[1:])
+        store = SimonStore(args.db) if args.db else SimonStore()
+        serve_web(host=args.host, port=args.port, store=store)
+        return
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run Simon's showcase scouting graph, or use subcommands "
+            "`scout` (CLI taste-brief scout) and `serve` (interactive web MVP)."
+        )
+    )
+    parser.add_argument(
+        "--live",
+        type=Path,
+        metavar="MANIFEST",
+        help="Run Gemini on a local JSON manifest of opt-in auditions.",
+    )
+    args = parser.parse_args(raw_args)
     demo = Path(__file__).resolve().parents[1] / "examples" / "showcase.json"
     try:
         result = run_showcase(args.live or demo, live=args.live is not None)

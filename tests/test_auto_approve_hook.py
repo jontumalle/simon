@@ -51,7 +51,7 @@ def eval_write_tool(tool_name: str, target_path: str, arg_key: str = "Path") -> 
 class AutoApproveToolchainHookTest(unittest.TestCase):
     def test_safe_simon_toolchain_commands_auto_approve(self):
         safe_commands = [
-            "/Users/kevinquizhpi/.local/bin/gh auth setup-git",
+            f"{Path.home()}/.local/bin/gh auth setup-git",
             "~/.local/bin/gh auth status",
             "gh pr list",
             "gh pr create --fill --base main --head feat/audio-scout",
