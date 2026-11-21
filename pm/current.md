@@ -3,6 +3,10 @@
 *Updated: 2026-11-21*
 
 ## Live Now
+- **Discovery Dashboard UI Refinement & Expanded Source Selector (PR #18 merged to `main` at `44ac309`, commit `6b0c529`, 55/55 tests passing)**:
+  - **Removed Redundant Section 3 (`simon/discovery_ui.py`)**: Removed Section 3 (`3. Per-Agent Contract Outputs`) and inline worker-card / `interaction_id` outputs from `/discovery`. Agent execution progress and structured deliverables are cleanly channeled into **2. Field News** (`/field-news`) and **3. Scouting Reports** (`/reports`), with direct post-dispatch navigation links (`Follow in Field News →` and `Open Scouting Reports →`).
+  - **Expanded Section 1 (`1. Select Discovery Sources`)**: Enhanced source discovery UI with a wider `1440px` wrapper (`wrap-wide`), larger `340px+` source cards, `520px` min-height / `76vh` scrollable selector, `Expand Full List` / `Collapse List` toggle, live search (`#sourceSearchInput`), genre filter (`#genreFilter`), clickable channel count chips (`#channelChips`), `Select All Shown`, and a removable selected-sources tray (`#selectedTray`).
+  - **Verification & Staging Deployment**: 55/55 unit tests pass (including `test_discovery_dashboard_removes_third_section_and_expands_selector` in `tests/test_discovery_ui.py`), `python -m simon` smoke check clean, `ruff check --select E9,F` clean. Live-deployed to Cloud Run `simon-staging` (`simon-staging-00008-ftk` at `https://simon-staging-139550420825.us-east1.run.app/discovery`).
 - **Talent Agency Studio Remodel, Phase Runner & Agent Eval Lab (PR #16 merged to `main`, commit `95d3bcf`, 57/57 tests passing)**:
   - **Zero-Dependency 3-Tab Studio (`/`, `simon/static/index.html`, `simon/static/app.css`, `simon/static/app.js`)**: Remodeled `5. Vocal Studio` (`/`) into a modern 3-tab Talent Agency Studio featuring:
     1. **Talent Review**: Sticky YouTube Moment Verifier player with quick-jump timestamps, Top-3 Shortlist + All Scouted Artists, Full Profile drawer, New Brief drawer, Trace drawer, and promote-to-Phase-2 candidate selection.
