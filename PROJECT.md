@@ -34,6 +34,7 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 ## Recent sessions
 *Working memory (LRU pointer cache, max 12, most recent first). Maintained by the `project-manager` skill/subagent.*
 
+- 2026-11-21 · managed-agents deploy & ci · merged PR #2 (deploy CLI, fleet API, Actions CI) & live-deployed 5 staging agents → `pm/log/2026-11-21-managed-agents-deploy-ci.md`, `simon/`, `.github/`
 - 2026-11-21 · leadgen & investigator · aligned 2-stage music pipeline (Lead Gen + Generalist Investigator, objective data, 2-layer skills) → `pm/log/2026-11-21-leadgen-investigator-alignment.md`
 - 2026-11-21 · governance charters · added top-level governance/ (main + feature-branch code flow, Intake/Decision/Outcome domains, safety) → `governance/`, `AGENTS.md`, `.agents/`
 - 2026-11-21 · taste-brief youtube mvp · shipped & live-verified 3-unit YouTube vocal scout MVP (`run_881b5370`), SQLite & web studio → `simon/`, `agents/`, `notes/managed-agents/`, `pm/`
