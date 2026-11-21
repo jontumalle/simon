@@ -1,0 +1,536 @@
+{
+  "dataset_version": "1.0.0",
+  "agent_id": "simon-track-record-mapper",
+  "description": "Golden evaluation cases for Simon's Stage 2 Track Record Mapper investigator agent, covering active show history, peak venue capacity, honest abstention on sparse tour history, fabricated venue capacities, ungrounded/blocked URLs, and forbidden telemetry leaks.",
+  "cases": [
+    {
+      "id": "track_record_01_active_shows_and_credits_pass",
+      "brief": "Map public live show history, venue capacities, team mentions, and collaborator credits for Mira Sol.",
+      "context": "Grounded lookups across Bandsintown, Dice, and MusicBrainz for active Brooklyn vocalist Mira Sol. Verified venues: Rockwood Stage 1 (75), Baby's All Right (280), Mercury Lounge (250).",
+      "expected_valid": true,
+      "notes": "Clean pass case with 2 past shows, 1 upcoming show, highest_venue_cap_observed=280, explicit team mentions (DistroKid distributor, North Star Artists mgmt), and deduplicated producer credits.",
+      "output": {
+        "live_history_and_credits": {
+          "show_history": [
+            {
+              "venue": "Rockwood Music Hall Stage 1",
+              "city": "New York, NY",
+              "date": "2026-03-14",
+              "billing_slot": "opener",
+              "source_url": "https://www.bandsintown.com/e/1029384"
+            },
+            {
+              "venue": "Baby's All Right",
+              "city": "Brooklyn, NY",
+              "date": "2026-06-20",
+              "billing_slot": "direct_support",
+              "source_url": "https://www.bandsintown.com/e/1029385"
+            }
+          ],
+          "upcoming_shows": [
+            {
+              "venue": "Mercury Lounge",
+              "city": "New York, NY",
+              "date": "2026-12-09",
+              "billing_slot": "opener",
+              "source_url": "https://dice.fm/event/mira-sol-mercury"
+            }
+          ],
+          "highest_venue_cap_observed": 280,
+          "public_team_mentions": {
+            "management": "North Star Artists",
+            "booking_agent": null,
+            "label": null,
+            "distributor": "DistroKid"
+          },
+          "collaborator_credits": [
+            {
+              "name": "Jonah Reyes",
+              "role": "producer",
+              "source_url": "https://musicbrainz.org/artist/11111111-2222-3333-4444-555555555555"
+            },
+            {
+              "name": "Priya Nair",
+              "role": "mixer",
+              "source_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+            }
+          ]
+        },
+        "process_trace": [
+          {
+            "step": "4a_track_record_generic",
+            "tool": "url_context",
+            "status": "ok",
+            "evidence_urls": [
+              "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+              "https://linktr.ee/mirasolmusic"
+            ],
+            "notes": "Extracted team mentions and credit lines from descriptions and Linktree."
+          },
+          {
+            "step": "4b_track_record_domain",
+            "tool": "google_search",
+            "status": "ok",
+            "evidence_urls": [
+              "https://www.bandsintown.com/e/1029384",
+              "https://dice.fm/event/mira-sol-mercury",
+              "https://musicbrainz.org/artist/11111111-2222-3333-4444-555555555555"
+            ],
+            "notes": "Found past Bandsintown listings and upcoming Dice event at Mercury Lounge."
+          }
+        ],
+        "missing_fields": [
+          "live_history_and_credits.public_team_mentions.booking_agent",
+          "live_history_and_credits.public_team_mentions.label"
+        ],
+        "newly_discovered_sources": [
+          {
+            "url": "https://mercuryloungenyc.com/calendar",
+            "source_channel": "diy_venue_calendar",
+            "title_or_node": "Mercury Lounge NYC Calendar",
+            "why_useful": "Active Lower East Side venue calendar for emerging vocalist lineups.",
+            "discovered_by": "stage_2_investigator"
+          }
+        ]
+      },
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_track_01_mira",
+        "agent_name": "Simon Track Record Mapper",
+        "stage": "investigator",
+        "brief": "Map public live show history, venue capacities, team mentions, and collaborator credits for Mira Sol.",
+        "status": "completed",
+        "headline": "Mapped 2 past shows, 1 upcoming Mercury Lounge date, peak venue cap 280 (Baby's All Right), and 2 credited collaborators.",
+        "steps": [
+          {
+            "step_number": 1,
+            "phase": "looking_at",
+            "title": "Parsing bio and description for team mentions",
+            "looking_at": "YouTube description and Linktree",
+            "finding": "Found North Star Artists management and DistroKid distribution",
+            "analysis": "Explicit representation noted; no booking agent or label found",
+            "status": "completed"
+          },
+          {
+            "step_number": 2,
+            "phase": "finding",
+            "title": "Querying live show listings across Bandsintown and Dice",
+            "looking_at": "Bandsintown and Dice event indexes",
+            "finding": "2 past NYC club dates and 1 upcoming Mercury Lounge opener slot",
+            "analysis": "Peak observed venue capacity is 280 (Baby's All Right)",
+            "status": "completed"
+          },
+          {
+            "step_number": 3,
+            "phase": "analysis",
+            "title": "Cross-referencing collaborator credits with MusicBrainz",
+            "looking_at": "MusicBrainz release relationships",
+            "finding": "Confirmed producer Jonah Reyes and mixing engineer Priya Nair",
+            "analysis": "Clean deduplicated credit list with valid source URLs",
+            "status": "completed"
+          }
+        ],
+        "findings": [
+          {
+            "label": "Peak Venue Capacity",
+            "value": "280 cap (Baby's All Right)",
+            "evidence_url": "https://www.bandsintown.com/e/1029385"
+          },
+          {
+            "label": "Upcoming Live Date",
+            "value": "2026-12-09 at Mercury Lounge",
+            "evidence_url": "https://dice.fm/event/mira-sol-mercury"
+          }
+        ],
+        "output": {
+          "live_history_and_credits": {
+            "show_history": [
+              {
+                "venue": "Rockwood Music Hall Stage 1",
+                "city": "New York, NY",
+                "date": "2026-03-14",
+                "billing_slot": "opener",
+                "source_url": "https://www.bandsintown.com/e/1029384"
+              },
+              {
+                "venue": "Baby's All Right",
+                "city": "Brooklyn, NY",
+                "date": "2026-06-20",
+                "billing_slot": "direct_support",
+                "source_url": "https://www.bandsintown.com/e/1029385"
+              }
+            ],
+            "upcoming_shows": [
+              {
+                "venue": "Mercury Lounge",
+                "city": "New York, NY",
+                "date": "2026-12-09",
+                "billing_slot": "opener",
+                "source_url": "https://dice.fm/event/mira-sol-mercury"
+              }
+            ],
+            "highest_venue_cap_observed": 280,
+            "public_team_mentions": {
+              "management": "North Star Artists",
+              "booking_agent": null,
+              "label": null,
+              "distributor": "DistroKid"
+            },
+            "collaborator_credits": [
+              {
+                "name": "Jonah Reyes",
+                "role": "producer",
+                "source_url": "https://musicbrainz.org/artist/11111111-2222-3333-4444-555555555555"
+              },
+              {
+                "name": "Priya Nair",
+                "role": "mixer",
+                "source_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+              }
+            ]
+          },
+          "process_trace": [
+            {
+              "step": "4a_track_record_generic",
+              "tool": "url_context",
+              "status": "ok",
+              "evidence_urls": [
+                "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                "https://linktr.ee/mirasolmusic"
+              ],
+              "notes": "Extracted team mentions and credit lines from descriptions and Linktree."
+            },
+            {
+              "step": "4b_track_record_domain",
+              "tool": "google_search",
+              "status": "ok",
+              "evidence_urls": [
+                "https://www.bandsintown.com/e/1029384",
+                "https://dice.fm/event/mira-sol-mercury",
+                "https://musicbrainz.org/artist/11111111-2222-3333-4444-555555555555"
+              ],
+              "notes": "Found past Bandsintown listings and upcoming Dice event at Mercury Lounge."
+            }
+          ],
+          "missing_fields": [
+            "live_history_and_credits.public_team_mentions.booking_agent",
+            "live_history_and_credits.public_team_mentions.label"
+          ],
+          "newly_discovered_sources": [
+            {
+              "url": "https://mercuryloungenyc.com/calendar",
+              "source_channel": "diy_venue_calendar",
+              "title_or_node": "Mercury Lounge NYC Calendar",
+              "why_useful": "Active Lower East Side venue calendar for emerging vocalist lineups.",
+              "discovered_by": "stage_2_investigator"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "track_record_02_sparse_underground_abstention_pass",
+      "brief": "Map live show history and industry representation for Devon Thorne.",
+      "context": "Underground vocalist Devon Thorne with zero public touring history or team representation.",
+      "expected_valid": true,
+      "notes": "Clean pass case verifying honest abstention: show_history and collaborator_credits are empty lists, venue cap is null, and all missing fields are logged in missing_fields.",
+      "output": {
+        "live_history_and_credits": {
+          "show_history": [],
+          "upcoming_shows": [],
+          "highest_venue_cap_observed": null,
+          "public_team_mentions": {
+            "management": null,
+            "booking_agent": null,
+            "label": null,
+            "distributor": null
+          },
+          "collaborator_credits": []
+        },
+        "process_trace": [
+          {
+            "step": "4a_track_record_generic",
+            "tool": "url_context",
+            "status": "empty",
+            "evidence_urls": [
+              "https://www.youtube.com/watch?v=M7lc1UVf-VE"
+            ],
+            "notes": "No team mentions or credit lines in seed clip description."
+          },
+          {
+            "step": "4b_track_record_domain",
+            "tool": "google_search",
+            "status": "empty",
+            "evidence_urls": [],
+            "notes": "No public concert listings on Bandsintown, Songkick, or Dice."
+          }
+        ],
+        "missing_fields": [
+          "live_history_and_credits.show_history",
+          "live_history_and_credits.upcoming_shows",
+          "live_history_and_credits.highest_venue_cap_observed",
+          "live_history_and_credits.public_team_mentions",
+          "live_history_and_credits.collaborator_credits"
+        ],
+        "newly_discovered_sources": []
+      },
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_track_02_devon",
+        "agent_name": "Simon Track Record Mapper",
+        "stage": "investigator",
+        "brief": "Map live show history and industry representation for Devon Thorne.",
+        "status": "completed",
+        "headline": "Zero public concert history or team mentions found; recorded clean abstention.",
+        "steps": [
+          {
+            "step_number": 1,
+            "phase": "looking_at",
+            "title": "Inspecting video description for credits",
+            "looking_at": "YouTube video M7lc1UVf-VE",
+            "finding": "No representation or collaborator credits mentioned",
+            "analysis": "Appended public_team_mentions and collaborator_credits to missing_fields",
+            "status": "completed"
+          },
+          {
+            "step_number": 2,
+            "phase": "finding",
+            "title": "Searching public ticketing platforms",
+            "looking_at": "Bandsintown and Songkick queries",
+            "finding": "Zero listed shows found for artist",
+            "analysis": "Pre-touring artist profile confirmed",
+            "status": "completed"
+          },
+          {
+            "step_number": 3,
+            "phase": "analysis",
+            "title": "Finalizing track record report",
+            "looking_at": "Abstention state",
+            "finding": "Highest venue cap set to null",
+            "analysis": "Appended show fields to missing_fields",
+            "status": "completed"
+          }
+        ],
+        "findings": [
+          {
+            "label": "Show History",
+            "value": "0 public shows",
+            "evidence_url": "https://www.youtube.com/watch?v=M7lc1UVf-VE"
+          }
+        ],
+        "output": {
+          "live_history_and_credits": {
+            "show_history": [],
+            "upcoming_shows": [],
+            "highest_venue_cap_observed": null,
+            "public_team_mentions": {
+              "management": null,
+              "booking_agent": null,
+              "label": null,
+              "distributor": null
+            },
+            "collaborator_credits": []
+          },
+          "process_trace": [
+            {
+              "step": "4a_track_record_generic",
+              "tool": "url_context",
+              "status": "empty",
+              "evidence_urls": [
+                "https://www.youtube.com/watch?v=M7lc1UVf-VE"
+              ],
+              "notes": "No team mentions or credit lines in seed clip description."
+            },
+            {
+              "step": "4b_track_record_domain",
+              "tool": "google_search",
+              "status": "empty",
+              "evidence_urls": [],
+              "notes": "No public concert listings on Bandsintown, Songkick, or Dice."
+            }
+          ],
+          "missing_fields": [
+            "live_history_and_credits.show_history",
+            "live_history_and_credits.upcoming_shows",
+            "live_history_and_credits.highest_venue_cap_observed",
+            "live_history_and_credits.public_team_mentions",
+            "live_history_and_credits.collaborator_credits"
+          ],
+          "newly_discovered_sources": []
+        }
+      }
+    },
+    {
+      "id": "track_record_03_fabricated_venue_cap_and_scoring_fail",
+      "brief": "Map live history and booking readiness for coffee-house singer Chloe James.",
+      "context": "Adversarial test case containing fabricated venue cap (15000) and subjective booking tier score.",
+      "expected_valid": false,
+      "notes": "Fails gate_venue_cap (claims 15,000 arena cap for local open-mic singer), gate_evidence_urls (ungrounded empty source_url on show), and qual_zero_ranking (uses 'top pick booking candidate, 9/10 score').",
+      "output": {
+        "live_history_and_credits": {
+          "show_history": [
+            {
+              "venue": "Madison Square Garden",
+              "city": "New York, NY",
+              "date": "2026-04-01",
+              "billing_slot": "headliner",
+              "source_url": ""
+            }
+          ],
+          "upcoming_shows": [],
+          "highest_venue_cap_observed": 15000,
+          "public_team_mentions": {
+            "management": "WME Agency",
+            "booking_agent": "CAA",
+            "label": "Atlantic Records",
+            "distributor": "Warner Music"
+          },
+          "collaborator_credits": [
+            {
+              "name": "Max Martin",
+              "role": "producer",
+              "source_url": "not-a-valid-url"
+            }
+          ]
+        },
+        "process_trace": [
+          {
+            "step": "4a_track_record_generic",
+            "tool": "url_context",
+            "status": "ok",
+            "evidence_urls": [],
+            "notes": "Top pick booking candidate with 9/10 score."
+          }
+        ],
+        "missing_fields": [],
+        "newly_discovered_sources": []
+      },
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_track_03_fail",
+        "agent_name": "Simon Track Record Mapper",
+        "stage": "investigator",
+        "brief": "Map live history and booking readiness for coffee-house singer Chloe James.",
+        "status": "completed",
+        "headline": "Strong fit headliner with standout 9/10 booking score.",
+        "steps": [
+          {
+            "step_number": 1,
+            "phase": "looking_at",
+            "title": "Evaluating headliner potential",
+            "looking_at": "Fabricated venue listing",
+            "finding": "Assumed Madison Square Garden capacity 15000",
+            "analysis": "Recommended as top pick headliner",
+            "status": "completed"
+          }
+        ],
+        "findings": [],
+        "output": {
+          "live_history_and_credits": {
+            "show_history": [
+              {
+                "venue": "Madison Square Garden",
+                "city": "New York, NY",
+                "date": "2026-04-01",
+                "billing_slot": "headliner",
+                "source_url": ""
+              }
+            ],
+            "highest_venue_cap_observed": 15000
+          }
+        }
+      }
+    },
+    {
+      "id": "track_record_04_telemetry_leak_and_blocked_url_fail",
+      "brief": "Map collaborator credits and show history for Lucas Vance.",
+      "context": "Adversarial test case leaking system telemetry and containing forbidden SoundCloud URL.",
+      "expected_valid": false,
+      "notes": "Fails gate_no_sys_leak (report leaks interaction_id and environment_id) and gate_evidence_urls (collaborator credit points to blocked soundcloud audio feed).",
+      "output": {
+        "live_history_and_credits": {
+          "show_history": [
+            {
+              "venue": "Berlin Under A",
+              "city": "New York, NY",
+              "date": "2026-05-10",
+              "billing_slot": "showcase",
+              "source_url": "https://www.ticketweb.com/event/lucas-vance"
+            }
+          ],
+          "upcoming_shows": [],
+          "highest_venue_cap_observed": 100,
+          "public_team_mentions": {
+            "management": null,
+            "booking_agent": null,
+            "label": null,
+            "distributor": null
+          },
+          "collaborator_credits": [
+            {
+              "name": "Alex Chen",
+              "role": "engineer",
+              "source_url": "https://soundcloud.com/fake-feed/credits"
+            }
+          ]
+        },
+        "process_trace": [
+          {
+            "step": "4a_track_record_generic",
+            "tool": "url_context",
+            "status": "ok",
+            "evidence_urls": [
+              "https://soundcloud.com/fake-feed/credits"
+            ],
+            "notes": "Checked soundcloud audio feed."
+          }
+        ],
+        "missing_fields": [],
+        "newly_discovered_sources": []
+      },
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_track_04_fail",
+        "agent_name": "Simon Track Record Mapper",
+        "stage": "investigator",
+        "brief": "Map collaborator credits and show history for Lucas Vance.",
+        "status": "completed",
+        "interaction_id": "int_telemetry_bad_999",
+        "environment_id": "env_track_bad_888",
+        "headline": "Mapped 1 showcase show for Lucas Vance.",
+        "steps": [
+          {
+            "step_number": 1,
+            "phase": "looking_at",
+            "title": "Inspecting credits",
+            "looking_at": "SoundCloud feed",
+            "finding": "Leaked raw telemetry keys",
+            "analysis": "Blocked platform feed linked",
+            "status": "completed"
+          }
+        ],
+        "findings": [],
+        "output": {
+          "live_history_and_credits": {
+            "show_history": [
+              {
+                "venue": "Berlin Under A",
+                "city": "New York, NY",
+                "date": "2026-05-10",
+                "billing_slot": "showcase",
+                "source_url": "https://www.ticketweb.com/event/lucas-vance"
+              }
+            ],
+            "collaborator_credits": [
+              {
+                "name": "Alex Chen",
+                "role": "engineer",
+                "source_url": "https://soundcloud.com/fake-feed/credits"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

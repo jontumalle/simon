@@ -1,0 +1,328 @@
+{
+  "dataset_version": "1.0.0",
+  "agent_id": "simon-footprint-profiler",
+  "stage": "stage_2_investigator",
+  "description": "Golden evaluation cases for simon-footprint-profiler covering Phase B concurrent footprint profiling, zero-decode oEmbed media links, deterministic Python math, and adversarial edge cases.",
+  "cases": [
+    {
+      "case_id": "case_01_valid_early_dsp_inflection_artist",
+      "description": "Clean valid pass case for a multi-release emerging artist with live oEmbed embeddable links, YouTube reach, Bandcamp supporter counts, and deterministic 75.0% view share math.",
+      "expected_valid": true,
+      "expected_failures": [],
+      "brief": "Profile public reach, oEmbed media queue, and concentration share for resolved subject lead_mira_sol.",
+      "context": "Tool url_context returned 2 live oEmbed embeddable videos: 1) 'Mira Sol - Midnight Train (Live Session)', author Sofar Sounds, duration 215s, embeddable true, view count 18000; 2) 'Mira Sol - Paper Walls (Acoustic)', author Mira Sol, duration 192s, embeddable true, view count 6000. YouTube channel subscriber count is 4200. Bandcamp catalog has 3 releases, 84 supporters, and 9 released tracks. Python code execution computed total sampled views = 24000, top view share = 18000 / 24000 * 100 = 75.0%, and classified regime as early_dsp_inflection.",
+      "output": {
+        "media_links": [
+          {
+            "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "title": "Mira Sol - Midnight Train (Live Session)",
+            "uploader_channel": "Sofar Sounds",
+            "duration_seconds": 215,
+            "oembed_live_embeddable": true
+          },
+          {
+            "url": "https://www.youtube.com/watch?v=9bZkp7q19f0",
+            "title": "Mira Sol - Paper Walls (Acoustic)",
+            "uploader_channel": "Mira Sol",
+            "duration_seconds": 192,
+            "oembed_live_embeddable": true
+          }
+        ],
+        "public_footprint": {
+          "footprint_regime": "early_dsp_inflection",
+          "public_reach": {
+            "youtube_subscribers": 4200,
+            "top_video_views": 18000,
+            "bandcamp_releases_count": 3,
+            "bandcamp_supporters_count": 84,
+            "released_tracks_count": 9
+          },
+          "top_release_view_share_pct": 75.0
+        },
+        "process_trace": [
+          {
+            "step": "2a_footprint_generic",
+            "tool": "url_context",
+            "status": "ok",
+            "evidence_urls": [
+              "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+              "https://www.youtube.com/watch?v=9bZkp7q19f0"
+            ],
+            "notes": "Verified 2 media links via oEmbed; collected YouTube subscriber and top video metrics."
+          },
+          {
+            "step": "2b_footprint_domain",
+            "tool": "url_context",
+            "status": "ok",
+            "evidence_urls": [
+              "https://mirasol.bandcamp.com"
+            ],
+            "notes": "Gathered Bandcamp release count (3), supporter count (84), and track count (9)."
+          }
+        ],
+        "missing_fields": [],
+        "newly_discovered_sources": [
+          {
+            "url": "https://mirasol.bandcamp.com",
+            "source_channel": "bandcamp_local_arrival",
+            "title_or_node": "Mira Sol Bandcamp Hub",
+            "why_useful": "Active independent release catalog with 84 verified supporters and 3 EPs.",
+            "discovered_by": "stage_2_investigator"
+          }
+        ]
+      },
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_foot_mira_sol_01",
+        "agent_name": "Footprint Profiler 01",
+        "stage": "investigator",
+        "brief": "Profile public reach, oEmbed media queue, and concentration share for Mira Sol",
+        "status": "completed",
+        "headline": "Inventoried 2 live-embeddable media links; computed early_dsp_inflection regime with 75.0% top release view share.",
+        "steps": [
+          {
+            "step_number": 1,
+            "phase": "looking_at",
+            "title": "Inspecting video oEmbed and YouTube reach",
+            "looking_at": "YouTube channel subscribers and live oEmbed endpoints for 2 videos",
+            "status": "done"
+          },
+          {
+            "step_number": 2,
+            "phase": "finding",
+            "title": "Collected Bandcamp supporters and catalog counts",
+            "finding": "Found 3 Bandcamp EPs, 84 community supporters, and 9 released tracks",
+            "status": "done"
+          },
+          {
+            "step_number": 3,
+            "phase": "analysis",
+            "title": "Ran Python concentration share calculation",
+            "analysis": "Computed 75.0% top release view share across 24000 total sampled views",
+            "status": "done"
+          }
+        ],
+        "findings": [
+          {
+            "title": "Mira Sol Public Reach",
+            "summary": "4,200 YouTube subscribers, 18,000 top video views, 84 Bandcamp supporters across 3 releases.",
+            "source_name": "YouTube & Bandcamp Public Profiles",
+            "source_channel": "youtube_live_session",
+            "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "attribution_status": "verified"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "case_02_valid_pre_dsp_underground_single_clip",
+      "description": "Clean valid pass case demonstrating honest abstention on a single-clip open mic vocalist with no Bandcamp presence and fewer than 2 releases (null concentration share).",
+      "expected_valid": true,
+      "expected_failures": [],
+      "brief": "Profile public reach and oEmbed media queue for underground open mic performer Devon K.",
+      "context": "Tool url_context returned 1 live oEmbed video: 'Devon K - Open Mic Clip', author Brooklyn Open Mic, duration 140s, embeddable true, view count 320. YouTube subscriber count is hidden. Bandcamp lookup returned no artist page. Code execution evaluated 1 release (< 2 releases), leaving top_release_view_share_pct as null and classifying regime as pre_dsp_underground.",
+      "output": {
+        "media_links": [
+          {
+            "url": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
+            "title": "Devon K - Open Mic Clip",
+            "uploader_channel": "Brooklyn Open Mic",
+            "duration_seconds": 140,
+            "oembed_live_embeddable": true
+          }
+        ],
+        "public_footprint": {
+          "footprint_regime": "pre_dsp_underground",
+          "public_reach": {
+            "youtube_subscribers": null,
+            "top_video_views": 320,
+            "bandcamp_releases_count": null,
+            "bandcamp_supporters_count": null,
+            "released_tracks_count": null
+          },
+          "top_release_view_share_pct": null
+        },
+        "process_trace": [
+          {
+            "step": "2a_footprint_generic",
+            "tool": "url_context",
+            "status": "ok",
+            "evidence_urls": [
+              "https://www.youtube.com/watch?v=M7lc1UVf-VE"
+            ],
+            "notes": "Verified 1 live-embeddable open mic clip via oEmbed; subscriber count hidden."
+          },
+          {
+            "step": "2b_footprint_domain",
+            "tool": "url_context",
+            "status": "empty",
+            "evidence_urls": [],
+            "notes": "No Bandcamp artist catalog or storefront indexed."
+          }
+        ],
+        "missing_fields": [
+          "public_footprint.public_reach.youtube_subscribers",
+          "public_footprint.public_reach.bandcamp_releases_count",
+          "public_footprint.public_reach.bandcamp_supporters_count",
+          "public_footprint.public_reach.released_tracks_count",
+          "public_footprint.top_release_view_share_pct"
+        ],
+        "newly_discovered_sources": []
+      },
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_foot_devon_k_01",
+        "agent_name": "Footprint Profiler 01",
+        "stage": "investigator",
+        "brief": "Profile public reach for Devon K",
+        "status": "completed",
+        "headline": "Classified Devon K in pre_dsp_underground regime with 1 verified live open mic clip and 320 views.",
+        "steps": [
+          {
+            "step_number": 1,
+            "phase": "looking_at",
+            "title": "Inspecting live open mic upload",
+            "looking_at": "YouTube oEmbed endpoint for Devon K open mic clip",
+            "status": "done"
+          },
+          {
+            "step_number": 2,
+            "phase": "finding",
+            "title": "Captured single live clip with 320 views",
+            "finding": "1 live-embeddable clip found; no Bandcamp presence detected",
+            "status": "done"
+          },
+          {
+            "step_number": 3,
+            "phase": "analysis",
+            "title": "Applied single-clip abstention rule",
+            "analysis": "Single release observed (< 2 releases); set view share to null and regime to pre_dsp_underground",
+            "status": "done"
+          }
+        ],
+        "findings": [
+          {
+            "title": "Devon K Public Reach",
+            "summary": "1 live open mic video with 320 views; zero Bandcamp releases; pre_dsp_underground regime.",
+            "source_name": "Brooklyn Open Mic Series",
+            "source_channel": "open_mic_lineup",
+            "url": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
+            "attribution_status": "uncertain"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "case_03_invalid_audio_decode_and_telemetry_leak",
+      "description": "Failure case where agent violates zero audio/video decoding invariant by calling binary audio decoding tool and leaks system telemetry into the agent report.",
+      "expected_valid": false,
+      "expected_failures": [
+        "gate_zero_decode_oembed",
+        "gate_no_sys_leak"
+      ],
+      "brief": "Profile public reach for lead_devon_k.",
+      "context": "Agent inspected video URL but invoked an audio spectrogram and transcription decoder.",
+      "output": {
+        "media_links": [
+          {
+            "url": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
+            "title": "Devon K - Open Mic Clip",
+            "uploader_channel": "Brooklyn Open Mic",
+            "duration_seconds": 140,
+            "oembed_live_embeddable": true
+          }
+        ],
+        "public_footprint": {
+          "footprint_regime": "pre_dsp_underground",
+          "public_reach": {
+            "youtube_subscribers": null,
+            "top_video_views": 320,
+            "bandcamp_releases_count": null,
+            "bandcamp_supporters_count": null,
+            "released_tracks_count": null
+          },
+          "top_release_view_share_pct": null
+        },
+        "process_trace": [
+          {
+            "step": "audio_waveform_transcribe",
+            "tool": "ffmpeg_audio_decode",
+            "status": "ok",
+            "evidence_urls": ["https://www.youtube.com/watch?v=M7lc1UVf-VE"],
+            "notes": "Downloaded mp3 stream and decoded 128kbps audio spectrum."
+          }
+        ],
+        "missing_fields": [],
+        "newly_discovered_sources": []
+      },
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_foot_leak_01",
+        "agent_name": "Footprint Profiler 01",
+        "stage": "investigator",
+        "brief": "Profile public reach for Devon K",
+        "status": "completed",
+        "headline": "Decoded audio waveform and analyzed frequency bands.",
+        "interaction_id": "int_footprint_leak_9812",
+        "environment_id": "env_audio_decode_sandbox_1",
+        "trace_id": "tr_audio_err_551",
+        "steps": [],
+        "findings": []
+      }
+    },
+    {
+      "case_id": "case_04_invalid_bad_math_and_ranking_language",
+      "description": "Failure case where top_release_view_share_pct has an erroneous calculation (98.4 instead of 75.0) and output contains subjective ranking praise.",
+      "expected_valid": false,
+      "expected_failures": [
+        "gate_python_math",
+        "qual_zero_ranking"
+      ],
+      "brief": "Profile public reach for lead_mira_sol.",
+      "context": "Mira Sol has 18000 views on top video and 6000 views on second video (total 24000).",
+      "output": {
+        "media_links": [
+          {
+            "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "title": "Mira Sol - Midnight Train",
+            "uploader_channel": "Sofar Sounds",
+            "duration_seconds": 215,
+            "oembed_live_embeddable": true
+          },
+          {
+            "url": "https://www.youtube.com/watch?v=9bZkp7q19f0",
+            "title": "Mira Sol - Paper Walls",
+            "uploader_channel": "Mira Sol",
+            "duration_seconds": 192,
+            "oembed_live_embeddable": true
+          }
+        ],
+        "public_footprint": {
+          "footprint_regime": "established_streaming",
+          "public_reach": {
+            "youtube_subscribers": 4200,
+            "top_video_views": 18000,
+            "bandcamp_releases_count": 3,
+            "bandcamp_supporters_count": 84,
+            "released_tracks_count": 9
+          },
+          "top_release_view_share_pct": 98.4
+        },
+        "process_trace": [],
+        "missing_fields": [],
+        "newly_discovered_sources": []
+      },
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_foot_praise_01",
+        "agent_name": "Footprint Profiler 01",
+        "stage": "investigator",
+        "brief": "Profile public reach for Mira Sol",
+        "status": "completed",
+        "headline": "Mira Sol shows #1 standout viral velocity and stellar reach as a top pick for label signing.",
+        "steps": [],
+        "findings": []
+      }
+    }
+  ]
+}

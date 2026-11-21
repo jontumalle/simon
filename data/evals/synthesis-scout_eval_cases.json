@@ -1,0 +1,350 @@
+{
+  "dataset_version": "1.0.0",
+  "agent_id": "simon-synthesis-scout",
+  "stage": "stage_4_synthesis",
+  "description": "Golden evaluation cases for Simon's Stage 4 Synthesis Scout (simon-synthesis-scout), covering multi-candidate synthesis, single-clip second-take guidance, and failure modes (shortlist cap violation, hallucinated timestamps, telemetry leaks).",
+  "cases": [
+    {
+      "id": "synth_01_clean_pass_three_artists_shortlist",
+      "brief": "Find emerging NYC solo vocalists who reinterpret familiar songs with stripped-back acoustic arrangements, exceptional dynamic control, and distinctive vocal timbre.",
+      "expected_valid": true,
+      "context": "Evaluated candidate leads (lead_olivia_dean, lead_devon_cole, lead_luna_jinna) with timestamped ClipEvidence from Mahogany Sessions and Sofar Sounds NYC.",
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_synth_01_pass",
+        "agent_name": "Synthesis Scout 01",
+        "stage": "synthesis",
+        "brief": "Find emerging NYC solo vocalists who reinterpret familiar songs with stripped-back acoustic arrangements, exceptional dynamic control, and distinctive vocal timbre.",
+        "status": "completed",
+        "headline": "Shortlisted 3 solo vocalists with verified timestamped observations matching stripped-back acoustic brief.",
+        "steps": [
+          {
+            "step_number": 1,
+            "phase": "looking_at",
+            "title": "Loaded upstream candidate leads and evaluated clip evidence from simon-db",
+            "looking_at": "3 candidate leads and 6 timestamped clip observations across soul, folk, and R&B.",
+            "status": "done"
+          },
+          {
+            "step_number": 2,
+            "phase": "analysis",
+            "title": "Mapped vocal phrasing and dynamic range against taste brief criteria",
+            "analysis": "Identified standout mic dynamics on Olivia Dean at 1:12 and intimate acoustic phrasing on Devon Cole and Luna Jinna.",
+            "status": "done"
+          },
+          {
+            "step_number": 3,
+            "phase": "saved",
+            "title": "Saved 3 artist assessments and top-3 listening shortlist to simon-db",
+            "status": "done"
+          }
+        ],
+        "findings": [
+          {
+            "title": "Olivia Dean",
+            "summary": "Rank 1: Soulful dynamic modulation and warm chest-to-head transitions on live acoustic session.",
+            "source_name": "Mahogany Session",
+            "source_channel": "curated_session",
+            "url": "https://www.youtube.com/watch?v=3-K26i1go0s",
+            "attribution_status": "verified"
+          },
+          {
+            "title": "Devon Cole",
+            "summary": "Rank 2: Stripped-back acoustic guitar arrangement with crisp diction and playful vocal trills.",
+            "source_name": "Sofar Sounds NYC",
+            "source_channel": "curated_session",
+            "url": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
+            "attribution_status": "verified"
+          },
+          {
+            "title": "Luna Jinna",
+            "summary": "Rank 3: Smoky lower-register phrasing and sustained vibrato on live acoustic ballad.",
+            "source_name": "Brooklyn Acoustic Sessions",
+            "source_channel": "indie_venue_session",
+            "url": "https://www.youtube.com/watch?v=RXwE1G7_U9M",
+            "attribution_status": "verified"
+          }
+        ],
+        "created_at": "2026-11-21T21:40:00Z",
+        "updated_at": "2026-11-21T21:40:45Z"
+      },
+      "output": {
+        "synthesis_summary": "Evaluated 3 candidate vocalists against the stripped-back acoustic taste brief. Shortlisted all 3, prioritizing Olivia Dean's dynamic phrasing at the mic, with Devon Cole and Luna Jinna offering contrasting intimate live arrangements.",
+        "assessments": [
+          {
+            "lead_id": "lead_olivia_dean",
+            "shortlisted": true,
+            "fit_rationale": "Exceptional breath control and dynamic transitions between intimate chest voice and head resonance on acoustic guitar backing in clip_01 at 1:12.",
+            "open_questions": [
+              "Does live vocal projection hold unamplified in larger 250-cap rooms?",
+              "Confirm availability of original acoustic arrangements versus studio production."
+            ]
+          },
+          {
+            "lead_id": "lead_devon_cole",
+            "shortlisted": true,
+            "fit_rationale": "Playful vocal ornamentation and precise pitch intonation on live single-take performance in clip_02 at 0:45.",
+            "open_questions": [
+              "Has only one evaluated live clip; verify consistency across an extended 30-minute set."
+            ]
+          },
+          {
+            "lead_id": "lead_luna_jinna",
+            "shortlisted": true,
+            "fit_rationale": "Smoky resonant lower register with restrained vibrato that anchors the intimate mood requested in the brief in clip_03 at 1:30.",
+            "open_questions": [
+              "Confirm whether stage setup requires acoustic grand piano or electric keyboard DI."
+            ]
+          }
+        ],
+        "shortlist": [
+          {
+            "rank": 1,
+            "lead_id": "lead_olivia_dean",
+            "play_first_clip_id": "clip_01",
+            "play_first_observation_id": "obs_01_dynamic_crescendo",
+            "why_it_fits": "At 1:12, Dean shifts effortlessly from hushed conversational delivery into a resonant acoustic crescendo without clipping or pitch wobble.",
+            "what_to_hear_next": "Listen to clip_01b to confirm her sustained falsetto control on lower-tempo ballads.",
+            "listen_next_url": "https://www.youtube.com/watch?v=3-K26i1go0s&t=145s"
+          },
+          {
+            "rank": 2,
+            "lead_id": "lead_devon_cole",
+            "play_first_clip_id": "clip_02",
+            "play_first_observation_id": "obs_02_percussive_phrasing",
+            "why_it_fits": "At 0:45, Cole locks percussive vocal phrasing into the acoustic guitar rhythm with crisp diction and playful syncopation.",
+            "what_to_hear_next": "Seek a second live clip with a slower tempo to evaluate emotional resonance beyond rhythmic hooks.",
+            "listen_next_url": null
+          },
+          {
+            "rank": 3,
+            "lead_id": "lead_luna_jinna",
+            "play_first_clip_id": "clip_03",
+            "play_first_observation_id": "obs_03_lower_register_vibrato",
+            "why_it_fits": "At 1:30, Jinna demonstrates deep, controlled vibrato in her lower register that perfectly fulfills the brief's distinctive timbre requirement.",
+            "what_to_hear_next": "Check live performance with full rhythm section to test vocal presence against drums.",
+            "listen_next_url": "https://www.youtube.com/watch?v=RXwE1G7_U9M&t=180s"
+          }
+        ]
+      }
+    },
+    {
+      "id": "synth_02_clean_pass_single_clip_and_studio_guidance",
+      "brief": "Under-the-radar neo-soul and bedroom jazz vocalists with rich vocal texture for an intimate live residency.",
+      "expected_valid": true,
+      "context": "Evaluated candidate leads where candidate 2 has only a single acoustic living-room clip.",
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_synth_02_pass",
+        "agent_name": "Synthesis Scout 01",
+        "stage": "synthesis",
+        "brief": "Under-the-radar neo-soul and bedroom jazz vocalists with rich vocal texture for an intimate live residency.",
+        "status": "completed",
+        "headline": "Shortlisted 2 vocalists with explicit single-clip validation warnings and second-take listening guidance.",
+        "steps": [
+          {
+            "step_number": 1,
+            "phase": "looking_at",
+            "title": "Screened candidate leads and evaluated clip count metadata",
+            "looking_at": "Found 1 multi-session verified artist and 1 single-clip living-room recording.",
+            "status": "done"
+          },
+          {
+            "step_number": 2,
+            "phase": "analysis",
+            "title": "Evaluated single-clip risk and framed required second-take follow-up",
+            "analysis": "Maya Vance's single living-room clip shows remarkable vocal tone but requires live stage verification before booking.",
+            "status": "done"
+          },
+          {
+            "step_number": 3,
+            "phase": "saved",
+            "title": "Saved assessments and shortlist with second-take guidance to simon-db",
+            "status": "done"
+          }
+        ],
+        "findings": [
+          {
+            "title": "Acantha Lang",
+            "summary": "Rank 1: Powerful neo-soul timbre with proven multi-session live track record.",
+            "source_name": "Sofar London & NYC",
+            "source_channel": "curated_session",
+            "url": "https://www.youtube.com/watch?v=kVUq2wgHW0Q",
+            "attribution_status": "verified"
+          },
+          {
+            "title": "Maya Vance",
+            "summary": "Rank 2: Single-clip acoustic living-room recording; rich texture but flagged for second take.",
+            "source_name": "Maya Vance Channel",
+            "source_channel": "artist_channel",
+            "url": "https://www.youtube.com/watch?v=Bb07cO7lX_0",
+            "attribution_status": "verified"
+          }
+        ],
+        "created_at": "2026-11-21T21:42:00Z",
+        "updated_at": "2026-11-21T21:42:40Z"
+      },
+      "output": {
+        "synthesis_summary": "Assessed 2 promising neo-soul vocalists. Acantha Lang brings verified multi-room live experience, while Maya Vance presents high vocal promise from a single living-room take with explicit second-take guidance.",
+        "assessments": [
+          {
+            "lead_id": "lead_acantha_lang",
+            "shortlisted": true,
+            "fit_rationale": "Mature, resonant neo-soul vocal delivery with strong projection and dynamic control demonstrated across multiple live rooms.",
+            "open_questions": [
+              "Confirm whether NYC residency dates align with European touring schedule."
+            ]
+          },
+          {
+            "lead_id": "lead_maya_vance",
+            "shortlisted": true,
+            "fit_rationale": "Intimate warm jazz phrasing with subtle microtonal inflections in clip_02 at 0:28; outstanding bedroom-pop texture.",
+            "open_questions": [
+              "Single clip only: living-room acoustic capture does not verify uncompressed stage projection or pitch stability under stage monitoring."
+            ]
+          }
+        ],
+        "shortlist": [
+          {
+            "rank": 1,
+            "lead_id": "lead_acantha_lang",
+            "play_first_clip_id": "clip_lang_01",
+            "play_first_observation_id": "obs_lang_bridge_crescendo",
+            "why_it_fits": "At 2:05, Lang commands the room with authoritative soul vocal power and flawless pitch stability on the bridge crescendo.",
+            "what_to_hear_next": "Listen to her stripped-back acoustic duet to evaluate dynamics when not backed by a full horn section.",
+            "listen_next_url": "https://www.youtube.com/watch?v=kVUq2wgHW0Q&t=125s"
+          },
+          {
+            "rank": 2,
+            "lead_id": "lead_maya_vance",
+            "play_first_clip_id": "clip_vance_01",
+            "play_first_observation_id": "obs_vance_intro_verse",
+            "why_it_fits": "At 0:28, Vance delivers close-mic vocal breathiness and delicate pitch inflection matching the bedroom jazz brief.",
+            "what_to_hear_next": "Scout MUST hear a live venue or open-mic clip with ambient room noise before booking to confirm vocal audibility over an audience.",
+            "listen_next_url": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "synth_03_fail_exceeds_shortlist_cap",
+      "brief": "Find indie-folk vocalists in Brooklyn for intimate live showcase.",
+      "expected_valid": false,
+      "failure_reasons": [
+        "Shortlist contains 4 artists, violating the strict <=3 shortlist cap invariant."
+      ],
+      "context": "Agent evaluated 5 leads and returned 4 in the shortlist instead of capping at 3.",
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_synth_03_fail",
+        "agent_name": "Synthesis Scout 01",
+        "stage": "synthesis",
+        "brief": "Find indie-folk vocalists in Brooklyn for intimate live showcase.",
+        "status": "completed",
+        "headline": "Shortlisted 4 candidates across Brooklyn indie-folk leads.",
+        "steps": [
+          {
+            "step_number": 1,
+            "phase": "looking_at",
+            "title": "Evaluated 5 candidates",
+            "status": "done"
+          },
+          {
+            "step_number": 2,
+            "phase": "analysis",
+            "title": "Selected 4 candidates for shortlist",
+            "status": "done"
+          }
+        ],
+        "findings": [
+          {
+            "title": "Oversized Shortlist",
+            "summary": "Agent placed 4 candidates on the shortlist instead of enforcing <= 3 cap.",
+            "source_name": "Local Directory",
+            "source_channel": "curated_session",
+            "url": "https://www.youtube.com/watch?v=3-K26i1go0s",
+            "attribution_status": "verified"
+          }
+        ],
+        "created_at": "2026-11-21T21:44:00Z",
+        "updated_at": "2026-11-21T21:44:30Z"
+      },
+      "output": {
+        "synthesis_summary": "Evaluated 5 leads and decided to include 4 candidates on the shortlist.",
+        "assessments": [
+          {"lead_id": "lead_01", "shortlisted": true, "fit_rationale": "Folk timbre fit", "open_questions": ["Check availability"]},
+          {"lead_id": "lead_02", "shortlisted": true, "fit_rationale": "Acoustic fingerpicking", "open_questions": ["Check set length"]},
+          {"lead_id": "lead_03", "shortlisted": true, "fit_rationale": "Harmonic clarity", "open_questions": ["Check live experience"]},
+          {"lead_id": "lead_04", "shortlisted": true, "fit_rationale": "Lyrical resonance", "open_questions": ["Check travel dates"]}
+        ],
+        "shortlist": [
+          {"rank": 1, "lead_id": "lead_01", "play_first_clip_id": "c1", "play_first_observation_id": "o1", "why_it_fits": "Fits", "what_to_hear_next": "Next take", "listen_next_url": null},
+          {"rank": 2, "lead_id": "lead_02", "play_first_clip_id": "c2", "play_first_observation_id": "o2", "why_it_fits": "Fits", "what_to_hear_next": "Next take", "listen_next_url": null},
+          {"rank": 3, "lead_id": "lead_03", "play_first_clip_id": "c3", "play_first_observation_id": "o3", "why_it_fits": "Fits", "what_to_hear_next": "Next take", "listen_next_url": null},
+          {"rank": 4, "lead_id": "lead_04", "play_first_clip_id": "c4", "play_first_observation_id": "o4", "why_it_fits": "Fits", "what_to_hear_next": "Next take", "listen_next_url": null}
+        ]
+      }
+    },
+    {
+      "id": "synth_04_fail_fabricated_evidence_and_missing_play_first",
+      "brief": "Find emerging jazz vocalists in Lower Manhattan.",
+      "expected_valid": false,
+      "failure_reasons": [
+        "Fabricated play_first_observation_id ('obs_hallucinated_999') not present in upstream clip evidence.",
+        "Omitted open_questions array in artist assessments.",
+        "Leaked raw interaction_id and environment_id inside Field News report steps."
+      ],
+      "context": "Agent hallucinated timestamps, dropped open questions, and leaked raw system IDs in report.",
+      "report": {
+        "contract_version": "1.0.0",
+        "report_id": "rep_synth_04_leak",
+        "agent_name": "Synthesis Scout 01",
+        "stage": "synthesis",
+        "brief": "Find emerging jazz vocalists in Lower Manhattan.",
+        "status": "completed",
+        "headline": "Shortlisted candidate with hallucinated observations.",
+        "steps": [
+          {
+            "step_number": 1,
+            "phase": "looking_at",
+            "title": "Triggered interaction_id=int_deadbeef123 in environment_id=env_sandbox_456",
+            "status": "done"
+          }
+        ],
+        "findings": [
+          {
+            "title": "Hallucinated Vocalist",
+            "summary": "Fabricated observations and telemetry leak.",
+            "source_name": "Unknown",
+            "source_channel": "curated_session",
+            "url": "https://www.youtube.com/watch?v=DEAD0000000",
+            "attribution_status": "uncertain"
+          }
+        ],
+        "created_at": "2026-11-21T21:46:00Z",
+        "updated_at": "2026-11-21T21:46:25Z"
+      },
+      "output": {
+        "synthesis_summary": "Assessed candidate using fabricated observation data.",
+        "assessments": [
+          {
+            "lead_id": "lead_fake_singer",
+            "shortlisted": true,
+            "fit_rationale": "Invented vocal vibrato not present in clip."
+          }
+        ],
+        "shortlist": [
+          {
+            "rank": 1,
+            "lead_id": "lead_fake_singer",
+            "play_first_clip_id": "clip_fabricated_01",
+            "play_first_observation_id": "obs_hallucinated_999",
+            "why_it_fits": "Cited an invented high note at 4:15 in a 2-minute video.",
+            "what_to_hear_next": "Nothing.",
+            "listen_next_url": "https://www.youtube.com/watch?v=DEAD0000000"
+          }
+        ]
+      }
+    }
+  ]
+}
