@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Simon · 5. Vocal Studio · Talent Review (Taste-Brief Vocal Scout MVP)</title>
+  <title>Simon · Talent Review</title>
   <link rel="stylesheet" href="/static/app.css" />
   <style>/*__NAV_CSS__*/</style>
 </head>
@@ -80,7 +80,7 @@
 
     <div class="brief-header">
       <div>
-        <div class="eyebrow">Stage 1 · Source Registry &amp; Fleet Dispatch</div>
+        <div class="eyebrow">Stage 1 · Sources &amp; Scout Dispatch</div>
         <h1 class="brief-headline">Discovery — Pick Sources &amp; Send Scouts</h1>
       </div>
       <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
@@ -120,8 +120,8 @@
 
       <section class="card disc-card">
         <div class="disc-head">
-          <h2>2. Orchestrate Discovery Fleet</h2>
-          <span class="pill accent mono">simon-discovery-scout</span>
+          <h2>2. Send Discovery Scouts</h2>
+          <span class="pill accent">Discovery Scout</span>
         </div>
 
         <div style="display:flex; flex-direction:column; gap:6px;">
@@ -132,16 +132,16 @@
         <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px;">
           <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:center;">
             <label style="font-size:12.5px; display:inline-flex; align-items:center; gap:6px;">
-              <span>Discovery Agents:</span>
+              <span>Discovery Scouts:</span>
               <input type="number" id="discAgentCountInput" class="field-input" min="1" max="10" value="3" style="width:68px; padding:5px 8px;" />
             </label>
             <label style="font-size:12.5px; display:inline-flex; align-items:center; gap:6px;">
-              <span>Leads / Agent:</span>
+              <span>Leads / Scout:</span>
               <input type="number" id="discLeadsPerAgentInput" class="field-input" min="1" max="10" value="2" style="width:68px; padding:5px 8px;" />
             </label>
             <label style="display:inline-flex; align-items:center; gap:6px; font-size:12.5px; cursor:pointer;">
               <input type="checkbox" id="discLiveToggle" />
-              <span>Dispatch Live Managed Agents</span>
+              <span>Run Live Scouts</span>
             </label>
             <label style="display:inline-flex; align-items:center; gap:6px; font-size:12.5px; cursor:pointer;">
               <input type="checkbox" id="discResetPrevToggle" checked />
@@ -151,8 +151,8 @@
 
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <button id="discClearOldRunsBtn" class="btn" type="button">↺ Clear Old Runs</button>
-            <button id="discSyncToPipelineBtn" class="btn" type="button">Sync to Pipeline Phase 1 →</button>
-            <button id="discDispatchBtn" class="btn btn-primary" type="button">Send Discovery Agents</button>
+            <button id="discSyncToPipelineBtn" class="btn" type="button">Send to Phase 1 →</button>
+            <button id="discDispatchBtn" class="btn btn-primary" type="button">Send Discovery Scouts</button>
           </div>
         </div>
 
@@ -167,7 +167,7 @@
       <div class="disc-lower-grid">
         <section class="card disc-card">
           <div class="disc-head">
-            <h2>Recent Discovery Batches <span id="discBatchCountBadge" class="pill">0</span></h2>
+            <h2>Recent Discovery Runs <span id="discBatchCountBadge" class="pill">0</span></h2>
             <button id="discRefreshDataBtn" class="btn" type="button">↻ Refresh</button>
           </div>
           <div id="discBatchesList" style="display:flex; flex-direction:column; gap:8px;"></div>
@@ -175,7 +175,7 @@
 
         <section class="card disc-card">
           <div class="disc-head">
-            <h2>Discovered Leads Ready for Pipeline <span id="discLeadCountBadge" class="pill ok">0</span></h2>
+            <h2>Discovered Artists Ready to Investigate <span id="discLeadCountBadge" class="pill ok">0</span></h2>
             <a class="btn" href="/investigate">Open Investigator Desk ↗</a>
           </div>
           <div id="discLeadsList" style="display:flex; flex-direction:column; gap:8px; max-height:360px; overflow-y:auto;"></div>
@@ -252,14 +252,14 @@
   <main id="tab-pipeline" class="container tab-panel hidden">
     <div class="pipeline-head">
       <div>
-        <div class="eyebrow">Step-by-Step Orchestration</div>
+        <div class="eyebrow">Step-by-Step Pipeline</div>
         <h1 style="margin:4px 0 0; font-size:20px; font-weight:800;">Pipeline Runner — Run or Test Each Phase</h1>
-        <div class="muted" style="font-size:13px;">Run any phase live with deployed agents, or use Test Mode to edit handoffs and check evals.</div>
+        <div class="muted" style="font-size:13px;">Run any phase live with scouts, or use Test Mode to edit inputs and run checks.</div>
       </div>
 
       <div class="nav-tabs" role="group" aria-label="Pipeline Mode">
-        <button id="pmodeTestBtn" class="nav-tab active" data-pmode="test" type="button">Test / Eval Mode</button>
-        <button id="pmodeLiveBtn" class="nav-tab" data-pmode="live" type="button">● Live Run (Deployed Agents)</button>
+        <button id="pmodeTestBtn" class="nav-tab active" data-pmode="test" type="button">Test Mode</button>
+        <button id="pmodeLiveBtn" class="nav-tab" data-pmode="live" type="button">● Live Run</button>
       </div>
     </div>
 
@@ -276,7 +276,7 @@
         </div>
 
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button id="loadPhaseFixtureBtn" class="btn" type="button">Load Fixture</button>
+          <button id="loadPhaseFixtureBtn" class="btn" type="button">Load Sample</button>
           <button id="runThisPhaseBtn" class="btn btn-primary" type="button">▶ Run This Phase</button>
           <button id="runNextPhaseBtn" class="btn" type="button">Run Next →</button>
         </div>
@@ -285,7 +285,7 @@
       <div class="phase-split">
         <div style="display:flex; flex-direction:column; gap:8px;">
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px;">
-            <strong>Phase Input (Editable Handoff JSON)</strong>
+            <strong>Phase Input (Editable JSON)</strong>
             <span id="phaseInputHint" class="muted"></span>
           </div>
           <div id="phaseSourceBridgeBar" class="phase-lead-bar hidden">
@@ -293,9 +293,9 @@
             <button id="phaseOpenDiscoveryBtn" class="btn" type="button">Pick Sources in Discovery Tab →</button>
           </div>
           <div id="phaseLeadBridgeBar" class="phase-lead-bar hidden">
-            <label for="phaseLeadSelect" class="muted" style="font-weight:600;">Load Discovered Lead:</label>
+            <label for="phaseLeadSelect" class="muted" style="font-weight:600;">Load Discovered Artist:</label>
             <select id="phaseLeadSelect" class="select-compact" style="flex:1; min-width:180px;">
-              <option value="">Choose a lead from Discovery…</option>
+              <option value="">Choose an artist from Discovery…</option>
             </select>
           </div>
           <textarea id="phaseInputJson" class="code-area"></textarea>
@@ -303,16 +303,16 @@
 
         <div style="display:flex; flex-direction:column; gap:12px;">
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; gap:8px; flex-wrap:wrap;">
-            <strong>Phase Output &amp; Process Evals</strong>
+            <strong>Phase Output &amp; Checks</strong>
             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
               <span id="phaseBatchLinks" class="hidden" style="display:inline-flex; gap:6px;"></span>
-              <span id="phaseRunMeta" class="mono muted">Not run yet</span>
+              <span id="phaseRunMeta" class="muted">Not run yet</span>
             </div>
           </div>
           <div id="phaseChecks" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
           <div id="phaseOutputCards" class="output-grid"></div>
           <details>
-            <summary class="muted" style="font-size:12px; cursor:pointer;">Inspect Raw Phase Output JSON</summary>
+            <summary class="muted" style="font-size:12px; cursor:pointer;">View Raw Output JSON</summary>
             <pre id="phaseRawJson" class="raw-pre" style="margin-top:8px;">{}</pre>
           </details>
         </div>
@@ -333,14 +333,14 @@
   <!-- ========================================================= -->
   <main id="tab-lab" class="container tab-panel hidden">
     <div style="margin-bottom:16px;">
-      <div class="eyebrow">Per-Agent Testing &amp; Scoring</div>
+      <div class="eyebrow">Single-Agent Testing</div>
       <h1 style="margin:4px 0 0; font-size:20px; font-weight:800;">Agent Lab</h1>
-      <div class="muted" style="font-size:13px;">Test any curated agent in isolation (Dry Run or Live), check contract rules, and save Pass/Fail evals.</div>
+      <div class="muted" style="font-size:13px;">Test one agent at a time in Dry Run or Live mode, check output rules, and save Pass or Fail notes.</div>
     </div>
 
     <div class="lab-grid">
       <aside class="card roster-card">
-        <div class="eyebrow" style="padding:4px 8px 8px; border-bottom:1px solid var(--border); margin-bottom:4px;">Curated Agents</div>
+        <div class="eyebrow" style="padding:4px 8px 8px; border-bottom:1px solid var(--border); margin-bottom:4px;">Scouting Agents</div>
         <div id="agentRoster"></div>
       </aside>
 
@@ -348,17 +348,17 @@
         <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
           <div>
             <h2 id="labAgentName" style="margin:0; font-size:16px; font-weight:800;">Select an agent</h2>
-            <div id="labAgentDeployedId" class="mono muted" style="font-size:11.5px; margin-top:2px;">—</div>
+            <div id="labAgentDeployedId" class="muted" style="font-size:11.5px; margin-top:2px;">—</div>
           </div>
-          <span id="labAgentModel" class="pill accent mono">—</span>
+          <span id="labAgentModel" class="pill accent">—</span>
         </div>
 
         <div style="display:flex; flex-direction:column; gap:6px;">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-            <label for="labInput" style="font-size:12px; font-weight:700;">Assignment Payload (JSON object or array for batch fan-out)</label>
+            <label for="labInput" style="font-size:12px; font-weight:700;">Agent Input (JSON object or list)</label>
             <button id="labResetInputBtn" class="btn" type="button" style="padding:3px 8px; font-size:11.5px;">Reset Sample</button>
           </div>
-          <div id="labInputHint" class="muted" style="font-size:11.5px;">Select an agent to load its expected input contract.</div>
+          <div id="labInputHint" class="muted" style="font-size:11.5px;">Select an agent to load its sample input.</div>
           <textarea id="labInput" class="code-area" style="min-height:220px;"></textarea>
         </div>
 
@@ -373,22 +373,22 @@
 
       <section class="card lab-panel">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-          <strong style="font-size:14px;">Eval Inspector</strong>
+          <strong style="font-size:14px;">Output &amp; Checks</strong>
           <div style="display:flex; align-items:center; gap:8px;">
             <button id="toggleLabRawBtn" class="btn" type="button">Raw JSON</button>
-            <span id="labLatency" class="mono muted" style="font-size:11.5px;">—</span>
+            <span id="labLatency" class="muted" style="font-size:11.5px;">—</span>
           </div>
         </div>
 
         <div id="labChecksRow" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
 
         <div id="labOutputFormatted" class="output-card">
-          <div class="muted">Run an agent to inspect its response and contract checks.</div>
+          <div class="muted">Run an agent to view its output and rule checks.</div>
         </div>
         <pre id="labOutputRaw" class="raw-pre hidden">{}</pre>
 
         <div style="border-top:1px solid var(--border); padding-top:12px; display:flex; flex-direction:column; gap:10px;">
-          <strong style="font-size:12.5px;">Save Human Eval</strong>
+          <strong style="font-size:12.5px;">Save Review Note</strong>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <button class="btn btn-ok" data-eval-score="pass" type="button">✓ Pass</button>
             <button class="btn btn-warn" data-eval-score="fail" type="button">✕ Fail</button>
@@ -442,9 +442,9 @@
       <div class="output-card" style="display:flex; flex-direction:column; gap:10px;">
         <label style="display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:600; cursor:pointer;">
           <input type="checkbox" id="liveToggle" />
-          <span>Run Live (Gemini Managed Agents + YouTube)</span>
+          <span>Run Live (Scouts + YouTube)</span>
         </label>
-        <input type="password" id="apiKeyInput" class="field-input mono" placeholder="Optional GEMINI_API_KEY override…" />
+        <input type="password" id="apiKeyInput" class="field-input" placeholder="Optional Gemini API key override…" />
       </div>
 
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -461,8 +461,8 @@
     <div class="drawer-panel">
       <div class="drawer-head">
         <div>
-          <div class="eyebrow">System Transparency</div>
-          <h2 style="margin:4px 0 0; font-size:18px; font-weight:800;">Managed Agent &amp; Evaluator Trace</h2>
+          <div class="eyebrow">Run Activity</div>
+          <h2 style="margin:4px 0 0; font-size:18px; font-weight:800;">Scouting Run Trace</h2>
         </div>
         <button class="btn" data-close-drawer type="button">✕ Close</button>
       </div>

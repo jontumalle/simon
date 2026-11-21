@@ -268,7 +268,7 @@ class MvpScoutTests(unittest.TestCase):
         code, ctype, html_bytes = dispatch_http_request(store, "GET", "/")
         self.assertEqual(code, 200)
         self.assertIn("text/html", ctype)
-        self.assertIn(b"Taste-Brief Vocal Scout MVP", html_bytes)
+        self.assertIn(b"Talent Review", html_bytes)
 
         code, _, status_bytes = dispatch_http_request(store, "GET", "/api/status")
         self.assertEqual(code, 200)

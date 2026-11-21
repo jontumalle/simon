@@ -41,13 +41,13 @@ class TestScreeningDeckUI(unittest.TestCase):
         self.assertIn("View Our Taste Profile →", html)
         self.assertIn('href="/taste-profile"', html)
 
-        # Top Control Strip: counter, 5 filter pills, fleet/DSPy/eval buttons, active model badge
+        # Top Control Strip: counter, 5 filter pills, screening/taste/check buttons, active model badge
         self.assertIn('id="deckCounterBadge"', html)
         for filt in ("all", "unlabeled", "ELEVATE", "WATCH", "PASS"):
             self.assertIn(f'data-filter="{filt}"', html)
-        self.assertIn("Run Neon Screening Fleet", html)
-        self.assertIn("Compile Judging Model (DSPy)", html)
-        self.assertIn("Run Rubric Evals", html)
+        self.assertIn("Run Screening", html)
+        self.assertIn("Update Taste Profile", html)
+        self.assertIn("Run Quality Checks", html)
         self.assertIn('id="activeModelBadge"', html)
 
         # Stepper & keyboard navigation
@@ -91,31 +91,44 @@ class TestScreeningDeckUI(unittest.TestCase):
             self.assertIn(rubric_key, html, f"Missing rubric dimension: {rubric_key}")
         self.assertIn("dossier-identity", html)
 
-        # Adversarial Debate Grid (Advocate vs. Skeptic)
-        self.assertIn("simon-screen-advocate", html)
+        # Side-by-Side Debate Grid (Advocate vs. Skeptic)
+        self.assertIn("Talent Advocate · Pros", html)
         self.assertIn("advocate_case", html)
         self.assertIn("standout_hook", html)
-        self.assertIn("simon-screen-skeptic", html)
+        self.assertIn("Talent Skeptic · Risks &amp; Gaps", html)
         self.assertIn("skeptic_case", html)
         self.assertIn("missing_evidence_flags", html)
 
-        # Neon Judge synthesis + Human-in-the-Loop Calibration Footer
-        self.assertIn("gemini-4-neon", html)
+        # Judge Verdict + Human Review Footer
+        self.assertIn("Judge Verdict", html)
         for verdict in ("ELEVATE", "WATCH", "PASS"):
             self.assertIn(f'data-verdict="{verdict}"', html)
-        self.assertIn("Why? (trains judging rubric — especially on overrides)", html)
+        self.assertIn("Why? Share a quick note to refine your taste profile", html)
         self.assertIn("Save &amp; Next →", html)
         self.assertIn("human_review", html)
 
-        # Collapsible Rubric Eval Results & Active gemini-decision-1 Policy Inspector
+        # Collapsible Quality Checks & Active Taste Criteria Drawer
         self.assertIn('id="policyInspectorDrawer"', html)
-        self.assertIn("gemini-decision-1", html)
+        self.assertIn("Quality Checks &amp; Active Taste Criteria", html)
+        self.assertIn("Active Taste Profile Criteria", html)
+        self.assertIn("Elevate Likelihood", html)
         self.assertIn("questions_config", html)
 
-        # XSS protection & human-first telemetry hygiene
+        # XSS protection & human-first copy hygiene (no internal model IDs or ML jargon)
         self.assertIn("function escapeHtml(", html)
-        self.assertNotIn("interaction_id", html)
-        self.assertNotIn("environment_id", html)
+        for forbidden in (
+            "interaction_id",
+            "environment_id",
+            "gemini-4-neon",
+            "gemini-decision-1",
+            "0 output tokens",
+            "0 tok",
+            "DSPy",
+            "P(elevate)",
+            "policy_v1",
+            ">lead_id:",
+        ):
+            self.assertNotIn(forbidden, html, f"Internal label leaked into /screen UI: {forbidden}")
 
     def test_absence_of_swipe_or_drag_gesture_handlers(self) -> None:
         html_lower = render_screening_page().lower()
@@ -147,7 +160,7 @@ class TestScreeningDeckUI(unittest.TestCase):
             "/api/screening/labels",
         ):
             self.assertIn(endpoint, html, f"Missing API binding: {endpoint}")
-        self.assertIn("Run Taste Engine (gemini-decision-1 · 0 tok)", html)
+        self.assertIn("Score with Taste Profile", html)
 
         # Label submission payload keys
         for key in ("packet_id", "lead_id", "stage_name", "human_verdict", "reason"):

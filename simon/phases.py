@@ -92,10 +92,10 @@ PHASE_DEFINITIONS: List[Dict[str, Any]] = [
         "id": "1_discovery",
         "code": "1",
         "name": "Discovery",
-        "domain": "Intake · Discovery Scout Fleet",
+        "domain": "Intake · Discovery Scouts",
         "agents": ["discovery-scout"],
-        "description": "Sends Discovery Scouts across chosen sources to return checked, unranked leads.",
-        "input_hint": "Search brief and source IDs (or pick in Discovery)",
+        "description": "Scans chosen sources and returns checked, unranked artist leads.",
+        "input_hint": "Search brief and chosen sources (or pick them in Discovery)",
         "default_input": {
             "brief": DEFAULT_DISCOVERY_BRIEF,
             "source_ids": ["yt_sofar_sounds", "nyc_babys_all_right", "bc_brooklyn_soul_rnb"],
@@ -107,40 +107,40 @@ PHASE_DEFINITIONS: List[Dict[str, Any]] = [
         "id": "2a_identity",
         "code": "2A",
         "name": "Identity",
-        "domain": "Intake · Sequential Anchor",
+        "domain": "Intake · Identity Check",
         "agents": ["identity-resolver"],
-        "description": "Finds the artist's official links, MusicBrainz ID, and public booking contact.",
-        "input_hint": "Lead from Phase 1",
+        "description": "Finds the artist's official links, catalog credits, and public booking contact.",
+        "input_hint": "Artist lead from Phase 1",
         "default_input": DEFAULT_LEAD_FIXTURE,
     },
     {
         "id": "2b_investigators",
         "code": "2B",
         "name": "Investigators ×3",
-        "domain": "Intake · Parallel Fan-Out",
+        "domain": "Intake · Parallel Research",
         "agents": ["footprint-profiler", "signal-forensics", "track-record-mapper"],
-        "description": "Runs footprint, audience comment, and live show investigators in parallel.",
-        "input_hint": "Identity bundle from Phase 2A (or a raw lead)",
+        "description": "Checks online reach, audience comments, and live show history in parallel.",
+        "input_hint": "Verified artist identity from Phase 2A (or a raw lead)",
         "default_input": DEFAULT_LEAD_FIXTURE,
     },
     {
         "id": "2c_dossier",
         "code": "2C",
         "name": "Profile Join",
-        "domain": "Intake · Deterministic Assembler",
+        "domain": "Intake · Profile Assembly",
         "agents": ["dossier-assembler"],
-        "description": "Merges Phase 2A and 2B into one factual Artist Dossier and runs process checks.",
-        "input_hint": "Identity + Phase 2B results (or a raw lead)",
+        "description": "Combines Phase 2A and 2B into one factual Artist Dossier and runs quality checks.",
+        "input_hint": "Identity and Phase 2B findings (or a raw lead)",
         "default_input": DEFAULT_LEAD_FIXTURE,
     },
     {
         "id": "3_screening",
         "code": "3",
         "name": "Active Screening",
-        "domain": "Decision Engine · Advocate / Skeptic / Judge",
+        "domain": "Decision · Advocate, Skeptic & Judge",
         "agents": ["screen-advocate", "screen-skeptic", "screening-judge"],
-        "description": "Runs Advocate and Skeptic debate plus a Neon Judge verdict on the Artist Dossier.",
-        "input_hint": "Dossier from Phase 2C (or lead_id in /api/dossiers)",
+        "description": "Weighs upside and risk on the Artist Dossier, then scores a verdict.",
+        "input_hint": "Artist Dossier from Phase 2C (or pick a saved artist)",
         "default_input": {
             "lead_id": "lead_luna_jinna",
             "stage_name": "Luna Jinna",
@@ -152,8 +152,8 @@ PHASE_DEFINITIONS: List[Dict[str, Any]] = [
         "name": "Showcase Producer",
         "domain": "Outcome · Human Review",
         "agents": ["showcase-producer"],
-        "description": "Turns an elevated Screening Packet into a callback draft for human review.",
-        "input_hint": "Elevated Screening Packet + showcase terms",
+        "description": "Turns an elevated screening decision into a callback draft for your review.",
+        "input_hint": "Elevated screening decision and showcase terms",
         "default_input": {
             "lead_id": "lead_luna_jinna",
             "stage_name": "Luna Jinna",
@@ -201,7 +201,7 @@ DEFAULT_IDENTITY_BUNDLE_FIXTURE: Dict[str, Any] = {
 
 AGENT_INPUT_PRESETS: Dict[str, Dict[str, Any]] = {
     "discovery-scout": {
-        "input_hint": "Search brief & requested lead count (Stage 1 Discovery)",
+        "input_hint": "Search brief and lead count for Stage 1 Discovery",
         "default_input": {
             "search_brief": "Find NYC-based emerging indie vocalists performing stripped-back live sessions",
             "requested_count": 3,
@@ -209,7 +209,7 @@ AGENT_INPUT_PRESETS: Dict[str, Dict[str, Any]] = {
         },
     },
     "identity-resolver": {
-        "input_hint": "Single DiscoveryLead from Stage 1 (Phase 2A)",
+        "input_hint": "Single artist lead from Stage 1 Discovery",
         "default_input": {
             "lead_id": "lead_mira_sol",
             "stage_name": "Mira Sol",
@@ -227,11 +227,11 @@ AGENT_INPUT_PRESETS: Dict[str, Dict[str, Any]] = {
         },
     },
     "footprint-profiler": {
-        "input_hint": "Resolved IdentityBundle with public artifact URLs (Phase 2B)",
+        "input_hint": "Verified artist identity and public links",
         "default_input": DEFAULT_IDENTITY_BUNDLE_FIXTURE,
     },
     "signal-forensics": {
-        "input_hint": "Resolved IdentityBundle with public pages for comment sampling (Phase 2B)",
+        "input_hint": "Verified artist identity and public video links for comment review",
         "default_input": {
             **DEFAULT_IDENTITY_BUNDLE_FIXTURE,
             "comment_sampling_targets": [
@@ -242,14 +242,14 @@ AGENT_INPUT_PRESETS: Dict[str, Dict[str, Any]] = {
         },
     },
     "track-record-mapper": {
-        "input_hint": "Resolved IdentityBundle with bio, links & city for milestones (Phase 2B)",
+        "input_hint": "Verified artist identity, bio, links, and city for live history",
         "default_input": {
             **DEFAULT_IDENTITY_BUNDLE_FIXTURE,
             "focus": ["show_history", "upcoming_shows", "public_team_mentions", "collaborator_credits"],
         },
     },
     "performance-critic": {
-        "input_hint": "Showcase brief + audition performance notes & timestamps",
+        "input_hint": "Showcase brief with audition notes and timestamps",
         "default_input": {
             "brief": {
                 "event": "First Listen NYC",
@@ -269,7 +269,7 @@ AGENT_INPUT_PRESETS: Dict[str, Dict[str, Any]] = {
         },
     },
     "booking-critic": {
-        "input_hint": "Showcase brief + audition setup & stage logistics notes",
+        "input_hint": "Showcase brief with stage setup and logistics notes",
         "default_input": {
             "brief": {
                 "event": "First Listen NYC",
@@ -291,7 +291,7 @@ AGENT_INPUT_PRESETS: Dict[str, Dict[str, Any]] = {
         },
     },
     "synthesis-scout": {
-        "input_hint": "Taste brief + artist_leads[] + timestamped clip_evidence[]",
+        "input_hint": "Taste brief with artist leads and timestamped clip notes",
         "default_input": {
             "brief": {
                 "prompt": DEFAULT_TASTE_BRIEF,
@@ -323,7 +323,7 @@ AGENT_INPUT_PRESETS: Dict[str, Dict[str, Any]] = {
         },
     },
     "showcase-producer": {
-        "input_hint": "Stage 3 Screening Packet (Advocate/Skeptic/Judge) + First Listen NYC showcase terms",
+        "input_hint": "Stage 3 screening decision and showcase terms",
         "default_input": {
             "lead_id": "lead_luna_jinna",
             "stage_name": "Luna Jinna",
@@ -348,7 +348,7 @@ AGENT_INPUT_PRESETS: Dict[str, Dict[str, Any]] = {
         },
     },
     "screen-advocate": {
-        "input_hint": "Stage 2 InvestigatorDossier (5 factual blocks) for upside case",
+        "input_hint": "Stage 2 Artist Dossier for the upside case",
         "default_input": {
             "lead_id": "lead_luna_jinna",
             "dossier": {
@@ -390,7 +390,7 @@ AGENT_INPUT_PRESETS: Dict[str, Dict[str, Any]] = {
         },
     },
     "screen-skeptic": {
-        "input_hint": "Stage 2 InvestigatorDossier (5 factual blocks) for risk & dealbreaker audit",
+        "input_hint": "Stage 2 Artist Dossier for risk and dealbreaker review",
         "default_input": {
             "lead_id": "lead_luna_jinna",
             "dossier": {
@@ -423,7 +423,7 @@ AGENT_INPUT_PRESETS: Dict[str, Dict[str, Any]] = {
         },
     },
     "screening-judge": {
-        "input_hint": "InvestigatorDossier + advocate_case + skeptic_case for 0-10 verdict",
+        "input_hint": "Artist Dossier with Advocate and Skeptic cases for a 0-10 verdict",
         "default_input": {
             "lead_id": "lead_luna_jinna",
             "dossier": {
@@ -480,7 +480,7 @@ def get_agent_input_preset(package_name: str) -> Dict[str, Any]:
             "default_input": json.loads(json.dumps(preset["default_input"])),
         }
     return {
-        "input_hint": "JSON object or array for batch fan-out",
+        "input_hint": "JSON object or list of inputs",
         "default_input": {
             "lead_id": "lead_luna_jinna",
             "stage_name": "Luna Jinna",
@@ -532,9 +532,9 @@ def evaluate_agent_output(agent_id: str, output_payload: Any) -> Dict[str, Any]:
         checks.append(
             {
                 "name": "no_ranking_keys",
-                "label": "Zero Ranking Keys",
+                "label": "Objective Facts Only",
                 "passed": len(forbidden_hits) == 0,
-                "detail": "Clean objective data" if not forbidden_hits else f"Found forbidden keys: {forbidden_hits[:3]}",
+                "detail": "Clean factual data" if not forbidden_hits else f"Found subjective fields: {forbidden_hits[:3]}",
             }
         )
 
@@ -551,9 +551,9 @@ def evaluate_agent_output(agent_id: str, output_payload: Any) -> Dict[str, Any]:
         checks.append(
             {
                 "name": "dossier_process_eval",
-                "label": f"Process Eval ({checks_run - len(failures)}/{checks_run})" if not failures else f"Process Eval ({len(failures)} issues)",
+                "label": f"Quality Checks ({checks_run - len(failures)}/{checks_run})" if not failures else f"Quality Checks ({len(failures)} issues)",
                 "passed": bool(proc["passed"]),
-                "detail": "; ".join(failures or ["All process rules passed"]),
+                "detail": "; ".join(failures or ["All quality checks passed"]),
             }
         )
 
@@ -679,15 +679,15 @@ def run_phase(
         if live:
             checks = [
                 {"name": "sources_targeted", "label": f"{len(source_ids)} Sources Targeted", "passed": len(source_ids) > 0},
-                {"name": "workers_dispatched", "label": f"{len(workers)} Live Scouts Dispatched", "passed": len(workers) > 0},
-                {"name": "field_news_linked", "label": f"Batch {batch_id}", "passed": bool(batch_id)},
+                {"name": "workers_dispatched", "label": f"{len(workers)} Live Scouts Sent", "passed": len(workers) > 0},
+                {"name": "field_news_linked", "label": "Field News Linked", "passed": bool(batch_id)},
             ]
         else:
             all_valid = all(bool(w.get("contract_valid")) for w in workers) if workers else False
             checks = [
                 {"name": "sources_targeted", "label": f"{len(source_ids)} Sources Targeted", "passed": len(source_ids) > 0},
                 {"name": "leads_found", "label": f"{len(leads)} Leads Found", "passed": len(leads) > 0},
-                {"name": "handoff_contract", "label": "DiscoveryHandoff v1.0.0 Valid", "passed": all_valid},
+                {"name": "handoff_contract", "label": "Lead Handoff Complete", "passed": all_valid},
             ]
 
         if leads:
@@ -737,7 +737,10 @@ def run_phase(
                 {
                     "agent": "identity-resolver",
                     "status": "completed",
-                    "summary": f"Resolved {ic.get('stage_name')} ({ic.get('home_city') or 'city n/a'}), {links_count} platform links, contact={ic.get('contact_route_type')}.",
+                    "summary": (
+                        f"Found {ic.get('stage_name')} ({ic.get('home_city') or 'city unknown'}), "
+                        f"{links_count} official links, contact: {str(ic.get('contact_route_type') or 'unknown').replace('_', ' ')}."
+                    ),
                 }
             )
             eval_res = evaluate_agent_output("identity-resolver", bundle)
@@ -773,8 +776,8 @@ def run_phase(
                     )
             output_data = results_by_agent
             checks = [
-                {"name": "parallel_3x", "label": "3/3 Parallel Workers", "passed": len(results_by_agent) == 3},
-                {"name": "no_ranking_keys", "label": "Zero Ranking Keys", "passed": len(_find_forbidden_keys(output_data)) == 0},
+                {"name": "parallel_3x", "label": "3/3 Parallel Scouts", "passed": len(results_by_agent) == 3},
+                {"name": "no_ranking_keys", "label": "Objective Facts Only", "passed": len(_find_forbidden_keys(output_data)) == 0},
             ]
             next_handoff = {"identity_bundle": inp, "investigators": results_by_agent}
         else:
@@ -797,12 +800,15 @@ def run_phase(
                 {
                     "agent": "footprint-profiler",
                     "status": "completed",
-                    "summary": f"Media queue: {len(fp.get('media_links', []))} clips · Regime: {fp.get('footprint_analysis', {}).get('footprint_regime', 'unknown')}.",
+                    "summary": (
+                        f"Clips found: {len(fp.get('media_links', []))} · "
+                        f"Stage: {str(fp.get('footprint_analysis', {}).get('footprint_regime', 'unknown')).replace('_', ' ')}."
+                    ),
                 },
                 {
                     "agent": "signal-forensics",
                     "status": "completed",
-                    "summary": f"Analyzed {sf.get('signal_forensics', {}).get('comments_sampled', 0)} public comments · Zero ranking keys.",
+                    "summary": f"Reviewed {sf.get('signal_forensics', {}).get('comments_sampled', 0)} public comments · Objective facts only.",
                 },
                 {
                     "agent": "track-record-mapper",
@@ -811,9 +817,9 @@ def run_phase(
                 },
             ]
             checks = [
-                {"name": "parallel_3x", "label": "3/3 Parallel Workers", "passed": True},
-                {"name": "zero_decode", "label": "Zero Media Decode", "passed": True},
-                {"name": "no_ranking_keys", "label": "Zero Ranking Keys", "passed": len(_find_forbidden_keys(output_data)) == 0},
+                {"name": "parallel_3x", "label": "3/3 Parallel Scouts", "passed": True},
+                {"name": "zero_decode", "label": "Fast Public Scan", "passed": True},
+                {"name": "no_ranking_keys", "label": "Objective Facts Only", "passed": len(_find_forbidden_keys(output_data)) == 0},
             ]
             next_handoff = output_data
 
@@ -862,19 +868,19 @@ def run_phase(
                 "agent": "dossier-assembler",
                 "status": "completed",
                 "summary": (
-                    f"Merged full Artist Profile for {dossier['identity_and_contact'].get('stage_name')} · "
-                    f"Process eval: {'PASS' if proc_eval['passed'] else f'{len(failures)} failures'} ({checks_run} rules)."
+                    f"Built full Artist Profile for {dossier['identity_and_contact'].get('stage_name')} · "
+                    f"Checks: {'Passed' if proc_eval['passed'] else f'{len(failures)} issues'} ({checks_run} rules)."
                 ),
             }
         )
         checks = [
             {
                 "name": "process_eval",
-                "label": f"Process Eval ({checks_run}/{checks_run})" if proc_eval["passed"] else f"Process Eval ({len(failures)} issues)",
+                "label": f"Quality Checks ({checks_run}/{checks_run})" if proc_eval["passed"] else f"Quality Checks ({len(failures)} issues)",
                 "passed": bool(proc_eval["passed"]),
             },
-            {"name": "no_ranking_keys", "label": "Zero Ranking Keys", "passed": len(_find_forbidden_keys(dossier)) == 0},
-            {"name": "trace_complete", "label": f"{len(dossier.get('process_trace', []))} Trace Steps", "passed": len(dossier.get("process_trace", [])) >= 8},
+            {"name": "no_ranking_keys", "label": "Objective Facts Only", "passed": len(_find_forbidden_keys(dossier)) == 0},
+            {"name": "trace_complete", "label": f"{len(dossier.get('process_trace', []))} Audit Steps", "passed": len(dossier.get("process_trace", [])) >= 8},
         ]
         next_handoff = {
             "lead_id": dossier.get("lead_id"),
@@ -1029,13 +1035,13 @@ def run_phase(
                 "summary": (
                     str(worker.get("output"))[:240]
                     if worker.get("output")
-                    else f"Drafted {showcase} callback (${fee_cap_usd} cap, {slot_minutes}m) for {stage_name} [pending_human_review]."
+                    else f"Drafted {showcase} callback (${fee_cap_usd} cap, {slot_minutes} min) for {stage_name} — ready for human review."
                 ),
             }
         )
         checks = [
-            {"name": "human_gate", "label": "pending_human_review Gate", "passed": True},
-            {"name": "screening_grounded", "label": f"Grounded in {verdict} Screening", "passed": bool(verdict)},
+            {"name": "human_gate", "label": "Human Review Required", "passed": True},
+            {"name": "screening_grounded", "label": f"Based on {verdict.title()} Verdict", "passed": bool(verdict)},
             {"name": "budget_present", "label": f"Budget Cap ${fee_cap_usd}", "passed": bool(fee_cap_usd)},
         ]
         next_handoff = {}
