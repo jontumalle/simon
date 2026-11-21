@@ -156,7 +156,7 @@ def list_agent_packages(agents_dir: Optional[Path] = None) -> List[Path]:
         return []
     packages: List[Path] = []
     for child in sorted(root.iterdir()):
-        if not child.is_dir() or child.name.startswith("."):
+        if not child.is_dir() or child.name.startswith(".") or child.name.startswith("_"):
             continue
         if (child / "agent.json").exists() or (child / "agent.yaml").exists():
             packages.append(child)
@@ -245,6 +245,20 @@ def _collect_inline_sources(agent_dir: Path, spec: Dict[str, Any]) -> List[Dict[
                 continue
             rel = file_path.relative_to(skills_dir).as_posix()
             add_inline(f".agents/skills/{rel}", file_path.read_text(encoding="utf-8"))
+
+    # 4. Bundle declared shared_skills from agents/_shared/skills/<skill>/** -> .agents/skills/<skill>/**
+    shared_root = agent_dir.parent / "_shared" / "skills"
+    for skill_name in spec.get("shared_skills") or []:
+        skill_dir = shared_root / str(skill_name)
+        if not skill_dir.is_dir():
+            raise FileNotFoundError(f"Shared skill '{skill_name}' not found at {skill_dir}")
+        for file_path in sorted(skill_dir.rglob("*")):
+            if not file_path.is_file() or file_path.name.startswith("."):
+                continue
+            if "__pycache__" in file_path.parts or file_path.suffix in (".pyc", ".pyo"):
+                continue
+            rel = file_path.relative_to(skill_dir).as_posix()
+            add_inline(f".agents/skills/{skill_name}/{rel}", file_path.read_text(encoding="utf-8"))
 
     return sources
 
