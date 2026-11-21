@@ -107,6 +107,7 @@ class AutoApproveToolchainHookTest(unittest.TestCase):
 
     def test_steward_doc_writes_auto_approve_while_code_and_secrets_do_not(self):
         approved_doc_targets = [
+            ("write_file", str(REPO_ROOT / "governance" / "git-flow.md"), "Path"),
             ("write_file", str(REPO_ROOT / "pm" / "log" / "2026-11-21-session.md"), "Path"),
             ("edit_file", str(REPO_ROOT / "PROJECT.md"), "Path"),
             ("write_to_file", str(REPO_ROOT / "notes" / "managed-agents" / "guide.md"), "TargetFile"),
@@ -129,6 +130,7 @@ class AutoApproveToolchainHookTest(unittest.TestCase):
                 self.assertEqual(eval_write_tool(tool_name, path, key), "allow")
 
     def test_sync_main_dual_track_path_matching(self):
+        self.assertTrue(sync_mod.is_doc_or_knowledge_path("governance/git-flow.md"))
         self.assertTrue(sync_mod.is_doc_or_knowledge_path("pm/current.md"))
         self.assertTrue(sync_mod.is_doc_or_knowledge_path("PROJECT.md"))
         self.assertFalse(sync_mod.is_doc_or_knowledge_path("simon/__main__.py"))

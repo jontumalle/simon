@@ -15,7 +15,7 @@ import sys
 from typing import List
 
 
-KNOWLEDGE_DIRS = frozenset({"pm", "notes", "ideas", "data", "agents", ".agents"})
+KNOWLEDGE_DIRS = frozenset({"governance", "pm", "notes", "ideas", "data", "agents", ".agents"})
 FORBIDDEN_TOP_DIRS = frozenset({"local", ".venv", ".git"})
 FORBIDDEN_PART_NAMES = frozenset({".git", ".venv", "__pycache__", ".DS_Store"})
 FORBIDDEN_SUFFIXES = (".pyc", ".pyo", ".pyd")

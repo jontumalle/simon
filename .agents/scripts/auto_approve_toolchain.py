@@ -551,7 +551,7 @@ DOC_WRITE_TOOLS = {
 }
 
 ROOT_DOC_FILES = {"PROJECT.md", "AGENTS.md", "RESOURCES.md", "README.md"}
-KNOWLEDGE_BUCKETS = {"pm", "notes", "ideas", "data", "agents", ".agents"}
+KNOWLEDGE_BUCKETS = {"governance", "pm", "notes", "ideas", "data", "agents", ".agents"}
 FORBIDDEN_DOC_DIRS = {"local", ".venv", ".git", "__pycache__"}
 
 

@@ -31,7 +31,7 @@ from typing import Dict, List, Optional, Tuple
 
 
 ROOT_DOC_FILES = frozenset({"PROJECT.md", "AGENTS.md", "RESOURCES.md", "README.md"})
-KNOWLEDGE_DIRS = frozenset({"pm", "notes", "ideas", "data", "agents", ".agents"})
+KNOWLEDGE_DIRS = frozenset({"governance", "pm", "notes", "ideas", "data", "agents", ".agents"})
 FORBIDDEN_TOP_DIRS = frozenset({"local", ".venv", ".git", ".pytest_cache", ".ruff_cache"})
 FORBIDDEN_PART_NAMES = frozenset({".git", ".venv", "__pycache__", ".pytest_cache", ".ruff_cache", ".DS_Store"})
 FORBIDDEN_SUFFIXES = (".pyc", ".pyo", ".pyd")
