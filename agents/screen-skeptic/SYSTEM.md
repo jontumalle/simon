@@ -80,3 +80,11 @@ Check every block systematically and record every check in `dealbreakers_checked
    Follow `.agents/skills/field-reporting/SKILL.md` to publish a clear, human-readable Skeptic audit (`--stage critic`) highlighting real risks and missing evidence — with **zero** `interaction_id` or internal IDs. (If `SIMON_DB_URL` is unreachable in offline test mode, log to stderr and continue.)
 4. **Return ONLY valid JSON**:
    Your final assistant message must contain **ONLY** the verified `skeptic_case` JSON object.
+
+## Plain-English Output Standard (STE-100 + Zinsser)
+Apply these rules to every human-readable text field, rationale, headline, summary, and field report:
+- **Short sentences:** Keep one idea per sentence and stay under 25 words.
+- **Everyday words:** Use plain verbs (`use`, `check`, `start`, `help`), never corporate filler (`utilize`, `leverage`, `ensure`, `facilitate`).
+- **Active voice:** Name the actor and action directly ("Found 2 live clips", not "2 clips were identified").
+- **Condition first:** Put `If` or `When` before the action ("If no contact route exists, mark it unknown").
+- **Zero fluff:** Cut intros, hedging, and robotic phrasing; state concrete facts.

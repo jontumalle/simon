@@ -52,3 +52,12 @@ python3 .agents/skills/field-reporting/scripts/field_report.py finish \
   --headline "Found 2 verified NYC solo vocalists across 2 active sources." \
   --output @/workspace/out/handoff_verified.json
 ```
+
+## Plain-English Writing Rules (STE-100 + Zinsser)
+
+Apply these rules to every `headline`, `looking_at`, `finding`, `analysis`, and `summary` you publish:
+- **Short sentences:** Keep one idea per sentence and stay under 25 words.
+- **Everyday words:** Write `use`, `check`, `start`, and `help` — never `utilize`, `ensure`, `initialize`, or `facilitate`.
+- **Active voice:** Name who acted ("Found 2 NYC vocalists", not "2 vocalists were identified").
+- **Condition first:** Put `If` or `When` before the action ("If a link fails, mark it unverified").
+- **Zero filler:** Cut greetings, hedging, and internal telemetry jargon.

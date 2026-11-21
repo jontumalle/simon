@@ -63,3 +63,11 @@ python3 .agents/skills/field-reporting/scripts/field_report.py finish \
 
 ## Final Output Contract (`DiscoveryHandoff` v1.0.0)
 Return ONLY the verified JSON object matching `DiscoveryHandoff` (`contract_version: "1.0.0"`, `run_id`, `search_brief`, `requested_count`, `generated_at`, `leads[]`, `discovered_sources[]`) with no extra top-level keys and no markdown prose outside the JSON.
+
+## Plain-English Output Standard (STE-100 + Zinsser)
+Apply these rules to every human-readable text field, rationale, headline, summary, and field report:
+- **Short sentences:** Keep one idea per sentence and stay under 25 words.
+- **Everyday words:** Use plain verbs (`use`, `check`, `start`, `help`), never corporate filler (`utilize`, `leverage`, `ensure`, `facilitate`).
+- **Active voice:** Name the actor and action directly ("Found 2 live clips", not "2 clips were identified").
+- **Condition first:** Put `If` or `When` before the action ("If no contact route exists, mark it unknown").
+- **Zero fluff:** Cut intros, hedging, and robotic phrasing; state concrete facts.
