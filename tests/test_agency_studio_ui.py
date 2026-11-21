@@ -268,6 +268,30 @@ class TestAgencyStudioUIAndPhases(unittest.TestCase):
         ):
             self.assertIn(token, js)
 
+    def test_discovery_subflow_nav_and_plain_english_agent_rules(self) -> None:
+        # Discovery Sub-Flow strip is accessible on /, /discovery, /field-news, and /reports
+        for route in ("/", "/discovery", "/field-news", "/reports"):
+            code, _, html = dispatch_http_request(self.store, "GET", route)
+            self.assertEqual(code, 200)
+            for token in (
+                b'class="subflow-nav"',
+                b'id="subflowDiscoveryLink"',
+                b'id="subflowFieldNewsLink"',
+                b'id="subflowReportsLink"',
+                b'Next: Investigate',
+            ):
+                self.assertIn(token, html, f"Missing {token!r} on {route}")
+
+        # Shared field-reporting skill and all curated agent SYSTEM.md files enforce Plain-English output
+        from pathlib import Path
+        repo_root = Path(__file__).resolve().parents[1]
+        field_skill = (repo_root / "agents" / "_shared" / "skills" / "field-reporting" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("Plain-English", field_skill)
+        system_files = sorted((repo_root / "agents").glob("*/SYSTEM.md"))
+        self.assertGreaterEqual(len(system_files), 12)
+        for sf in system_files:
+            self.assertIn("Plain-English Output Standard", sf.read_text(encoding="utf-8"), f"Missing rule in {sf}")
+
 
 if __name__ == "__main__":
     unittest.main()

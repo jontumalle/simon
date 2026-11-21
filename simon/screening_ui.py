@@ -261,7 +261,7 @@ def render_screening_page() -> str:
     <header>
       <div class="brand">
         <h1>Simon <span class="pill purple">7. Screening Deck</span></h1>
-        <p>Stage 3 Screening Layer: single-candidate dossier report with <strong>Advocate vs. Skeptic</strong> debate, 5-skill rubric scoreboard, <strong>gemini-4-neon</strong> Judge synthesis, and DSPy human calibration.</p>
+        <p>Review one artist at a time with <strong>Advocate vs. Skeptic</strong> debate, 5-skill scores, <strong>gemini-4-neon</strong> Judge verdict, and your calibration vote.</p>
       </div>
       {top_nav}
     </header>
@@ -408,12 +408,26 @@ def render_screening_page() -> str:
     const urlParams = new URLSearchParams(window.location.search);
     let initialFocusLead = urlParams.get('lead') || '';
     let initialFocusPacket = urlParams.get('packet') || '';
+    const VALID_FILTERS = ['all', 'unlabeled', 'ELEVATE', 'WATCH', 'PASS'];
+    const reqFilter = urlParams.get('filter') || 'all';
 
     let allPackets = [];
-    let currentFilter = 'all';
+    let currentFilter = VALID_FILTERS.includes(reqFilter) ? reqFilter : 'all';
     let currentIndex = 0;
     let selectedVerdict = 'WATCH';
     let activeVideoIdOverride = '';
+
+    function syncScreeningUrl(leadId) {{
+      try {{
+        const url = new URL(window.location.href);
+        if (leadId) url.searchParams.set('lead', leadId);
+        else url.searchParams.delete('lead');
+        if (currentFilter && currentFilter !== 'all') url.searchParams.set('filter', currentFilter);
+        else url.searchParams.delete('filter');
+        url.searchParams.delete('packet');
+        window.history.replaceState({{}}, '', url.toString());
+      }} catch (e) {{}}
+    }}
 
     function showBanner(msg, kind) {{
       const node = el('screeningBanner');
@@ -619,6 +633,7 @@ def render_screening_page() -> str:
       const pkt = filtered[currentIndex];
       const packetId = pkt.packet_id || pkt.id || pkt._doc_id || `pkt_${{currentIndex + 1}}`;
       const leadId = pkt.lead_id || (pkt.dossier_snapshot && pkt.dossier_snapshot.lead_id) || '';
+      syncScreeningUrl(leadId);
       const d = extractDossierView(pkt);
       const judge = pkt.judge_decision || {{}};
       const advocate = pkt.advocate_case || pkt.advocate || {{}};

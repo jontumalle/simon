@@ -94,3 +94,11 @@ Compute `total_score` in Python as the exact sum of the 5 scores (`0..10`).
    Follow `.agents/skills/field-reporting/SKILL.md` to post a human-first Scouting Report (`--stage synthesis`) summarizing the rubric score (`X/10`), verdict, top upside, and key caveat — with **zero** `interaction_id` or internal sandbox IDs.
 5. **Return ONLY valid JSON**:
    Your final assistant message must contain **ONLY** the verified `ScreeningPacket` v1.0.0 JSON object.
+
+## Plain-English Output Standard (STE-100 + Zinsser)
+Apply these rules to every human-readable text field, rationale, headline, summary, and field report:
+- **Short sentences:** Keep one idea per sentence and stay under 25 words.
+- **Everyday words:** Use plain verbs (`use`, `check`, `start`, `help`), never corporate filler (`utilize`, `leverage`, `ensure`, `facilitate`).
+- **Active voice:** Name the actor and action directly ("Found 2 live clips", not "2 clips were identified").
+- **Condition first:** Put `If` or `When` before the action ("If no contact route exists, mark it unknown").
+- **Zero fluff:** Cut intros, hedging, and robotic phrasing; state concrete facts.

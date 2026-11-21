@@ -66,10 +66,22 @@
   <!-- TAB 0: DISCOVERY (SOURCE REGISTRY + FLEET ORCHESTRATOR)   -->
   <!-- ========================================================= -->
   <main id="tab-discovery" class="container tab-panel hidden">
+    <nav class="subflow-nav" aria-label="Discovery Sub-Flow">
+      <span class="subflow-label">Discovery Flow</span>
+      <div class="subflow-steps">
+        <a href="/?tab=discovery" id="subflowDiscoveryLink" class="subflow-step active">1. Sources &amp; Dispatch</a>
+        <span class="subflow-arrow" aria-hidden="true">→</span>
+        <a href="/field-news" id="subflowFieldNewsLink" class="subflow-step">2. Field News</a>
+        <span class="subflow-arrow" aria-hidden="true">→</span>
+        <a href="/reports" id="subflowReportsLink" class="subflow-step">3. Scouting Reports</a>
+      </div>
+      <a href="/investigate" class="subflow-next">Next: Investigate →</a>
+    </nav>
+
     <div class="brief-header">
       <div>
         <div class="eyebrow">Stage 1 · Source Registry &amp; Fleet Dispatch</div>
-        <h1 class="brief-headline">Discovery — Pick Curated Sources &amp; Dispatch Scouts</h1>
+        <h1 class="brief-headline">Discovery — Pick Sources &amp; Send Scouts</h1>
       </div>
       <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
         <a id="discTopFieldNewsLink" class="btn" href="/field-news">Field News →</a>
@@ -242,7 +254,7 @@
       <div>
         <div class="eyebrow">Step-by-Step Orchestration</div>
         <h1 style="margin:4px 0 0; font-size:20px; font-weight:800;">Pipeline Runner — Run or Test Each Phase</h1>
-        <div class="muted" style="font-size:13px;">Run any phase live against real agents (saved to SQLite/Firestore) or switch to Test Mode to edit handoffs and check process evals.</div>
+        <div class="muted" style="font-size:13px;">Run any phase live with deployed agents, or use Test Mode to edit handoffs and check evals.</div>
       </div>
 
       <div class="nav-tabs" role="group" aria-label="Pipeline Mode">
