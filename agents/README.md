@@ -30,6 +30,10 @@ Use `SIMON_AGENT_PREFIX` (`kevin-`, `jt-`, `prod-`) when syncing to `/v1beta/age
 
 | Directory / Agent | Harness & Model | Network | Role | Status |
 | :--- | :--- | :--- | :--- | :--- |
+| `identity-resolver` | `antigravity-preview-09-2026` (`gemini-4-hydrogen`) | Search + URL | **Stage 2 Phase A:** 2-step (`1a Generic -> 1b Domain`) identity, link graph, MusicBrainz MBID & contact route | **Active (Stage 2)** |
+| `footprint-profiler` | `antigravity-preview-09-2026` (`gemini-4-hydrogen`) | URL + Python | **Stage 2 Phase B (Parallel):** oEmbed media queue (zero decode), public reach & Python concentration math | **Active (Stage 2)** |
+| `signal-forensics` | `antigravity-preview-09-2026` (`gemini-4-hydrogen`) | URL + Python | **Stage 2 Phase B (Parallel):** Fetch ≤50 public comments & 1-pass merged generic/domain intent counts | **Active (Stage 2)** |
+| `track-record-mapper` | `antigravity-preview-09-2026` (`gemini-4-hydrogen`) | Search + URL | **Stage 2 Phase B (Parallel):** Public show history, venue caps, explicit team mentions & collaborator credits | **Active (Stage 2)** |
 | `discovery-scout` | `antigravity-preview-09-2026` (`gemini-4-hydrogen`) | Search + oEmbed | Searches public YouTube venues, sessions & open mics from a taste brief; groups by performer & flags uncertain attribution | **Active (MVP)** |
 | `synthesis-scout` | `antigravity-preview-09-2026` (`gemini-4-carbon`) | `disabled` | Compares `gemini-4-hydrogen` clip evidence, triggers second-take loop when thin, outputs <=3 singer listening shortlist | **Active (MVP)** |
 | `performance-critic` | `antigravity-preview-09-2026` (`gemini-4-hydrogen`) | `disabled` | Independent vocal phrasing, dynamics, waveform/single-take forensics & performance critique (*First Listen NYC* showcase flow) | Seeded |

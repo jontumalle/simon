@@ -1,0 +1,16 @@
+id: simon-signal-forensics
+base_agent: antigravity-preview-09-2026
+agent_config:
+  type: antigravity
+  model: gemini-4-hydrogen
+system_instruction_file: SYSTEM.md
+tools:
+  - type: url_context
+  - type: code_execution
+environment:
+  type: remote
+  inline_mounts:
+    - source: SYSTEM.md
+      target: .agents/AGENTS.md
+    - source: ../../.agents/skills/music/SKILL.md
+      target: .agents/skills/music/SKILL.md
