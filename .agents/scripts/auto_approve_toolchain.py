@@ -164,7 +164,7 @@ def _split_shell_segments(command_line: str) -> list[list[str]] | None:
 
     try:
         lexer = shlex.shlex(cleaned, posix=True, punctuation_chars=True)
-        lexer.whitespace_split = True
+        lexer.wordchars += ":@+%,"
         tokens = list(lexer)
     except ValueError:
         return None
@@ -172,6 +172,7 @@ def _split_shell_segments(command_line: str) -> list[list[str]] | None:
     if not tokens:
         return None
 
+    punct_set = set("();<>|&")
     segments: list[list[str]] = []
     current: list[str] = []
 
@@ -181,8 +182,8 @@ def _split_shell_segments(command_line: str) -> list[list[str]] | None:
                 return None
             segments.append(current)
             current = []
-        elif any(ch in tok for ch in (";", "&", "|", "<", ">", "(", ")")):
-            # Rejects background `&`, subshells `(...)`, and any non-/dev/null file redirections.
+        elif tok and set(tok) <= punct_set:
+            # Rejects unquoted background `&`, subshells `(...)`, and non-/dev/null redirections.
             return None
         elif "{" in tok and "," in tok and "}" in tok:
             # Reject brace expansion tricks.
@@ -302,8 +303,10 @@ def _check_gh(args: list[str]) -> bool:
         return len(args) >= 2 and args[1] in {"status", "setup-git"}
     if args[0] == "repo":
         return len(args) >= 2 and args[1] in {"view", "list"}
-    if args[0] in {"pr", "issue"}:
-        return len(args) >= 2 and args[1] in {"list", "view", "status", "checks", "diff"}
+    if args[0] == "pr":
+        return len(args) >= 2 and args[1] in {"list", "view", "status", "checks", "diff", "create"}
+    if args[0] == "issue":
+        return len(args) >= 2 and args[1] in {"list", "view", "status"}
     if args[0] == "run":
         return len(args) >= 2 and args[1] in {"list", "view"}
     return False
@@ -323,6 +326,7 @@ def _check_python(args: list[str], cwd: Path, workspace_roots: list[Path]) -> bo
 
     # Allow checked-in repo helper scripts under .agents/scripts/ or scripts/
     script_arg = args[0]
+    script_rest = args[1:]
     if not script_arg.startswith("-") and script_arg.endswith(".py"):
         script_path = Path(os.path.expanduser(script_arg))
         if not script_path.is_absolute():
@@ -335,6 +339,11 @@ def _check_python(args: list[str], cwd: Path, workspace_roots: list[Path]) -> bo
             for allowed_sub in (root / ".agents" / "scripts", root / "scripts"):
                 try:
                     resolved.relative_to(allowed_sub.resolve())
+                    if resolved.name == "sync_main.py":
+                        # Docs Sync (`--docs-only` / default) and verified Code Sync (`--code`) are
+                        # auto-approved; `--skip-verify` or unscoped `--all` fall back to normal review.
+                        if any(a in {"--skip-verify", "--all"} for a in script_rest):
+                            return False
                     return True
                 except ValueError:
                     continue
@@ -533,13 +542,69 @@ def _is_segment_approved(
     return False
 
 
+DOC_WRITE_TOOLS = {
+    "write_to_file",
+    "replace_file_content",
+    "multi_replace_file_content",
+    "write_file",
+    "edit_file",
+}
+
+ROOT_DOC_FILES = {"PROJECT.md", "AGENTS.md", "RESOURCES.md", "README.md"}
+KNOWLEDGE_BUCKETS = {"pm", "notes", "ideas", "data", "agents", ".agents"}
+FORBIDDEN_DOC_DIRS = {"local", ".venv", ".git", "__pycache__"}
+
+
+def _is_approved_doc_write(args: dict, cwd: Path, workspace_roots: list[Path]) -> bool:
+    """Returns True when creating/editing a safe documentation or Knowledge Model file."""
+    raw_target = (
+        args.get("Path")
+        or args.get("TargetFile")
+        or args.get("path")
+        or args.get("targetFile")
+        or ""
+    )
+    if not isinstance(raw_target, str) or not raw_target.strip():
+        return False
+
+    target = Path(os.path.expanduser(raw_target.strip()))
+    if not target.is_absolute():
+        target = cwd / target
+
+    try:
+        resolved = target.resolve()
+    except OSError:
+        return False
+
+    for root in workspace_roots:
+        try:
+            rel = resolved.relative_to(root.resolve())
+        except ValueError:
+            continue
+
+        parts = rel.parts
+        if not parts:
+            continue
+        if parts[0] in FORBIDDEN_DOC_DIRS:
+            return False
+        if any(part in FORBIDDEN_DOC_DIRS or part.startswith(".env") for part in parts):
+            return False
+
+        rel_str = rel.as_posix()
+        if rel_str in ROOT_DOC_FILES:
+            return True
+        if parts[0] in KNOWLEDGE_BUCKETS:
+            return True
+        if resolved.suffix.lower() == ".md":
+            return True
+
+    return False
+
+
 def evaluate_tool_call(payload: dict) -> dict:
     tool_call = payload.get("toolCall") or {}
-    if tool_call.get("name") != "run_command":
-        return {"decision": "allow"}
-
+    tool_name = tool_call.get("name") or ""
     args = tool_call.get("args") or {}
-    command_line = args.get("CommandLine") or args.get("commandLine") or ""
 
     ws_paths = payload.get("workspacePaths") or []
     workspace_roots = [REPO_ROOT]
@@ -549,6 +614,19 @@ def evaluate_tool_call(payload: dict) -> dict:
 
     raw_cwd = args.get("Cwd") or payload.get("cwd") or str(REPO_ROOT)
     cwd = Path(os.path.expanduser(raw_cwd))
+
+    if tool_name in DOC_WRITE_TOOLS:
+        if _is_approved_doc_write(args, cwd, workspace_roots):
+            return {
+                "decision": "auto_approve",
+                "reason": "Auto-approved Simon Knowledge Model / Steward documentation write.",
+            }
+        return {"decision": "allow"}
+
+    if tool_name != "run_command":
+        return {"decision": "allow"}
+
+    command_line = args.get("CommandLine") or args.get("commandLine") or ""
 
     trusted_dirs = _trusted_bin_dirs(workspace_roots)
     segments = _split_shell_segments(command_line)

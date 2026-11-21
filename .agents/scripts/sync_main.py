@@ -1,11 +1,25 @@
 #!/usr/bin/env python3
-"""Safe trunk-sync utility for the Simon repository (origin/main).
+"""Dual-track repository sync utility for Simon (Docs Sync vs. Code Sync).
 
-Stages documentation/knowledge-model changes by default (--docs-only) or all safe
-repository files (--all), commits if staged changes exist, pulls with rebase +
-autostash from origin/main, and pushes to origin/main unless --no-push is set.
-Never stages .env*, local/, or .venv/.
+Supports two distinct workflows managed by the `main-sync` skill:
+1. Docs Sync (`--docs-only`, default — used by Project Manager Steward & doc updates):
+   - Zero-ceremony, immediate sync straight to `origin/main`.
+   - Stages ONLY Markdown and Life OS knowledge-model paths (`PROJECT.md`, `AGENTS.md`,
+     `RESOURCES.md`, `README.md`, `pm/`, `notes/`, `ideas/`, `data/`, `agents/`, `.agents/`, `*.md`).
+   - Leaves in-progress `simon/` or `tests/` edits untouched via `--rebase --autostash`.
+
+2. Code Sync (`--code` — used when landing runtime `simon/`, `tests/`, or `examples/` changes):
+   - Runs automated verification FIRST (`unittest` suite + `python -m simon` smoke check +
+     optional `ruff check` on Python files) before committing. Aborts if checks fail.
+   - Supports `--paths <file ...>` to stage ONLY an explicit code slice so parallel chat
+     windows never sweep in unrelated work-in-progress.
+   - Supports `--branch <feat/name>` for feature-branch/PR code pushes when changes shouldn't
+     land directly on `main` yet, or pushes verified slices cleanly to `origin/main`.
+
+Never stages `.env*`, `local/`, `.venv/`, or `__pycache__/`.
 """
+
+from __future__ import annotations
 
 import argparse
 import json
@@ -18,8 +32,8 @@ from typing import Dict, List, Optional, Tuple
 
 ROOT_DOC_FILES = frozenset({"PROJECT.md", "AGENTS.md", "RESOURCES.md", "README.md"})
 KNOWLEDGE_DIRS = frozenset({"pm", "notes", "ideas", "data", "agents", ".agents"})
-FORBIDDEN_TOP_DIRS = frozenset({"local", ".venv", ".git"})
-FORBIDDEN_PART_NAMES = frozenset({".git", ".venv", "__pycache__", ".DS_Store"})
+FORBIDDEN_TOP_DIRS = frozenset({"local", ".venv", ".git", ".pytest_cache", ".ruff_cache"})
+FORBIDDEN_PART_NAMES = frozenset({".git", ".venv", "__pycache__", ".pytest_cache", ".ruff_cache", ".DS_Store"})
 FORBIDDEN_SUFFIXES = (".pyc", ".pyo", ".pyd")
 
 
@@ -82,6 +96,26 @@ def is_doc_or_knowledge_path(rel_path: str) -> bool:
     return False
 
 
+def matches_explicit_paths(rel_path: str, explicit_prefixes: List[str]) -> bool:
+    if is_forbidden_path(rel_path):
+        return False
+    norm = rel_path.strip("/")
+    rel_p = Path(norm)
+    for raw in explicit_prefixes:
+        clean = raw.strip().strip("/")
+        if not clean or clean == ".":
+            continue
+        target_p = Path(clean)
+        if rel_p == target_p:
+            return True
+        try:
+            rel_p.relative_to(target_p)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
 def parse_porcelain_z(output: str) -> List[str]:
     """Parse `git status --porcelain=v1 -z -uall` output into repo-relative paths."""
     tokens = output.split("\0")
@@ -107,22 +141,27 @@ def parse_porcelain_z(output: str) -> List[str]:
     return paths
 
 
-def get_head_and_ahead(cwd: Path, env: Dict[str, str]) -> Tuple[str, int]:
+def get_head_branch_and_ahead(cwd: Path, env: Dict[str, str], remote_ref: str) -> Tuple[str, str, int]:
     head = ""
+    branch = ""
     ahead = 0
     head_proc = run_git(["rev-parse", "--short", "HEAD"], cwd=cwd, env=env, timeout=5)
     if head_proc.returncode == 0:
         head = head_proc.stdout.strip()
 
+    branch_proc = run_git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd, env=env, timeout=5)
+    if branch_proc.returncode == 0:
+        branch = branch_proc.stdout.strip()
+
     ahead_proc = run_git(
-        ["rev-list", "--count", "origin/main..HEAD"], cwd=cwd, env=env, timeout=5
+        ["rev-list", "--count", f"{remote_ref}..HEAD"], cwd=cwd, env=env, timeout=5
     )
     if ahead_proc.returncode == 0:
         try:
             ahead = int(ahead_proc.stdout.strip())
         except ValueError:
             ahead = 0
-    return head, ahead
+    return head, branch, ahead
 
 
 def is_rebase_in_progress(cwd: Path, env: Dict[str, str]) -> bool:
@@ -149,31 +188,106 @@ def chunked(items: List[str], size: int = 200) -> List[List[str]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
 
 
+def run_code_verification(repo_root: Path, staged_paths: List[str], env: Dict[str, str]) -> Tuple[bool, Optional[str]]:
+    """Run unit tests, deterministic showcase smoke check, and optional ruff lint before code commit."""
+    venv_py = repo_root / ".venv" / "bin" / "python"
+    py_exe = str(venv_py) if venv_py.is_file() else sys.executable
+
+    run_env = env.copy()
+    existing_pp = run_env.get("PYTHONPATH", "")
+    run_env["PYTHONPATH"] = f"{repo_root}{os.pathsep}{existing_pp}" if existing_pp else str(repo_root)
+
+    # 1. Unit test suite
+    tests_dir = repo_root / "tests"
+    if tests_dir.is_dir():
+        test_proc = subprocess.run(
+            [py_exe, "-m", "unittest", "discover", "-s", "tests"],
+            cwd=str(repo_root),
+            env=run_env,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if test_proc.returncode != 0:
+            return False, compact_err("Unit tests failed", test_proc)
+
+    # 2. Deterministic showcase smoke check (if simon package exists)
+    if (repo_root / "simon" / "__main__.py").is_file():
+        smoke_proc = subprocess.run(
+            [py_exe, "-m", "simon"],
+            cwd=str(repo_root),
+            env=run_env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if smoke_proc.returncode != 0:
+            return False, compact_err("`python -m simon` smoke check failed", smoke_proc)
+
+    # 3. Optional ruff check (syntax & pyflakes bugs: E9,F) on staged Python files
+    venv_ruff = repo_root / ".venv" / "bin" / "ruff"
+    py_targets = [p for p in staged_paths if p.endswith(".py") and (repo_root / p).is_file()]
+    if venv_ruff.is_file() and py_targets:
+        ruff_proc = subprocess.run(
+            [str(venv_ruff), "check", "--select", "E9,F", *py_targets],
+            cwd=str(repo_root),
+            env=run_env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if ruff_proc.returncode != 0:
+            return False, compact_err("`ruff check` failed on staged Python files", ruff_proc)
+
+    return True, None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Stage, commit, pull-rebase, and push Simon updates safely to origin/main."
+        description="Dual-track sync utility for Simon: Docs Sync (--docs-only) vs. Code Sync (--code)."
     )
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument(
         "--docs-only",
         action="store_true",
-        help="Stage only Markdown and knowledge-model paths (default when --all is omitted).",
+        help="Docs Sync track (default): stage & push only Markdown/knowledge-model files directly to origin/main.",
+    )
+    mode_group.add_argument(
+        "--code",
+        action="store_true",
+        help="Code Sync track: verify tests/smoke/lint first, stage code slice (use --paths), and sync to main or --branch.",
     )
     mode_group.add_argument(
         "--all",
         action="store_true",
-        help="Stage all repository changes except .env*, local/, and .venv/.",
+        help="Legacy/full-tree sync: stage all non-forbidden changes (prefer --code --paths for code slices).",
+    )
+    parser.add_argument(
+        "--paths",
+        nargs="+",
+        default=None,
+        help="Explicit repo-relative file or directory paths to stage (recommended for --code).",
+    )
+    parser.add_argument(
+        "--branch",
+        default=None,
+        help="Target branch for --code when pushing a feature branch for PR instead of direct to main (e.g. feat/audio-scout).",
+    )
+    parser.add_argument(
+        "--skip-verify",
+        action="store_true",
+        help="Skip pre-commit test/smoke verification during --code sync (not auto-approved).",
     )
     parser.add_argument(
         "-m",
         "--message",
-        default="docs: sync knowledge model updates to main",
-        help='Commit message (default: "docs: sync knowledge model updates to main").',
+        default=None,
+        help="Commit message.",
     )
     parser.add_argument(
         "--no-push",
         action="store_true",
-        help="Skip pushing to origin/main after committing and rebasing.",
+        help="Skip pushing to origin after committing.",
     )
     parser.add_argument(
         "--repo",
@@ -182,7 +296,14 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    docs_only = not args.all
+    mode = "code" if args.code else ("all" if args.all else "docs")
+    target_branch = args.branch.strip() if args.branch else "main"
+    commit_msg = args.message or (
+        "docs: sync knowledge model updates to main"
+        if mode == "docs"
+        else "feat(simon): sync verified code slice"
+    )
+
     repo_root = (
         Path(args.repo).resolve()
         if args.repo
@@ -191,13 +312,18 @@ def main() -> int:
     env = build_git_env()
 
     committed = False
+    verified: Optional[bool] = None
     pulled = False
     pushed = False
     errors: List[str] = []
 
     def emit(exit_code: int) -> int:
-        head, ahead = get_head_and_ahead(repo_root, env)
+        remote_ref = f"origin/{target_branch}"
+        head, current_branch, ahead = get_head_branch_and_ahead(repo_root, env, remote_ref)
         summary = {
+            "mode": mode,
+            "branch": current_branch or target_branch,
+            "verified": verified,
             "committed": committed,
             "pulled": pulled,
             "pushed": pushed,
@@ -208,16 +334,60 @@ def main() -> int:
         print(json.dumps(summary))
         return exit_code
 
-    # Verify repository root is a valid git working tree.
     top_proc = run_git(["rev-parse", "--show-toplevel"], cwd=repo_root, env=env, timeout=5)
     if top_proc.returncode != 0:
         errors.append(compact_err("Not a valid git repository", top_proc))
         return emit(1)
     repo_root = Path(top_proc.stdout.strip()).resolve()
 
-    allowed_fn = is_doc_or_knowledge_path if docs_only else (lambda p: not is_forbidden_path(p))
+    if args.branch and mode == "docs":
+        errors.append("--branch is only for --code sync; Docs Sync always targets main directly.")
+        return emit(1)
 
-    # 1. Ensure pre-staged files outside the allowed scope (or forbidden paths) are unstaged.
+    # Normalize explicit --paths relative to repo_root if provided.
+    rel_prefixes: Optional[List[str]] = None
+    if args.paths:
+        rel_prefixes = []
+        for p in args.paths:
+            cand = Path(p)
+            if cand.is_absolute():
+                try:
+                    rel_prefixes.append(str(cand.resolve().relative_to(repo_root)))
+                except ValueError:
+                    errors.append(f"Path outside repository: {p}")
+                    return emit(1)
+            else:
+                rel_prefixes.append(str(cand))
+
+    # Switch/create feature branch if --branch <name> was requested for --code.
+    if args.branch:
+        cur_branch_proc = run_git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=repo_root, env=env, timeout=5)
+        cur_branch = cur_branch_proc.stdout.strip() if cur_branch_proc.returncode == 0 else ""
+        if cur_branch != target_branch:
+            exists_proc = run_git(
+                ["show-ref", "--verify", "--quiet", f"refs/heads/{target_branch}"],
+                cwd=repo_root,
+                env=env,
+                timeout=5,
+            )
+            switch_args = ["checkout", target_branch] if exists_proc.returncode == 0 else ["checkout", "-b", target_branch]
+            sw_proc = run_git(switch_args, cwd=repo_root, env=env, timeout=10)
+            if sw_proc.returncode != 0:
+                errors.append(compact_err(f"Failed to switch to branch {target_branch}", sw_proc))
+                return emit(1)
+
+    if mode == "docs":
+        if rel_prefixes:
+            allowed_fn = lambda p: is_doc_or_knowledge_path(p) and matches_explicit_paths(p, rel_prefixes)
+        else:
+            allowed_fn = is_doc_or_knowledge_path
+    else:
+        if rel_prefixes:
+            allowed_fn = lambda p: matches_explicit_paths(p, rel_prefixes)
+        else:
+            allowed_fn = lambda p: not is_forbidden_path(p)
+
+    # 1. Unstage any pre-staged files outside the allowed scope.
     staged_proc = run_git(["diff", "--cached", "--name-only", "-z"], cwd=repo_root, env=env, timeout=10)
     if staged_proc.returncode == 0 and staged_proc.stdout:
         staged_paths = [p for p in staged_proc.stdout.split("\0") if p]
@@ -230,7 +400,7 @@ def main() -> int:
                 else:
                     run_git(["rm", "--cached", "-q", "--", *batch], cwd=repo_root, env=env, timeout=10)
 
-    # 2. Discover candidate modified/deleted/untracked paths and stage allowed ones.
+    # 2. Discover candidate paths and stage allowed ones.
     status_proc = run_git(
         ["status", "--porcelain=v1", "-z", "-uall"], cwd=repo_root, env=env, timeout=10
     )
@@ -246,25 +416,40 @@ def main() -> int:
             errors.append(compact_err("git add failed", add_proc))
             return emit(1)
 
-    # 3. Commit if staged diff is non-empty.
+    # 3. For Code Sync (--code or --all), run verification gate BEFORE committing unless --skip-verify.
     diff_proc = run_git(["diff", "--cached", "--quiet"], cwd=repo_root, env=env, timeout=10)
-    if diff_proc.returncode == 1:
-        commit_proc = run_git(["commit", "-m", args.message], cwd=repo_root, env=env, timeout=15)
+    has_staged_changes = diff_proc.returncode == 1
+    if diff_proc.returncode not in (0, 1):
+        errors.append(compact_err("git diff --cached failed", diff_proc))
+        return emit(1)
+
+    if mode in ("code", "all") and not args.skip_verify:
+        now_staged_proc = run_git(["diff", "--cached", "--name-only", "-z"], cwd=repo_root, env=env, timeout=10)
+        now_staged = [p for p in now_staged_proc.stdout.split("\0") if p] if now_staged_proc.returncode == 0 else []
+        ok, verify_err = run_code_verification(repo_root, now_staged, env)
+        verified = ok
+        if not ok:
+            if now_staged:
+                for batch in chunked(now_staged):
+                    run_git(["reset", "-q", "HEAD", "--", *batch], cwd=repo_root, env=env, timeout=10)
+            errors.append(verify_err or "Code verification gate failed")
+            return emit(1)
+
+    # 4. Commit if staged diff is non-empty.
+    if has_staged_changes:
+        commit_proc = run_git(["commit", "-m", commit_msg], cwd=repo_root, env=env, timeout=15)
         if commit_proc.returncode != 0:
             errors.append(compact_err("git commit failed", commit_proc))
             return emit(1)
         committed = True
-    elif diff_proc.returncode != 0:
-        errors.append(compact_err("git diff --cached failed", diff_proc))
-        return emit(1)
 
-    # 4. Pull --rebase --autostash origin main (handle missing/unreachable remote gracefully).
+    # 5. Rebase onto origin/main when syncing trunk (or pull --rebase when branch tracks remote).
     remote_proc = run_git(["remote", "get-url", "origin"], cwd=repo_root, env=env, timeout=5)
     has_origin = remote_proc.returncode == 0
     rebase_conflict = False
     pull_unreachable = False
 
-    if has_origin:
+    if has_origin and target_branch == "main":
         try:
             pull_proc = run_git(
                 ["pull", "--rebase", "--autostash", "origin", "main"],
@@ -308,29 +493,27 @@ def main() -> int:
                 rebase_conflict = True
                 run_git(["rebase", "--abort"], cwd=repo_root, env=env, timeout=10)
             errors.append("git pull --rebase origin main timed out after 15s")
-    else:
+    elif not has_origin:
         errors.append("Remote 'origin' is not configured")
 
-    # 5. Push to origin/main unless --no-push or blocked by rebase conflict / unreachable origin.
+    # 6. Push to origin/<target_branch> unless --no-push or blocked by conflict.
     if not args.no_push and has_origin and not rebase_conflict:
-        if pull_unreachable and not pulled:
-            #Still attempt push only if pull didn't already fail with hard network timeout;
-            # skip redundant timeout wait while preserving the pull error diagnostics.
+        if target_branch == "main" and pull_unreachable and not pulled:
             pass
         else:
+            push_args = (
+                ["push", "origin", "main"]
+                if target_branch == "main"
+                else ["push", "-u", "origin", target_branch]
+            )
             try:
-                push_proc = run_git(
-                    ["push", "origin", "main"],
-                    cwd=repo_root,
-                    env=env,
-                    timeout=20,
-                )
+                push_proc = run_git(push_args, cwd=repo_root, env=env, timeout=20)
                 if push_proc.returncode == 0:
                     pushed = True
                 else:
-                    errors.append(compact_err("git push origin main failed", push_proc))
+                    errors.append(compact_err(f"git {' '.join(push_args)} failed", push_proc))
             except subprocess.TimeoutExpired:
-                errors.append("git push origin main timed out after 20s")
+                errors.append(f"git {' '.join(push_args)} timed out after 20s")
 
     return emit(0)
 
