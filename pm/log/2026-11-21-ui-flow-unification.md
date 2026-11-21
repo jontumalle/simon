@@ -1,6 +1,11 @@
-# 2026-11-21 — UI Drift & End-to-End Flow Unification (PR #30)
+# 2026-11-21 — UI Drift, Discovery Sub-Flow & Plain-English Pass (PRs #30 & #31)
 
 ## What Happened
+- **Discovery Sub-Flow Strip & Plain-English Pass (`b1ae6b8`, PR #31)**:
+  - Added a persistent **Discovery Sub-Flow Strip** (`1. Sources & Dispatch -> 2. Field News -> 3. Scouting Reports | Next: Investigate ->`) across `/?tab=discovery`, `/discovery`, `/field-news`, and `/reports` with automatic `?batch=` query sync.
+  - Applied `/plain-english` (STE-100 + Zinsser) rules to UI states, headers, phase descriptions, and Field News step copy across `simon/discovery_ui.py`, `simon/phases.py`, `simon/screening_ui.py`, `simon/taste_profile_ui.py`, and `simon/static/index.html`.
+  - Added the `Plain-English Output Standard (STE-100 + Zinsser)` to `agents/_shared/skills/field-reporting/SKILL.md` and all 12 curated `agents/*/SYSTEM.md` prompts.
+  - Verified **113/113** unit tests passing (`tests/test_agency_studio_ui.py`).
 - **Unified 5-Stage Primary Navigation (`cc2154e`, PR #30)**:
   - Unified the 5-stage primary topbar across `/` (`simon/static/index.html`) and all standalone pages (`simon/discovery_ui.py`), adding the missing `Taste Profile` tab to `/` and removing duplicate `Pipeline Stepper` / `Agent Lab` links from the `/` Tools menu.
 - **Discovery Parity & Stage-to-Stage Lead Handoffs**:

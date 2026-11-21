@@ -34,7 +34,7 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 ## Recent sessions
 *Working memory (LRU pointer cache, max 12, most recent first). Maintained by the `project-manager` skill/subagent.*
 
-- 2026-11-21 · ui flow unification · unified 5-stage topbar, discovery parity, Stage 3→4 screening handoffs & 112/112 tests (PR #30, `cc2154e`) → `pm/log/2026-11-21-ui-flow-unification.md`, `simon/static/`, `simon/discovery_ui.py`
+- 2026-11-21 · ui flow unification · unified 5-stage nav, Discovery sub-flow strip, Plain-English pass & 113/113 tests (PRs #30/#31) → `pm/log/2026-11-21-ui-flow-unification.md`, `simon/static/`, `simon/discovery_ui.py`, `agents/`
 - 2026-11-21 · screening, taste & demo flow · shipped Stage 3 Screening Fleet, `/screen`, `/taste-profile` & clean staging demo (PRs #24/#28) → `pm/log/2026-11-21-screening-taste-and-demo-flow.md`, `simon/screening.py`, `simon/demo_flow.py`
 - 2026-11-21 · label-signing recall eval · live 3-worker recall run (192k tokens, 24 leads), `/evals` trace selector & honest offline scoring (`602a30c`) → `pm/log/2026-11-21-label-signing-recall-eval.md`, `simon/vertex_eval.py`, `agents/discovery-scout/`
 - 2026-11-21 · multi-agent vertex evals · merged PR #20 (runner, /evals UI, 65/65 tests) & 9-agent 3-layer rubrics baseline (119 rubrics) → `pm/log/2026-11-21-discovery-vertex-evals.md`, `simon/vertex_eval.py`, `data/evals/`
