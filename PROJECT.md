@@ -33,7 +33,7 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 ## Recent sessions
 *Working memory (LRU pointer cache, max 12, most recent first). Maintained by the `project-manager` skill/subagent.*
 
+- 2026-11-21 · main-sync & toolchain · split dual-track Docs vs Code sync, auto-approved Steward doc writes, verified hooks → `AGENTS.md`, `.agents/`, `RESOURCES.md`, `tests/`
 - 2026-11-21 · dspy & decisions api · researched DSPy + Gemini Decisions classifier, enabled gemini-api plugin & Excalidraw MCP → `pm/`, `RESOURCES.md`
 - 2026-11-21 · agent-ops permissions · added PreToolUse toolchain auto-approve hook, 34 unit tests, RESOURCES.md docs → `.agents/`, `tests/`, `RESOURCES.md`, `pm/`
-- 2026-11-21 · main-sync & toolchain · added sync_main.py, Stop/SessionStart hooks, cross-window Steward, gemini-api + gcloud → `AGENTS.md`, `.agents/`, `RESOURCES.md`, `notes/managed-agents/`
 - 2026-11-21 · governance & onboarding · established Life OS knowledge model, skills, RESOURCES.md, distilled kickoff transcript → `PROJECT.md`, `pm/`, `RESOURCES.md`, `.agents/`

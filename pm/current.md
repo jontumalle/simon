@@ -3,11 +3,10 @@
 *Updated: 2026-11-21*
 
 ## Live Now
-- **Starter Pipeline & Tests Passing**: `python3 -m simon` demo pipeline and `tests/` suite (`test_smoke.py` + 34-case `test_auto_approve_hook.py` under Python 3.9+) passing.
-- **Continuous `main` Sync, Cross-Window Steward & Toolchain Auto-Approval Active**:
-  - [AGENTS.md](../AGENTS.md) enforces zero-repercussion direct `main` pushing for all Markdown/knowledge files, frequent `main` sync, and launching a background `Project Manager (Steward)` subagent across every chat window.
-  - [.agents/scripts/sync_main.py](../.agents/scripts/sync_main.py) + [main-sync/SKILL.md](../.agents/skills/main-sync/SKILL.md) handle safe `--docs-only` / `--all` staging, `git pull --rebase --autostash origin main`, and `git push origin main`.
-  - [.agents/hooks.json](../.agents/hooks.json) runs `SessionStart` (`session_start.py`), `PreToolUse` (`auto_approve_toolchain.py` — auto-approves safe `RESOURCES.md` toolchain commands while gating destructive/token-exfiltrating/untrusted commands), and `Stop` (`stop_doc_sync.py` — catches uncommitted docs before turn end); documented in Section 6 of [RESOURCES.md](../RESOURCES.md).
+- **Starter Pipeline & Tests Passing**: `python3 -m simon` demo pipeline and `tests/` suite (`test_smoke.py` + expanded 6-method `test_auto_approve_hook.py` under Python 3.9+) passing; GitHub `origin/main` push sync (`jontumalle/simon`) live.
+- **Dual-Track `main-sync`, Cross-Window Steward & Auto-Approval Active**:
+  - [AGENTS.md](../AGENTS.md) and [main-sync/SKILL.md](../.agents/skills/main-sync/SKILL.md) enforce strict separation between **Track A · Docs & Knowledge Sync (`--docs-only`)** (used by `Project Manager (Steward)`, auto-approved for both doc file writes and direct `origin/main` sync while leaving dirty `simon/` or `tests/` code untouched) and **Track B · Code Sync (`--code --paths <files...>`)** (enforcing pre-commit `unittest` + `python -m simon` smoke + `ruff check --select E9,F`, explicit slice staging, and optional `--branch feat/<slug>` + PR; `--skip-verify` and unscoped `--all` stay gated).
+  - [.agents/hooks.json](../.agents/hooks.json) runs `SessionStart` (`session_start.py`), `PreToolUse` (`auto_approve_toolchain.py` — auto-approves safe `RESOURCES.md` toolchain commands, Steward doc writes, and verified syncs while gating destructive/token-exfiltrating/unverified commands), and `Stop` (`stop_doc_sync.py`); `.gitignore` and `sync_main.py` block `.pytest_cache/` and `.ruff_cache/`.
 - **Local macOS (`arm64`) Toolchain Ready**:
   - Installed: `uv 0.13.9`, `Python 3.12.16`, `gcloud 594.0.0`, `gemini-api 0.5.0`, `gh 2.105.0`, plus `.venv` (`google-genai 3.6.1`, `pydantic 2.14.4`, `pyyaml 6.0.4`, `pytest 9.2.0`, `ruff 0.17.6`).
   - Antigravity plugins & MCP servers active: `gemini-api` (`antigravity-plugins-official/plugin/gemini-api`), `wispr-flow`, and global `excalidraw` MCP App (`https://mcp.excalidraw.com/mcp`, documented in [RESOURCES.md](../RESOURCES.md)).
