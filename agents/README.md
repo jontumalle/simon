@@ -69,6 +69,5 @@ flowchart LR
 | **Stage 3 · Screening** | `screen-skeptic` | `gemini-4-carbon` (`64k`) | Python + `simon-db` + 5 `dossier-*` | Audits concrete risks (`>85%` view skew, studio-only, `uncertain` attribution, lockups) & `missing_fields` | **Active** |
 | **Stage 3 · Screening** | `screening-judge` | `gemini-4-neon` (`64k`) | Python + `simon-db` + 5 `dossier-*` | Scores 5 `0–2` rubrics (`0..10`), weighs Pros vs. Cons, persists `ScreeningPacket` v1.0.0 | **Active** |
 | **Stage 4 · Outcome** | `showcase-producer` | `gemini-4-carbon` | `disabled` (repo-mounted) | Turns approved `ScreeningPacket` + Stage 2 Dossier into a human-gated callback invitation draft | **Active** |
-| **Legacy / MVP** | `synthesis-scout` | `gemini-4-carbon` | `disabled` | Legacy MVP: compares `gemini-4-hydrogen` clip evidence into a <=3 singer listening shortlist | Legacy MVP |
 | **Legacy / Seeded** | `performance-critic` | `gemini-4-hydrogen` | `disabled` | Replaced in Phase 3 by Active Screening (`screen-advocate` / `screen-skeptic` / `screening-judge`) | Legacy |
 | **Legacy / Seeded** | `booking-critic` | `gemini-4-hydrogen` | `disabled` | Replaced in Phase 3 by Active Screening (`screen-advocate` / `screen-skeptic` / `screening-judge`) | Legacy |

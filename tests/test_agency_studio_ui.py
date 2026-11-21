@@ -178,7 +178,6 @@ class TestAgencyStudioUIAndPhases(unittest.TestCase):
             "track-record-mapper": {"lead_id", "identity_and_contact", "focus"},
             "performance-critic": {"brief", "auditions"},
             "booking-critic": {"brief", "auditions"},
-            "synthesis-scout": {"brief", "artist_leads", "clip_evidence"},
             "showcase-producer": {"lead_id", "stage_name", "screening_verdict", "advocate_case", "skeptic_case", "judge_decision"},
             "screen-advocate": {"lead_id", "dossier"},
             "screen-skeptic": {"lead_id", "dossier"},
@@ -288,9 +287,15 @@ class TestAgencyStudioUIAndPhases(unittest.TestCase):
         field_skill = (repo_root / "agents" / "_shared" / "skills" / "field-reporting" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("Plain-English", field_skill)
         system_files = sorted((repo_root / "agents").glob("*/SYSTEM.md"))
-        self.assertGreaterEqual(len(system_files), 12)
+        self.assertGreaterEqual(len(system_files), 11)
         for sf in system_files:
             self.assertIn("Plain-English Output Standard", sf.read_text(encoding="utf-8"), f"Missing rule in {sf}")
+
+        code, _, home_html = dispatch_http_request(self.store, "GET", "/")
+        self.assertEqual(code, 200)
+        self.assertIn(b"subtabScreenedBtn", home_html)
+        self.assertNotIn(b"subtabShortlistBtn", home_html)
+        self.assertNotIn(b"briefDrawer", home_html)
 
 
 if __name__ == "__main__":

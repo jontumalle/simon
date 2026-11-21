@@ -5,7 +5,7 @@ Supports running or testing each of the 6 pipeline phases independently:
   - 2a_identity      (Intake: identity-resolver)
   - 2b_investigators (Intake: parallel footprint-profiler + signal-forensics + track-record-mapper)
   - 2c_dossier       (Intake: deterministic profile join + process evals)
-  - 3_shortlist      (Decision Engine: blind critics + synthesis-scout)
+  - 3_screening      (Decision Engine: Advocate + Skeptic + Screening Judge)
   - 4_producer       (Outcome: showcase-producer callback draft, pending_human_review)
 """
 
@@ -290,38 +290,6 @@ AGENT_INPUT_PRESETS: Dict[str, Dict[str, Any]] = {
             ],
         },
     },
-    "synthesis-scout": {
-        "input_hint": "Taste brief with artist leads and timestamped clip notes",
-        "default_input": {
-            "brief": {
-                "prompt": DEFAULT_TASTE_BRIEF,
-            },
-            "artist_leads": [
-                {
-                    "lead_id": "lead_luna_jinna",
-                    "stage_name": "Luna Jinna",
-                    "attribution_status": "verified",
-                }
-            ],
-            "clip_evidence": [
-                {
-                    "clip_id": "clip_01",
-                    "lead_id": "lead_luna_jinna",
-                    "title": "Luna Jinna - Stripped Piano Live Session",
-                    "source_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-                    "recording_context": "live",
-                    "observations": [
-                        {
-                            "observation_id": "obs_01",
-                            "timestamp": "0:42",
-                            "dimension": "phrasing",
-                            "musical_choice": "Delays the pre-chorus entrance behind the piano pulse, then drops to a whisper on the turnaround.",
-                        }
-                    ],
-                }
-            ],
-        },
-    },
     "showcase-producer": {
         "input_hint": "Stage 3 screening decision and showcase terms",
         "default_input": {
@@ -587,10 +555,6 @@ def run_phase(
     api_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Execute one pipeline phase in live or test mode and persist its checkpoint."""
-    # Backward-compatible alias for legacy 3_shortlist callers
-    if phase_id == "3_shortlist":
-        phase_id = "3_screening"
-
     if phase_id not in PHASE_MAP:
         raise ValueError(f"Unknown phase '{phase_id}'. Expected one of: {', '.join(PHASE_MAP)}")
 
