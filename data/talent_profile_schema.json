@@ -1,0 +1,842 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jontumalle/simon/blob/main/data/talent_profile_schema.json",
+  "title": "Simon Agentic Talent Agency — Canonical Talent Dossier & 4-Stage Pipeline Schema",
+  "description": "Canonical progressive-enrichment data model for Simon's 4-stage agentic talent pipeline: (1) Discovery & Basic Profile, (2) Metric-Blind Multimodal Media Digestion, (3) Sparsity-Aware Scout Metadata Enrichment, and (4) Disagreement-Preserving Taste & Standout Assessment. Strictly backward-compatible with Simon's MVP records (ArtistLead, ClipEvidence, TimestampedObservation, ArtistAssessment).",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "artist_id",
+    "enrichment_tier",
+    "updated_at",
+    "basic_profile"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "artist_id": {
+      "type": "string",
+      "description": "Canonical cross-run entity identifier (supersedes run-scoped lead_id once deduplicated).",
+      "pattern": "^art_[a-z0-9_]+$"
+    },
+    "mvp_lead_ids": {
+      "type": "array",
+      "description": "Lineage pointers to run-scoped ArtistLead IDs in simon/store.py.",
+      "items": { "type": "string" }
+    },
+    "vertical": {
+      "type": "string",
+      "enum": ["music_vocalist", "live_band", "dj_producer", "standup_comedy", "live_creator"],
+      "default": "music_vocalist"
+    },
+    "enrichment_tier": {
+      "type": "string",
+      "enum": [
+        "stage_1_basic_profile",
+        "stage_2_media_digested",
+        "stage_3_scout_enriched",
+        "stage_4_taste_evaluated"
+      ]
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "basic_profile": { "$ref": "#/$defs/Stage1BasicProfile" },
+    "media_digestion": { "$ref": "#/$defs/Stage2MediaDigestion" },
+    "scout_enrichment": { "$ref": "#/$defs/Stage3ScoutEnrichment" },
+    "taste_assessments": {
+      "type": "array",
+      "description": "Mandate-specific evaluations produced by Stage 4 over this enriched dossier.",
+      "items": { "$ref": "#/$defs/Stage4TasteAssessment" }
+    },
+    "pending_enrichment_tasks": {
+      "type": "array",
+      "description": "Demand-driven feedback tasks emitted by Stage 4 back to Stages 1-3 (generalizes MVP second_take_loop).",
+      "items": { "$ref": "#/$defs/EnrichmentTask" }
+    }
+  },
+  "$defs": {
+    "Stage1BasicProfile": {
+      "type": "object",
+      "description": "Stage 1 (Bronze): Fast, low-cost structural discovery, entity deduplication, legal/geography gates, and raw media queueing WITHOUT digesting audio/video frames.",
+      "required": [
+        "primary_stage_name",
+        "project_type",
+        "discovery_provenance",
+        "platform_identities",
+        "contact_and_routing_gate",
+        "media_asset_queue",
+        "stage_1_triage"
+      ],
+      "properties": {
+        "primary_stage_name": { "type": "string", "minLength": 1 },
+        "name_aliases": { "type": "array", "items": { "type": "string" } },
+        "pronouns": { "type": ["string", "null"] },
+        "project_type": {
+          "type": "string",
+          "enum": ["solo_vocalist", "duo", "band", "collective", "dj_producer", "unknown"]
+        },
+        "career_stage_tier": {
+          "type": "string",
+          "enum": ["zero_metric_diy", "local_scene_buzz", "regional_developing", "national_breakout", "established"]
+        },
+        "discovery_provenance": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["source_channel", "discovered_at", "source_url", "attribution_status"],
+            "properties": {
+              "source_channel": {
+                "type": "string",
+                "enum": [
+                  "youtube_live_session",
+                  "diy_venue_flyer_ocr",
+                  "bgv_or_session_credit_graph",
+                  "tiktok_or_ig_raw_clip",
+                  "bandcamp_local_arrival",
+                  "soundcloud_repost_chain",
+                  "open_mic_lineup",
+                  "direct_opt_in_submission"
+                ]
+              },
+              "seed_query_or_venue_node": { "type": "string" },
+              "source_url": { "type": "string", "format": "uri" },
+              "discovered_at": { "type": "string", "format": "date-time" },
+              "attribution_status": {
+                "type": "string",
+                "enum": ["verified", "uncertain"]
+              },
+              "attribution_notes": { "type": "string" }
+            }
+          }
+        },
+        "geography_and_legal_gates": {
+          "type": "object",
+          "properties": {
+            "home_city": { "type": ["string", "null"] },
+            "home_borough_or_neighborhood": { "type": ["string", "null"] },
+            "home_metro_dma": { "type": ["string", "null"] },
+            "secondary_anchor_markets": { "type": "array", "items": { "type": "string" } },
+            "travel_radius_miles_estimate": { "type": ["integer", "null"] },
+            "age_verification_flag": {
+              "type": "string",
+              "description": "Critical for 21+ bar-licensed NYC showcase venues.",
+              "enum": ["21_plus_verified", "18_to_20", "minor_requires_guardian", "unknown"]
+            },
+            "us_work_authorization_signal": {
+              "type": "string",
+              "description": "Required before issuing paid US showcase offers.",
+              "enum": [
+                "domestic_us_likely",
+                "us_citizen_or_gc_verified",
+                "o1b_or_p1b_active",
+                "esta_ineligible_for_paid_work",
+                "requires_visa",
+                "unknown"
+              ]
+            }
+          }
+        },
+        "taxonomy_initial": {
+          "type": "object",
+          "properties": {
+            "primary_genre": { "type": ["string", "null"] },
+            "subgenres": { "type": "array", "items": { "type": "string" } },
+            "micro_scene_tags": { "type": "array", "items": { "type": "string" } },
+            "sonic_comparables_ffo": {
+              "type": "array",
+              "description": "'For Fans Of' comps used by booking agents to pitch support bills (max 3).",
+              "maxItems": 3,
+              "items": { "type": "string" }
+            },
+            "raw_bio_text": { "type": ["string", "null"] }
+          }
+        },
+        "platform_identities": {
+          "type": "object",
+          "properties": {
+            "youtube_channel_url": { "type": ["string", "null"] },
+            "instagram_handle": { "type": ["string", "null"] },
+            "tiktok_handle": { "type": ["string", "null"] },
+            "spotify_artist_id": { "type": ["string", "null"] },
+            "apple_music_artist_id": { "type": ["string", "null"] },
+            "soundcloud_url": { "type": ["string", "null"] },
+            "bandcamp_url": { "type": ["string", "null"] },
+            "linktree_or_site_url": { "type": ["string", "null"] },
+            "isni": { "type": ["string", "null"] },
+            "musicbrainz_mbid": { "type": ["string", "null"] },
+            "rostr_slug": { "type": ["string", "null"] },
+            "chartmetric_id": { "type": ["string", "null"] },
+            "pollstar_artist_id": { "type": ["string", "null"] }
+          }
+        },
+        "contact_and_routing_gate": {
+          "type": "object",
+          "required": ["public_business_inquiry_route_exists", "private_pii_vault_ref"],
+          "properties": {
+            "public_business_inquiry_route_exists": { "type": "boolean" },
+            "contact_channel_type": {
+              "type": "string",
+              "enum": ["public_bio_email", "management_email", "agent_email", "open_dm", "opt_in_form", "none_found"]
+            },
+            "private_pii_vault_ref": {
+              "type": ["string", "null"],
+              "description": "Pointer into gitignored local/ vault; raw personal PII never enters tracked manifests."
+            },
+            "initial_rep_flags": {
+              "type": "object",
+              "properties": {
+                "appears_unsigned": { "type": ["boolean", "null"] },
+                "appears_unagented_na": { "type": ["boolean", "null"] },
+                "management_listed_in_bio": { "type": ["boolean", "null"] }
+              }
+            }
+          }
+        },
+        "media_asset_queue": {
+          "type": "array",
+          "description": "Candidate audio/video pointers queued for Stage 2 digestion.",
+          "items": { "$ref": "#/$defs/MediaAssetRef" }
+        },
+        "stage_1_triage": {
+          "type": "object",
+          "required": ["decision", "reason"],
+          "properties": {
+            "decision": {
+              "type": "string",
+              "enum": ["advance_to_stage_2", "hold_missing_media", "reject_non_target_or_duplicate"]
+            },
+            "reason": { "type": "string" }
+          }
+        }
+      }
+    },
+    "MediaAssetRef": {
+      "type": "object",
+      "required": ["media_id", "source_url", "modality", "digestion_status"],
+      "properties": {
+        "media_id": { "type": "string" },
+        "source_url": { "type": "string", "format": "uri" },
+        "sandbox_file_path": { "type": ["string", "null"] },
+        "modality": { "type": "string", "enum": ["video_with_audio", "audio_only"] },
+        "title": { "type": ["string", "null"] },
+        "channel_or_uploader": { "type": ["string", "null"] },
+        "claimed_context_hint": {
+          "type": "string",
+          "enum": ["live_room", "live_session", "bedroom_raw_take", "studio_master", "unknown"]
+        },
+        "duration_sec": { "type": ["integer", "null"] },
+        "digestion_status": {
+          "type": "string",
+          "enum": ["queued", "digested", "failed_unavailable", "skipped_budget_gate"]
+        }
+      }
+    },
+    "Stage2MediaDigestion": {
+      "type": "object",
+      "description": "Stage 2 (Silver): Strictly METRIC-BLIND multimodal audio/video/lyric/room digestion via gemini-4-hydrogen + zero-trust Python DSP sandbox.",
+      "required": ["digested_at", "clips", "rolled_up_craft_profile"],
+      "properties": {
+        "digested_at": { "type": "string", "format": "date-time" },
+        "metric_blind_enforced": { "type": "boolean", "const": true },
+        "clips": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/ClipDigestionRecord" }
+        },
+        "rolled_up_craft_profile": {
+          "type": "object",
+          "required": [
+            "clip_count",
+            "single_clip_flag",
+            "has_verified_live_take",
+            "authenticity_summary",
+            "vocal_dna"
+          ],
+          "properties": {
+            "clip_count": { "type": "integer", "minimum": 1 },
+            "single_clip_flag": { "type": "boolean" },
+            "has_verified_live_take": { "type": "boolean" },
+            "authenticity_summary": {
+              "type": "object",
+              "properties": {
+                "human_performance_confidence_0_1": { "type": "number", "minimum": 0, "maximum": 1 },
+                "generative_ai_slop_risk": { "type": "string", "enum": ["negligible", "low", "moderate", "high"] },
+                "studio_catfish_or_heavy_tuning_risk": { "type": "string", "enum": ["low", "moderate", "high", "unverified_studio_only"] }
+              }
+            },
+            "vocal_dna": {
+              "type": "object",
+              "properties": {
+                "timbre_descriptors": { "type": "array", "items": { "type": "string" } },
+                "three_second_scroll_stop_score_0_10": { "type": "number", "minimum": 0, "maximum": 10 },
+                "blind_sonic_kinship": { "type": "array", "items": { "type": "string" } },
+                "pitch_center_and_recovery_score_0_10": { "type": "number", "minimum": 0, "maximum": 10 },
+                "passaggio_and_breath_control_score_0_10": { "type": "number", "minimum": 0, "maximum": 10 },
+                "phrasing_pocket_style": {
+                  "type": "string",
+                  "enum": ["behind_the_beat", "on_top_driving", "rubato_elastic", "quantized_grid", "unstable"]
+                },
+                "dynamic_conviction_score_0_10": { "type": "number", "minimum": 0, "maximum": 10 },
+                "live_vs_studio_vocal_delta": {
+                  "type": "object",
+                  "properties": {
+                    "direction": {
+                      "type": "string",
+                      "enum": ["live_exceeds_studio", "live_matches_studio", "live_drops_moderately", "severe_live_collapse", "single_context_only"]
+                    },
+                    "delta_score": { "type": ["number", "null"] },
+                    "notes": { "type": "string" }
+                  }
+                }
+              }
+            },
+            "songwriting_and_lyrics": {
+              "type": "object",
+              "properties": {
+                "original_material_verified": { "type": "boolean" },
+                "reinterpretation_craft_on_covers_0_10": { "type": ["number", "null"] },
+                "time_to_first_hook_sec": { "type": ["integer", "null"] },
+                "lyric_specificity_vs_cliche_score_0_10": { "type": ["number", "null"] },
+                "standout_lyric_quotes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["clip_id", "timestamp", "quote"],
+                    "properties": {
+                      "clip_id": { "type": "string" },
+                      "timestamp": { "type": "string" },
+                      "quote": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            },
+            "observed_live_production_footprint": {
+              "type": "object",
+              "properties": {
+                "observed_setup_format": {
+                  "type": "string",
+                  "enum": ["solo_acoustic", "solo_vocal_plus_tracks", "duo_hybrid", "full_live_band", "band_plus_rig", "unobserved"]
+                },
+                "estimated_input_channels": { "type": ["integer", "null"] },
+                "estimated_changeover_minutes": { "type": ["integer", "null"] },
+                "room_hush_effect_observed": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "ClipDigestionRecord": {
+      "type": "object",
+      "description": "Per-clip multimodal evidence record (backward-compatible superset of MVP ClipEvidence).",
+      "required": [
+        "clip_id",
+        "media_id",
+        "source_url",
+        "recording_context",
+        "evaluated_model",
+        "authenticity_checks",
+        "observations"
+      ],
+      "properties": {
+        "clip_id": { "type": "string" },
+        "media_id": { "type": "string" },
+        "source_url": { "type": "string", "format": "uri" },
+        "recording_context": {
+          "type": "string",
+          "enum": ["live", "studio", "unclear", "live_club_room", "live_session", "bedroom_raw_take"]
+        },
+        "recording_context_notes": { "type": "string" },
+        "evaluated_model": { "type": "string", "default": "gemini-4-hydrogen" },
+        "interaction_id": { "type": ["string", "null"] },
+        "authenticity_checks": {
+          "type": "object",
+          "properties": {
+            "suno_udio_spectral_smear_detected": { "type": "boolean" },
+            "embodied_lip_and_breath_sync_verified": { "type": ["boolean", "null"] },
+            "live_lead_vs_playback_verdict": {
+              "type": "string",
+              "enum": ["live_unassisted", "live_with_light_backing", "heavy_vocal_backing_track", "suspected_lip_sync", "audio_only_unverified"]
+            },
+            "melodyne_or_autotune_artifacts": {
+              "type": "string",
+              "enum": ["none_natural", "subtle_polish", "heavy_stylistic", "heavy_corrective_masking"]
+            }
+          }
+        },
+        "sandbox_dsp_forensics": {
+          "type": "object",
+          "description": "Computed by Python DSP scripts inside zero-trust antigravity-preview-09-2026 container.",
+          "properties": {
+            "crest_factor_dynamic_range_db": { "type": ["number", "null"] },
+            "clipped_samples_ratio": { "type": ["number", "null"] },
+            "room_chatter_drop_db": { "type": ["number", "null"] },
+            "fundamental_pitch_range_hz": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          }
+        },
+        "observations": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/TimestampedObservation" }
+        }
+      }
+    },
+    "TimestampedObservation": {
+      "type": "object",
+      "required": ["observation_id", "source_url", "play_url", "timestamp", "seconds", "dimension", "musical_choice"],
+      "properties": {
+        "observation_id": { "type": "string" },
+        "source_url": { "type": "string", "format": "uri" },
+        "play_url": { "type": "string", "format": "uri" },
+        "timestamp": { "type": "string", "pattern": "^[0-9]+:[0-5][0-9]$" },
+        "seconds": { "type": "integer", "minimum": 0 },
+        "dimension": {
+          "type": "string",
+          "enum": [
+            "phrasing",
+            "dynamics",
+            "interpretation",
+            "arrangement",
+            "timbre",
+            "intonation_recovery",
+            "lyric_specificity",
+            "crowd_room_hush"
+          ]
+        },
+        "musical_choice": { "type": "string", "minLength": 1 }
+      }
+    },
+    "Stage3ScoutEnrichment": {
+      "type": "object",
+      "description": "Stage 3 (Gold): Sparsity-aware external scout metadata across DSP conversion ratios, comment intent forensics, live hard-ticket history, and representation white-space.",
+      "required": [
+        "enriched_at",
+        "data_footprint_regime",
+        "commercial_telemetry",
+        "audience_comment_forensics",
+        "live_booking_dossier",
+        "representation_and_rights"
+      ],
+      "properties": {
+        "enriched_at": { "type": "string", "format": "date-time" },
+        "freshness_ttl_days": { "type": "integer", "default": 14 },
+        "data_footprint_regime": {
+          "type": "string",
+          "description": "Prevents penalizing unreleased DIY discoveries for having null Spotify metrics.",
+          "enum": [
+            "pre_dsp_underground",
+            "early_dsp_inflection",
+            "regional_touring_act",
+            "established_streaming"
+          ]
+        },
+        "commercial_telemetry": {
+          "type": "object",
+          "properties": {
+            "is_on_dsps": { "type": "boolean" },
+            "released_tracks_count": { "type": "integer", "minimum": 0 },
+            "isrcs": { "type": "array", "items": { "type": "string" } },
+            "spotify_monthly_listeners": { "type": ["integer", "null"] },
+            "spotify_followers": { "type": ["integer", "null"] },
+            "follower_to_listener_ratio_pct": {
+              "type": ["number", "null"],
+              "description": "<1.5% = passive playlisting; 5-12%+ = active cult fanbase."
+            },
+            "save_rate_pct": {
+              "type": ["number", "null"],
+              "description": "3-5% healthy baseline; 6-10%+ high-conviction A&R signal."
+            },
+            "skip_rate_under_30s_pct": { "type": ["number", "null"] },
+            "completion_rate_pct": { "type": ["number", "null"] },
+            "streams_per_listener_28d": { "type": ["number", "null"] },
+            "spotify_popularity_index_0_100": { "type": ["integer", "null"] },
+            "top_track_stream_concentration_pct": { "type": ["number", "null"] },
+            "third_party_playlist_fraud_risk_0_1": { "type": ["number", "null"] },
+            "geographic_trigger_cities": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["city", "listeners"],
+                "properties": {
+                  "city": { "type": "string" },
+                  "listeners": { "type": "integer" },
+                  "share_pct": { "type": "number" },
+                  "growth_7d_pct": { "type": ["number", "null"] }
+                }
+              }
+            },
+            "d2c_and_high_intent_pull": {
+              "type": "object",
+              "properties": {
+                "bandcamp_paying_supporters": { "type": ["integer", "null"] },
+                "laylo_or_sms_rsvp_subscribers": { "type": ["integer", "null"] },
+                "tiktok_ugc_sound_creations": { "type": ["integer", "null"] },
+                "shazam_7d_velocity_pct": { "type": ["number", "null"] }
+              }
+            }
+          }
+        },
+        "audience_comment_forensics": {
+          "type": "object",
+          "properties": {
+            "posts_sampled": { "type": "integer", "minimum": 0 },
+            "comments_analyzed": { "type": "integer", "minimum": 0 },
+            "intent_distribution_pct": {
+              "type": "object",
+              "properties": {
+                "release_or_streaming_pull_pct": { "type": "number" },
+                "live_show_or_city_demand_pct": { "type": "number" },
+                "emotional_identification_pct": { "type": "number" },
+                "peer_musician_or_industry_cosign_pct": { "type": "number" },
+                "meme_or_ironic_noise_pct": { "type": "number" },
+                "bot_or_engagement_pod_spam_pct": { "type": "number" }
+              }
+            },
+            "verified_peer_cosign_receipts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["author_handle", "credibility_note", "snippet"],
+                "properties": {
+                  "author_handle": { "type": "string" },
+                  "credibility_note": { "type": "string" },
+                  "snippet": { "type": "string" },
+                  "source_url": { "type": ["string", "null"] }
+                }
+              }
+            }
+          }
+        },
+        "live_booking_dossier": {
+          "type": "object",
+          "properties": {
+            "highest_venue_tier_played": {
+              "type": "string",
+              "enum": [
+                "unverified_live_history",
+                "tier_0_listening_diy_40_100",
+                "tier_1_grassroots_club_120_200",
+                "tier_2_tastemaker_room_250_300",
+                "tier_3_milestone_club_500_700",
+                "tier_4_theater_1000_plus"
+              ]
+            },
+            "hard_ticket_shows_count": { "type": "integer", "minimum": 0 },
+            "soft_ticket_shows_count": { "type": "integer", "minimum": 0 },
+            "verified_show_history": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["date", "venue", "city", "billing_position"],
+                "properties": {
+                  "date": { "type": "string" },
+                  "venue": { "type": "string" },
+                  "city": { "type": "string" },
+                  "venue_cap": { "type": ["integer", "null"] },
+                  "billing_position": {
+                    "type": "string",
+                    "enum": ["headline", "co_headline", "direct_support", "opener", "showcase_slot"]
+                  },
+                  "ticket_type": { "type": "string", "enum": ["hard_ticket", "soft_ticket", "free_or_rsvp"] },
+                  "estimated_attendance": { "type": ["integer", "null"] }
+                }
+              }
+            },
+            "standalone_home_market_hard_ticket_draw": {
+              "type": "object",
+              "properties": {
+                "low": { "type": "integer" },
+                "mid": { "type": "integer" },
+                "high": { "type": "integer" }
+              }
+            },
+            "active_radius_clauses": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "anchor_event": { "type": "string" },
+                  "miles": { "type": "integer" },
+                  "lockout_until_date": { "type": "string" }
+                }
+              }
+            },
+            "deal_and_touring_economics": {
+              "type": "object",
+              "properties": {
+                "typical_deal_structure": {
+                  "type": "string",
+                  "enum": ["showcase_honorarium", "door_split", "flat_guarantee", "versus_nbor", "plus_deal", "unknown"]
+                },
+                "fair_slot_fee_range_usd": {
+                  "type": "array",
+                  "items": { "type": "number" },
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "touring_party_size": { "type": ["integer", "null"] },
+                "break_even_daily_nut_usd": { "type": ["number", "null"] },
+                "backline_shareable": { "type": ["boolean", "null"] },
+                "set_lengths_ready_minutes": { "type": "array", "items": { "type": "integer" } }
+              }
+            }
+          }
+        },
+        "representation_and_rights": {
+          "type": "object",
+          "properties": {
+            "management": { "$ref": "#/$defs/RepSlot" },
+            "booking_agents": {
+              "type": "array",
+              "items": {
+                "allOf": [
+                  { "$ref": "#/$defs/RepSlot" },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "territory": {
+                        "type": "string",
+                        "enum": ["north_america", "uk_eu", "row", "worldwide"]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            "record_label": { "$ref": "#/$defs/RepSlot" },
+            "distributor": { "type": ["string", "null"] },
+            "publisher": { "$ref": "#/$defs/RepSlot" },
+            "pro_affiliation": {
+              "type": "string",
+              "enum": ["ASCAP", "BMI", "SESAC", "GMR", "PRS", "SOCAN", "none_found", "unknown"]
+            },
+            "ipi_cae_numbers": { "type": "array", "items": { "type": "string" } },
+            "one_stop_sync_readiness": {
+              "type": "object",
+              "properties": {
+                "is_likely_100pct_one_stop": { "type": ["boolean", "null"] },
+                "contains_uncleared_samples": { "type": ["boolean", "null"] },
+                "instrumentals_stems_ready": { "type": ["boolean", "null"] },
+                "rationale": { "type": "string" }
+              }
+            },
+            "collaborator_credits_graph": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["collaborator_name", "role"],
+                "properties": {
+                  "collaborator_name": { "type": "string" },
+                  "role": { "type": "string" },
+                  "notable_credits": { "type": "string" }
+                }
+              }
+            },
+            "whitespace_opportunity_flags": {
+              "type": "array",
+              "description": "Deal-flow arbitrage signals (e.g., strong local draw with zero NA booking agent).",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "UNAGENTED_NA_WITH_LIVE_DRAW",
+                  "UNSIGNED_MASTER_HIGH_SAVE_RATE",
+                  "UNADMINISTERED_PUBLISHING_GROWTH",
+                  "ONE_STOP_SYNC_READY_CATALOG",
+                  "RISING_SESSION_BGV_SOLO_LAUNCH"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "RepSlot": {
+      "type": "object",
+      "required": ["status", "confidence_0_1"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["unrepresented", "represented", "self_managed_or_released", "unknown"]
+        },
+        "organization": { "type": ["string", "null"] },
+        "representative_name": { "type": ["string", "null"] },
+        "confidence_0_1": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "Stage4TasteAssessment": {
+      "type": "object",
+      "description": "Stage 4 (Taste & Standout Pipeline): Orthogonal Managed Agent critics + calibrated Decisions API gate + disagreement-preserving Producer/Partner synthesis evaluated against a specific TasteMandate.",
+      "required": [
+        "assessment_id",
+        "mandate_id",
+        "evaluated_at",
+        "independent_critic_ballots",
+        "disagreement_and_star_telemetry",
+        "agency_action_packet"
+      ],
+      "properties": {
+        "assessment_id": { "type": "string" },
+        "mandate_id": { "type": "string" },
+        "mandate_prompt": { "type": "string" },
+        "evaluated_at": { "type": "string", "format": "date-time" },
+        "calibrated_gate_decision": {
+          "type": "object",
+          "description": "DSPy-compiled rubric executed on gemini-decision-1 at 0 output tokens.",
+          "properties": {
+            "model": { "type": "string", "default": "gemini-decision-1" },
+            "compiled_rubric_version": { "type": "string" },
+            "gate_choice": {
+              "type": "string",
+              "enum": ["shortlist_contender", "request_targeted_enrichment", "pass"]
+            },
+            "calibrated_probability_0_1": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "independent_critic_ballots": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "required": [
+              "agent_id",
+              "critic_role",
+              "blind_to_commercial_metrics",
+              "score_0_10",
+              "conviction_tier",
+              "thesis_statement",
+              "evidence_refs"
+            ],
+            "properties": {
+              "agent_id": { "type": "string" },
+              "critic_role": {
+                "type": "string",
+                "enum": [
+                  "critic_vocal_artistry",
+                  "critic_cultural_whitespace",
+                  "validator_live_booking",
+                  "critic_red_team_skeptic"
+                ]
+              },
+              "blind_to_commercial_metrics": { "type": "boolean" },
+              "score_0_10": { "type": "number", "minimum": 0, "maximum": 10 },
+              "conviction_tier": {
+                "type": "string",
+                "enum": ["table_pounding_yes", "strong_yes", "cautious_watch", "pass"]
+              },
+              "thesis_statement": { "type": "string" },
+              "evidence_refs": {
+                "type": "array",
+                "description": "Exact clip_id@MM:SS timestamps or Stage 3 receipt pointers.",
+                "items": { "type": "string" }
+              },
+              "open_questions": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          }
+        },
+        "disagreement_and_star_telemetry": {
+          "type": "object",
+          "required": [
+            "intrinsic_artistry_score",
+            "practical_fit_score",
+            "peak_champion_score",
+            "critic_score_std_dev",
+            "archetype_classification",
+            "preserved_dissent_summary"
+          ],
+          "properties": {
+            "intrinsic_artistry_score": { "type": "number", "minimum": 0, "maximum": 10 },
+            "practical_fit_score": { "type": "number", "minimum": 0, "maximum": 10 },
+            "peak_champion_score": { "type": "number", "minimum": 0, "maximum": 10 },
+            "critic_score_std_dev": { "type": "number", "minimum": 0 },
+            "archetype_classification": {
+              "type": "string",
+              "enum": [
+                "PRE_VIRAL_SCENE_STAR",
+                "UNAGENTED_LIVE_BREAKOUT",
+                "POLARIZING_HIGH_CEILING_AUTEUR",
+                "NEEDS_LIVE_PROOF_SECOND_TAKE",
+                "STUDIO_CATFISH_RISK",
+                "VIRAL_MEME_MIRAGE",
+                "CONSENSUS_MEDIOCRITY_PASS"
+              ]
+            },
+            "preserved_dissent_summary": { "type": "string" }
+          }
+        },
+        "agency_action_packet": {
+          "type": "object",
+          "required": ["decision_status", "autonomous_outreach_sent", "recommended_action"],
+          "properties": {
+            "decision_status": {
+              "type": "string",
+              "const": "pending_human_review"
+            },
+            "autonomous_outreach_sent": {
+              "type": "boolean",
+              "const": false
+            },
+            "recommended_action": {
+              "type": "string",
+              "enum": [
+                "paid_showcase_callback",
+                "agency_roster_intro",
+                "one_stop_sync_intake",
+                "dispatch_enrichment_loop",
+                "pass"
+              ]
+            },
+            "play_first_url": { "type": ["string", "null"], "format": "uri" },
+            "play_first_timestamp": { "type": ["string", "null"] },
+            "bill_or_roster_pairing_notes": { "type": ["string", "null"] },
+            "draft_invitation": {
+              "type": ["object", "null"],
+              "properties": {
+                "subject": { "type": "string" },
+                "offered_guarantee_usd": { "type": ["number", "null"] },
+                "personalized_evidence_hook": { "type": "string" },
+                "open_confirmations_requested": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "EnrichmentTask": {
+      "type": "object",
+      "required": ["task_id", "target_stage", "task_type", "reason", "status"],
+      "properties": {
+        "task_id": { "type": "string" },
+        "target_stage": { "type": "integer", "enum": [1, 2, 3] },
+        "task_type": {
+          "type": "string",
+          "enum": [
+            "FIND_CONTRASTING_LIVE_CLIP",
+            "VERIFY_PERFORMER_ATTRIBUTION",
+            "AUDIT_TERRITORIAL_REPRESENTATION",
+            "CHECK_RADIUS_AND_AGE_ELIGIBILITY",
+            "REFRESH_DSP_AND_COMMENT_FORENSICS"
+          ]
+        },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["queued", "running", "completed", "unresolvable"] }
+      }
+    }
+  }
+}

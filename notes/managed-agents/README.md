@@ -5,6 +5,10 @@ This section holds **how-to engineering knowledge** for building, testing, mount
 > Looking for the actual deployable agents we maintain for Simon? See **[agents/](../../agents/README.md)**.
 
 ## Playbooks
+- **[talent-agency-pipeline.md](./talent-agency-pipeline.md)** — **4-Stage Agentic Talent Agency Pipeline & Data Architecture**:
+  - Plane A (Progressive Talent Dossier Enrichment: Stage 1 Basic Profile → Stage 2 Metric-Blind Media Digestion → Stage 3 Sparsity-Aware Scout Metadata) vs. Plane B (Stage 4 Mandate-Driven "Taste" & Standout Pipeline)
+  - Managed Agent fleet mapping (`gemini-4-hydrogen`, `gemini-4-carbon`, `deep-research-preview-04-2026`, `DSPy + gemini-decision-1`) & epistemic blinding rules
+  - Database upgrade path from MVP `simon/store.py` (v0) to the persistent Canonical Talent Graph (v1)
 - **[playbook.md](./playbook.md)** — Complete architecture & API reference:
   - `/v1beta/agents` persistent blueprints (`gemini-3.8-flash` / `gemini-4-argon` / `deep-research-preview-04-2026`)
   - "Agent as a Repo" (`base_environment.sources` mounting GitHub repos + inline `.agents/AGENTS.md` & `.agents/skills/`)
