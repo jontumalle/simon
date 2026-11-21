@@ -457,17 +457,20 @@ def run_live_scout(
     clips: List[ClipEvidence] = []
     eval_interaction_ids: List[str] = []
 
-    def _eval_one(idx_and_lead: Tuple[int, ArtistLead]) -> ClipEvidence:
+    def _eval_one(idx_and_lead: Tuple[int, ArtistLead]) -> Optional[ClipEvidence]:
         idx, lead = idx_and_lead
         primary_vid = lead.videos[0] if lead.videos else {"url": lead.source_links[0], "title": "", "channel": ""}
         clip_id = f"clip_{idx:02d}"
-        ev = gm.evaluate_youtube_clip(
-            taste_brief=brief.prompt,
-            stage_name=lead.stage_name,
-            video_url=primary_vid["url"],
-            title=primary_vid.get("title", ""),
-            channel=primary_vid.get("channel", ""),
-        )
+        try:
+            ev = gm.evaluate_youtube_clip(
+                taste_brief=brief.prompt,
+                stage_name=lead.stage_name,
+                video_url=primary_vid["url"],
+                title=primary_vid.get("title", ""),
+                channel=primary_vid.get("channel", ""),
+            )
+        except RuntimeError:
+            return None
         ev_data = ev.get("data", {})
         obs = _build_observations(clip_id, primary_vid["url"], ev_data.get("observations", []))
         return ClipEvidence(
@@ -487,9 +490,13 @@ def run_live_scout(
 
     with ThreadPoolExecutor(max_workers=min(3, len(leads))) as pool:
         for clip in pool.map(_eval_one, enumerate(leads, start=1)):
-            clips.append(clip)
-            if clip.interaction_id:
-                eval_interaction_ids.append(clip.interaction_id)
+            if clip is not None:
+                clips.append(clip)
+                if clip.interaction_id:
+                    eval_interaction_ids.append(clip.interaction_id)
+
+    if not clips:
+        raise RuntimeError("Gemini 4 Hydrogen could not evaluate any of the discovered public YouTube clips.")
 
     trace.append(
         TraceStep(

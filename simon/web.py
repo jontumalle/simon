@@ -234,7 +234,10 @@ INDEX_HTML = """<!DOCTYPE html>
           </label>
           <input type="password" id="apiKeyInput" class="key-input" placeholder="Optional GEMINI_API_KEY override…" />
         </div>
-        <button id="scoutBtn" class="run-btn" type="button">Scout Singers &amp; Build Shortlist</button>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button id="demoBtn" class="preset-btn" type="button" style="padding:10px 14px; font-weight:600;">Load Instant Demo</button>
+          <button id="scoutBtn" class="run-btn" type="button">Scout Singers &amp; Build Shortlist</button>
+        </div>
       </div>
     </section>
 
@@ -509,7 +512,23 @@ INDEX_HTML = """<!DOCTYPE html>
         liveToggle.checked = false;
       }
 
-      // Load initial verified demo run immediately so the page is populated on open
+      // If SQLite already has a saved run (e.g., a real live run), load the newest one first!
+      const runsRes = await fetch('/api/runs');
+      if (runsRes.ok) {
+        const runsData = await runsRes.json();
+        if (runsData.runs && runsData.runs.length > 0) {
+          const latestId = runsData.runs[0].run_id;
+          const latestRes = await fetch('/api/runs?id=' + encodeURIComponent(latestId));
+          if (latestRes.ok) {
+            renderRun(await latestRes.json());
+            await refreshHistory();
+            historySelect.value = latestId;
+            return;
+          }
+        }
+      }
+
+      // Otherwise seed with the verified public YouTube demo run
       const demoRes = await fetch('/api/scout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -532,6 +551,20 @@ INDEX_HTML = """<!DOCTYPE html>
       const res = await fetch('/api/runs?id=' + encodeURIComponent(id));
       if (res.ok) {
         renderRun(await res.json());
+      }
+    });
+
+    document.getElementById('demoBtn').addEventListener('click', async () => {
+      setBanner('Loading verified public YouTube demo fixture…', 'info');
+      const res = await fetch('/api/scout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brief: briefInput.value, live: false })
+      });
+      if (res.ok) {
+        setBanner('', 'info');
+        renderRun(await res.json());
+        await refreshHistory();
       }
     });
 
