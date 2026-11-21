@@ -253,7 +253,7 @@ def render_screening_page() -> str:
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Simon · 7. Stage 3 Screening Deck</title>
+  <title>Simon · 7. Screening Deck</title>
   <style>{_SHARED_CSS}{_SCREENING_EXTRA_CSS}</style>
 </head>
 <body>
@@ -261,7 +261,7 @@ def render_screening_page() -> str:
     <header>
       <div class="brand">
         <h1>Simon <span class="pill purple">7. Screening Deck</span></h1>
-        <p>Review one artist at a time with <strong>Advocate vs. Skeptic</strong> debate, 5-skill scores, <strong>gemini-4-neon</strong> Judge verdict, and your calibration vote.</p>
+        <p>Review one artist at a time with <strong>Advocate vs. Skeptic</strong> notes, 5-point scores, a Judge verdict, and your vote.</p>
       </div>
       {top_nav}
     </header>
@@ -275,7 +275,7 @@ def render_screening_page() -> str:
           <span id="deckCounterBadge" class="pill purple" style="font-size:0.84rem;">Artist 0 of 0</span>
           <div id="deckFilterBar" class="filter-pills" role="tablist" aria-label="Filter Screening Deck">
             <button type="button" class="filter-pill active" data-filter="all">All <span class="filter-count" id="countAll">0</span></button>
-            <button type="button" class="filter-pill" data-filter="unlabeled">Unlabeled <span class="filter-count" id="countUnlabeled">0</span></button>
+            <button type="button" class="filter-pill" data-filter="unlabeled">Needs Review <span class="filter-count" id="countUnlabeled">0</span></button>
             <button type="button" class="filter-pill" data-filter="ELEVATE">Elevate <span class="filter-count" id="countElevate">0</span></button>
             <button type="button" class="filter-pill" data-filter="WATCH">Watch <span class="filter-count" id="countWatch">0</span></button>
             <button type="button" class="filter-pill" data-filter="PASS">Pass <span class="filter-count" id="countPass">0</span></button>
@@ -283,32 +283,32 @@ def render_screening_page() -> str:
         </div>
 
         <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
-          <span id="activeModelBadge" class="pill blue" title="Active compiled gemini-decision-1 judging policy">
-            Policy: loading…
+          <span id="activeModelBadge" class="pill blue" title="Active taste profile settings">
+            Taste Profile: loading…
           </span>
           <a href="/taste-profile" class="btn dspy" style="padding:5px 11px; font-size:0.78rem;">View Our Taste Profile →</a>
         </div>
       </div>
 
       <div class="culmination-flow-strip">
-        <span><strong>The Culmination Loop:</strong> Stage 2 Dossier → Neon Advocate/Skeptic/Judge → Human Override → DSPy Compile → <strong>Instant Calibrated Taste Engine</strong></span>
+        <span><strong>How It Works:</strong> Artist Dossier → Advocate, Skeptic &amp; Judge → Your Verdict → <strong>Updated Taste Profile</strong></span>
         <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
-          <span class="pill purple">gemini-decision-1 · 0 output tokens</span>
-          <a href="/taste-profile" style="font-weight:700; color:var(--purple); font-size:0.79rem;">Inspect Criteria &amp; Overrides →</a>
+          <span class="pill purple">Instant Taste Scoring</span>
+          <a href="/taste-profile" style="font-weight:700; color:var(--purple); font-size:0.79rem;">View Criteria &amp; Overrides →</a>
         </div>
       </div>
 
       <div class="control-row-bottom">
-        <div class="mono">Single-card executive review · Use buttons or <code>[</code> / <code>]</code> (or Left/Right arrows) to step candidates.</div>
+        <div class="mono">One artist at a time · Use buttons, <code>[</code> / <code>]</code>, or arrow keys to move.</div>
         <div class="fleet-actions">
           <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.83rem; cursor:pointer; color:var(--muted);">
             <input type="checkbox" id="liveScreeningToggle" />
-            <span>Live Fleet</span>
+            <span>Live Run</span>
           </label>
-          <button id="runScreeningBtn" class="btn neon" type="button">Run Neon Screening Fleet</button>
-          <button id="trainModelBtn" class="btn dspy" type="button">Compile Judging Model (DSPy)</button>
-          <button id="runTasteEngineBtn" class="btn taste" type="button">Run Taste Engine (gemini-decision-1 · 0 tok)</button>
-          <button id="runEvalsBtn" class="btn" type="button">Run Rubric Evals</button>
+          <button id="runScreeningBtn" class="btn neon" type="button">Run Screening</button>
+          <button id="trainModelBtn" class="btn dspy" type="button">Update Taste Profile</button>
+          <button id="runTasteEngineBtn" class="btn taste" type="button">Score with Taste Profile</button>
+          <button id="runEvalsBtn" class="btn" type="button">Run Quality Checks</button>
         </div>
       </div>
     </section>
@@ -322,34 +322,34 @@ def render_screening_page() -> str:
 
     <!-- Focused Single-Artist Profile Card (1 Person on Screen at a Time) -->
     <article id="profileCardContainer" class="profile-deck-card" aria-live="polite">
-      <div class="mono">Loading Stage 3 screening packets…</div>
+      <div class="mono">Loading artist profiles…</div>
     </article>
 
-    <!-- Collapsible Rubric Eval Results & Active gemini-decision-1 Policy Inspector -->
+    <!-- Collapsible Quality Checks & Active Taste Criteria -->
     <details id="policyInspectorDrawer" class="card inspector-drawer">
       <summary>
-        <span>▸ Rubric Eval Results &amp; Active <code>gemini-decision-1</code> Policy Inspector</span>
+        <span>▸ Quality Checks &amp; Active Taste Criteria</span>
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-          <span id="evalSummaryBadge" class="pill amber">3-Layer Evals: Not run yet</span>
-          <span id="policySummaryBadge" class="pill purple">gemini-decision-1: baseline</span>
+          <span id="evalSummaryBadge" class="pill amber">Quality Checks: Not run</span>
+          <span id="policySummaryBadge" class="pill purple">Taste Profile: Baseline</span>
         </div>
       </summary>
       <div class="inspector-grid">
         <div class="worker-card">
           <div class="section-head" style="margin-bottom:6px;">
-            <h2 style="font-size:0.98rem;">3-Layer Rubric Evaluation Score</h2>
-            <span class="pill ok">Layer 1 · Layer 2 · Layer 3</span>
+            <h2 style="font-size:0.98rem;">Quality Check Summary</h2>
+            <span class="pill ok">Format · Evidence · Alignment</span>
           </div>
-          <div id="evalBreakdownBox" class="mono">Click <strong>Run Rubric Evals</strong> above to verify deterministic schema, adversarial citations, and calibration alignment.</div>
+          <div id="evalBreakdownBox" class="mono">Click <strong>Run Quality Checks</strong> above to check format, evidence citations, and verdict alignment.</div>
           <pre id="evalRawJson" class="json-view" style="display:none;"></pre>
         </div>
 
         <div class="worker-card">
           <div class="section-head" style="margin-bottom:6px;">
-            <h2 style="font-size:0.98rem;">Compiled <code>questions_config</code> Policy</h2>
-            <span class="pill purple">gemini-decision-1</span>
+            <h2 style="font-size:0.98rem;">Active Taste Profile Criteria</h2>
+            <span class="pill purple">Active Profile</span>
           </div>
-          <div id="policyMetaBox" class="mono">Save human verdict labels below and click <strong>Compile Judging Model (DSPy)</strong> to optimize rubric weights and question prompts.</div>
+          <div id="policyMetaBox" class="mono">Save your verdicts below, then click <strong>Update Taste Profile</strong> to refine your criteria.</div>
           <pre id="questionsConfigJson" class="json-view">{{}}</pre>
         </div>
       </div>
@@ -492,6 +492,60 @@ def render_screening_page() -> str:
       return String(conf);
     }}
 
+    function formatLabel(raw, fallback) {{
+      if (raw == null || String(raw).trim() === '') return fallback || '—';
+      const cleaned = String(raw).trim().replace(/^dossier[-_]/i, '').replace(/[_-]+/g, ' ');
+      const acronyms = {{
+        dm: 'DM', ig: 'IG', yt: 'YouTube', nyc: 'NYC', ep: 'EP', lp: 'LP',
+        pr: 'PR', diy: 'DIY', url: 'URL', rnb: 'R&B', uk: 'UK', us: 'US',
+      }};
+      return cleaned.split(/\\s+/).map((word) => {{
+        const lower = word.toLowerCase();
+        if (acronyms[lower]) return acronyms[lower];
+        return lower.charAt(0).toUpperCase() + lower.slice(1);
+      }}).join(' ');
+    }}
+
+    function formatGenre(raw) {{
+      if (raw == null || String(raw).trim() === '') return '';
+      const str = String(raw).trim();
+      if (str.includes('_') || str === str.toLowerCase()) {{
+        return formatLabel(str, str);
+      }}
+      return str;
+    }}
+
+    function formatPlatformLabel(raw) {{
+      const map = {{
+        youtube: 'YouTube',
+        instagram: 'Instagram',
+        tiktok: 'TikTok',
+        soundcloud: 'SoundCloud',
+        spotify: 'Spotify',
+        bandcamp: 'Bandcamp',
+        apple_music: 'Apple Music',
+        linktree: 'Linktree',
+        website: 'Website',
+      }};
+      const key = String(raw || '').trim().toLowerCase();
+      return map[key] || formatLabel(raw, 'Link');
+    }}
+
+    function formatProfileVersion(raw) {{
+      if (!raw) return 'Baseline';
+      const str = String(raw).trim();
+      if (/seed|base/i.test(str)) return 'Baseline';
+      const match = str.match(/v?(\\d+(?:\\.\\d+)?)/i);
+      if (match) return `Profile v${{match[1]}}`;
+      return formatLabel(str, 'Baseline');
+    }}
+
+    function formatVerdict(raw) {{
+      const v = normalizeVerdict(raw);
+      if (!v) return 'Pending';
+      return v.charAt(0) + v.slice(1).toLowerCase();
+    }}
+
     function extractDossierView(pkt) {{
       const ds = (pkt && (pkt.dossier_snapshot || pkt.dossier)) || {{}};
       const idc = ds.identity_and_contact || {{}};
@@ -582,7 +636,7 @@ def render_screening_page() -> str:
         el('deckCounterBadge').textContent = 'Artist 0 of 0';
         el('prevCandidateBtn').disabled = true;
         el('nextCandidateBtn').disabled = true;
-        el('candidateJumpPills').innerHTML = '<span class="mono">No candidates in current filter</span>';
+        el('candidateJumpPills').innerHTML = '<span class="mono">No artists match this filter</span>';
         return;
       }}
       if (currentIndex >= total) currentIndex = total - 1;
@@ -620,8 +674,8 @@ def render_screening_page() -> str:
       const container = el('profileCardContainer');
       if (!filtered.length) {{
         const msg = allPackets.length === 0
-          ? 'No Stage 3 screening packets stored yet. Click "Run Neon Screening Fleet" above to run Advocate, Skeptic, and Neon Judge across your Stage 2 Investigator dossiers.'
-          : `No candidates match filter "${{currentFilter}}". Switch filter pills above to inspect the deck.`;
+          ? 'No screened artists yet. Click "Run Screening" above to review your investigated artists.'
+          : `No artists match "${{currentFilter === 'unlabeled' ? 'Needs Review' : formatLabel(currentFilter)}}". Choose another filter above.`;
         container.innerHTML = `
           <div style="text-align:center; padding:32px 16px;">
             <div style="font-size:1.08rem; font-weight:700; margin-bottom:8px;">Screening Deck Ready</div>
@@ -654,7 +708,7 @@ def render_screening_page() -> str:
       if (d.seedSourceUrl && !queueItems.some((q) => q.url === d.seedSourceUrl)) {{
         queueItems.push({{
           url: d.seedSourceUrl,
-          title: 'Seed Discovery Source',
+          title: 'Discovery Source',
           ytId: extractYouTubeVideoId(d.seedSourceUrl),
         }});
       }}
@@ -674,8 +728,8 @@ def render_screening_page() -> str:
                allowfullscreen></iframe>
            </div>`
         : `<div class="yt-empty-frame">
-             <div>No embeddable YouTube video URL on primary clip.</div>
-             ${{safeUrl(d.seedSourceUrl) ? `<div style="margin-top:8px;"><a href="${{escapeHtml(safeUrl(d.seedSourceUrl))}}" target="_blank" rel="noopener">Open Seed Source Link ↗</a></div>` : ''}}
+             <div>No playable YouTube clip found.</div>
+             ${{safeUrl(d.seedSourceUrl) ? `<div style="margin-top:8px;"><a href="${{escapeHtml(safeUrl(d.seedSourceUrl))}}" target="_blank" rel="noopener">Open Discovery Link ↗</a></div>` : ''}}
            </div>`;
 
       const mediaQueueHtml = queueItems.length
@@ -691,17 +745,17 @@ def render_screening_page() -> str:
                </div>`;
              }}).join('')}}
            </div>`
-        : '<div class="mono" style="margin-top:8px;">No media queue links attached.</div>';
+        : '<div class="mono" style="margin-top:8px;">No media links attached.</div>';
 
       const locationStr = [d.homeNeighborhood, d.homeCity].filter(Boolean).join(', ') || 'Location unverified';
       const genres = [d.primaryGenre].concat(d.subgenres || []).filter(Boolean);
-      const genrePillsHtml = genres.map((g) => `<span class="pill">${{escapeHtml(g)}}</span>`).join('');
+      const genrePillsHtml = genres.map((g) => `<span class="pill">${{escapeHtml(formatGenre(g))}}</span>`).join('');
       const platformLinksHtml = Object.entries(d.platformUrls || {{}})
         .filter(([, url]) => Boolean(safeUrl(url)))
-        .map(([platform, url]) => `<a class="pill blue" href="${{escapeHtml(safeUrl(url))}}" target="_blank" rel="noopener">${{escapeHtml(platform)}} ↗</a>`)
+        .map(([platform, url]) => `<a class="pill blue" href="${{escapeHtml(safeUrl(url))}}" target="_blank" rel="noopener">${{escapeHtml(formatPlatformLabel(platform))}} ↗</a>`)
         .join('');
 
-      // 5 Input-Skill Rubric Scoreboard
+      // 5-Criteria Scoreboard
       const rubricRows = RUBRIC_DIMENSIONS.map((dim) => ({{
         ...dim,
         ...extractRubricEntry(judge, dim),
@@ -717,57 +771,57 @@ def render_screening_page() -> str:
             <div class="rubric-row-top">
               <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                 <strong>${{escapeHtml(r.label)}}</strong>
-                <span class="pill purple">${{escapeHtml(r.skill)}}</span>
+                <span class="pill purple">${{escapeHtml(formatLabel(r.skill))}}</span>
               </div>
               <span class="mono" style="font-weight:800; color:var(--text);">${{escapeHtml(r.score)}} / 2</span>
             </div>
             <div class="meter-track"><div class="meter-fill ${{fillCls}}" style="width:${{pct}}%;"></div></div>
-            <div class="rubric-note">${{escapeHtml(r.note || 'Objective dossier check recorded.')}}</div>
+            <div class="rubric-note">${{escapeHtml(r.note || 'Dossier evidence checked.')}}</div>
           </div>`;
       }}).join('');
 
-      // Adversarial Debate: Advocate vs. Skeptic
+      // Advocate vs. Skeptic Notes
       const prosList = Array.isArray(advocate.pros) ? advocate.pros : [];
       const prosHtml = prosList.length
         ? prosList.map((item) => {{
-            const title = (item && (item.title || item.point || item.claim)) || 'Supporting signal';
+            const title = (item && (item.title || item.point || item.claim)) || 'Strength';
             const evidence = (item && (item.evidence || item.detail || item.citation)) || '';
             const skill = (item && (item.skill || item.input_skill || item.tag)) || '';
             return `<li class="debate-item">
               <div style="display:flex; justify-content:space-between; gap:8px; align-items:center; flex-wrap:wrap;">
                 <strong>${{escapeHtml(title)}}</strong>
-                ${{skill ? `<span class="pill ok">[${{escapeHtml(skill)}}]</span>` : ''}}
+                ${{skill ? `<span class="pill ok">${{escapeHtml(formatLabel(skill))}}</span>` : ''}}
               </div>
               ${{evidence ? `<div style="color:var(--muted); margin-top:4px;">${{escapeHtml(evidence)}}</div>` : ''}}
             </li>`;
           }}).join('')
-        : '<li class="debate-item mono">No Advocate pros recorded.</li>';
+        : '<li class="debate-item mono">No strengths noted yet.</li>';
 
       const consList = Array.isArray(skeptic.cons) ? skeptic.cons : [];
       const consHtml = consList.length
         ? consList.map((item) => {{
-            const title = (item && (item.title || item.point || item.risk)) || 'Risk or evidence gap';
+            const title = (item && (item.title || item.point || item.risk)) || 'Risk or gap';
             const evidence = (item && (item.evidence || item.detail || item.citation)) || '';
             const skill = (item && (item.skill || item.input_skill || item.tag)) || '';
             return `<li class="debate-item">
               <div style="display:flex; justify-content:space-between; gap:8px; align-items:center; flex-wrap:wrap;">
                 <strong>${{escapeHtml(title)}}</strong>
-                ${{skill ? `<span class="pill warn">[${{escapeHtml(skill)}}]</span>` : ''}}
+                ${{skill ? `<span class="pill warn">${{escapeHtml(formatLabel(skill))}}</span>` : ''}}
               </div>
               ${{evidence ? `<div style="color:var(--muted); margin-top:4px;">${{escapeHtml(evidence)}}</div>` : ''}}
             </li>`;
           }}).join('')
-        : '<li class="debate-item mono">No Skeptic cons recorded.</li>';
+        : '<li class="debate-item mono">No concerns noted yet.</li>';
 
       const missingFlags = Array.isArray(skeptic.missing_evidence_flags) ? skeptic.missing_evidence_flags : [];
       const missingFlagsHtml = missingFlags.length
         ? missingFlags.map((flag) => {{
             const label = typeof flag === 'string' ? flag : (flag.field || flag.flag || JSON.stringify(flag));
-            return `<span class="pill warn">${{escapeHtml(label)}}</span>`;
+            return `<span class="pill warn">${{escapeHtml(formatLabel(label))}}</span>`;
           }}).join(' ')
         : '<span class="mono">None flagged</span>';
 
-      // Judge Synthesis + Taste Engine + HITL Footer
+      // Judge Verdict + Taste Profile Score + Human Review Footer
       const judgeVerdict = normalizeVerdict(judge.verdict) || 'WATCH';
       const isOverride = selectedVerdict !== judgeVerdict;
       const existingReason = (humanReview && (humanReview.reason || humanReview.notes)) || '';
@@ -784,39 +838,35 @@ def render_screening_page() -> str:
       const compFit = (tasteScore && tasteScore.composite_fit && tasteScore.composite_fit.score != null)
         ? `${{Number(tasteScore.composite_fit.score).toFixed(2)}} / 4`
         : '—';
-      const tasteOutTok = (tasteScore && tasteScore.usage && tasteScore.usage.output_tokens != null)
-        ? tasteScore.usage.output_tokens
-        : 0;
       const tasteHtml = tasteScore
         ? `<div class="taste-engine-panel">
              <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px;">
                <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
-                 <strong style="font-size:0.9rem;">Calibrated Taste Engine (<code>gemini-decision-1</code>)</strong>
+                 <strong style="font-size:0.9rem;">Taste Profile Match</strong>
                  <span class="verdict-badge ${{escapeHtml(tasteVerdict)}}">${{escapeHtml(tasteVerdict)}}</span>
-                 <span class="pill purple">P(elevate): ${{escapeHtml(pElev)}}</span>
+                 <span class="pill purple">Elevate Likelihood: ${{escapeHtml(pElev)}}</span>
                  <span class="pill blue">Confidence: ${{escapeHtml(formatConfidence(tasteScore.confidence))}}</span>
-                 <span class="pill ok">${{escapeHtml(String(tasteOutTok))}} output tokens</span>
-                 <span class="pill">${{escapeHtml(tasteScore.policy_id || 'policy_v1')}}</span>
+                 <span class="pill">${{escapeHtml(formatProfileVersion(tasteScore.policy_id))}}</span>
                </div>
                <button type="button" id="cardTasteEngineBtn" class="btn taste" data-lead-id="${{escapeHtml(leadId)}}">
-                 Re-run Taste Engine (gemini-decision-1 · 0 tok)
+                 Re-score with Taste Profile
                </button>
              </div>
              <div class="prob-grid">
-               <div class="prob-cell"><div class="reach-label">P(elevate)</div><div class="reach-val">${{escapeHtml(pElev)}}</div></div>
-               <div class="prob-cell"><div class="reach-label">P(watch) · P(pass)</div><div class="reach-val">${{escapeHtml(pWatch)}} · ${{escapeHtml(pPass)}}</div></div>
-               <div class="prob-cell"><div class="reach-label">Live Signable (noul)</div><div class="reach-val">${{escapeHtml(pSignable)}}</div></div>
-               <div class="prob-cell"><div class="reach-label">Composite Fit</div><div class="reach-val">${{escapeHtml(compFit)}}</div></div>
+               <div class="prob-cell"><div class="reach-label">Elevate Likelihood</div><div class="reach-val">${{escapeHtml(pElev)}}</div></div>
+               <div class="prob-cell"><div class="reach-label">Watch · Pass Likelihood</div><div class="reach-val">${{escapeHtml(pWatch)}} · ${{escapeHtml(pPass)}}</div></div>
+               <div class="prob-cell"><div class="reach-label">Live Readiness</div><div class="reach-val">${{escapeHtml(pSignable)}}</div></div>
+               <div class="prob-cell"><div class="reach-label">Overall Fit</div><div class="reach-val">${{escapeHtml(compFit)}}</div></div>
              </div>
            </div>`
         : `<div class="taste-engine-panel">
              <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px;">
                <div>
-                 <strong style="font-size:0.9rem;">Culmination Point · Calibrated Taste Engine (<code>gemini-decision-1</code>)</strong>
-                 <div class="mono" style="margin-top:3px;">Evaluate this dossier against the compiled DSPy policy in one pass with calibrated probabilities and 0 output tokens.</div>
+                 <strong style="font-size:0.9rem;">Taste Profile Score</strong>
+                 <div class="mono" style="margin-top:3px;">Score this artist against your active taste profile criteria.</div>
                </div>
                <button type="button" id="cardTasteEngineBtn" class="btn taste" data-lead-id="${{escapeHtml(leadId)}}">
-                 Run Taste Engine (gemini-decision-1 · 0 tok)
+                 Score with Taste Profile
                </button>
              </div>
            </div>`;
@@ -833,14 +883,14 @@ def render_screening_page() -> str:
                 </h2>
                 ${{d.aliases.length ? `<div class="hero-aliases">Aliases: ${{escapeHtml(d.aliases.join(', '))}}</div>` : ''}}
               </div>
-              <span class="mono">lead_id: ${{escapeHtml(leadId || '—')}}</span>
+              ${{leadId ? `<span class="mono" style="opacity:0.7;">Ref: ${{escapeHtml(leadId)}}</span>` : ''}}
             </div>
 
             <div class="hero-badges">
-              <span class="pill ok">${{escapeHtml(d.projectType)}}</span>
+              <span class="pill ok">${{escapeHtml(formatLabel(d.projectType, 'Artist'))}}</span>
               <span class="pill">${{escapeHtml(locationStr)}}</span>
-              <span class="pill blue">regime: ${{escapeHtml(d.footprintRegime)}}</span>
-              <span class="pill ${{d.contactRouteType !== 'none' ? 'ok' : 'warn'}}">contact: ${{escapeHtml(d.contactRouteType)}}</span>
+              <span class="pill blue">Stage: ${{escapeHtml(formatLabel(d.footprintRegime, 'Unknown'))}}</span>
+              <span class="pill ${{d.contactRouteType !== 'none' ? 'ok' : 'warn'}}">Contact: ${{escapeHtml(formatLabel(d.contactRouteType, 'None'))}}</span>
               ${{genrePillsHtml}}
             </div>
 
@@ -848,7 +898,7 @@ def render_screening_page() -> str:
 
             <div class="reach-grid">
               <div class="reach-cell">
-                <div class="reach-label">YouTube Subs</div>
+                <div class="reach-label">YouTube Subscribers</div>
                 <div class="reach-val">${{escapeHtml(formatNumber(d.ytSubs))}}</div>
               </div>
               <div class="reach-cell">
@@ -860,13 +910,13 @@ def render_screening_page() -> str:
                 <div class="reach-val">${{d.viewSharePct != null ? escapeHtml(String(d.viewSharePct)) + '%' : '—'}}</div>
               </div>
               <div class="reach-cell">
-                <div class="reach-label">Highest Venue Cap</div>
+                <div class="reach-label">Largest Venue</div>
                 <div class="reach-val">${{escapeHtml(formatNumber(d.highestCap))}}</div>
               </div>
             </div>
 
             <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
-              ${{platformLinksHtml || '<span class="mono">No external platform URLs recorded.</span>'}}
+              ${{platformLinksHtml || '<span class="mono">No platform links found.</span>'}}
             </div>
           </div>
 
@@ -876,71 +926,71 @@ def render_screening_page() -> str:
           </div>
         </div>
 
-        <!-- 2. 5 Input-Skill Rubric Scoreboard -->
-        <section class="rubric-board" aria-label="5 Input-Skill Rubric Scoreboard">
+        <!-- 2. 5-Criteria Scoreboard -->
+        <section class="rubric-board" aria-label="5-Criteria Scoreboard">
           <div class="section-head" style="margin-bottom:4px;">
-            <h3 style="margin:0; font-size:1.04rem;">5 Input-Skill Rubric Scoreboard (0–2 each)</h3>
+            <h3 style="margin:0; font-size:1.04rem;">Artist Scoreboard (0–2 each)</h3>
             <span class="pill purple" style="font-size:0.86rem; font-weight:800;">${{escapeHtml(totalScore)}} / 10 Total</span>
           </div>
           <div class="rubric-rows">${{rubricHtml}}</div>
         </section>
 
-        <!-- 3. Side-by-Side Adversarial Debate Grid -->
-        <section class="debate-grid" aria-label="Adversarial Debate">
+        <!-- 3. Side-by-Side Debate Grid -->
+        <section class="debate-grid" aria-label="Advocate and Skeptic Notes">
           <div class="debate-col advocate">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
               <strong style="color:var(--teal); font-size:0.95rem;">Talent Advocate · Pros</strong>
-              <span class="pill ok">simon-screen-advocate</span>
+              <span class="pill ok">Advocate</span>
             </div>
-            <div class="debate-headline">${{escapeHtml(advocate.headline || 'Case for elevating candidate')}}</div>
+            <div class="debate-headline">${{escapeHtml(advocate.headline || 'Case to elevate this artist')}}</div>
             <ul class="debate-list">${{prosHtml}}</ul>
             <div class="standout-hook-box">
-              <strong>Standout Hook:</strong> ${{escapeHtml(advocate.standout_hook || 'Distinct live vocal identity in early discovery window.')}}
+              <strong>Standout Hook:</strong> ${{escapeHtml(advocate.standout_hook || 'Distinct live vocal identity in an early discovery window.')}}
             </div>
           </div>
 
           <div class="debate-col skeptic">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-              <strong style="color:var(--warn); font-size:0.95rem;">Talent Skeptic · Cons &amp; Gaps</strong>
-              <span class="pill warn">simon-screen-skeptic</span>
+              <strong style="color:var(--warn); font-size:0.95rem;">Talent Skeptic · Risks &amp; Gaps</strong>
+              <span class="pill warn">Skeptic</span>
             </div>
-            <div class="debate-headline">${{escapeHtml(skeptic.headline || 'Key uncertainties & missing evidence')}}</div>
+            <div class="debate-headline">${{escapeHtml(skeptic.headline || 'Key risks and missing proof')}}</div>
             <ul class="debate-list">${{consHtml}}</ul>
             <div class="missing-flags-box">
-              <div style="font-size:0.74rem; font-weight:700; text-transform:uppercase; color:var(--muted); margin-bottom:6px;">Missing Evidence Flags</div>
+              <div style="font-size:0.74rem; font-weight:700; text-transform:uppercase; color:var(--muted); margin-bottom:6px;">Missing Proof</div>
               <div style="display:flex; gap:6px; flex-wrap:wrap;">${{missingFlagsHtml}}</div>
             </div>
           </div>
         </section>
 
-        <!-- 4. Neon Judge Synthesis + Human-in-the-Loop Calibration Footer -->
+        <!-- 4. Judge Verdict + Your Review Footer -->
         <footer class="judge-footer">
           <div>
             <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px;">
               <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                <span class="pill purple">gemini-4-neon Judge</span>
+                <span class="pill purple">Judge Verdict</span>
                 <span class="verdict-badge ${{escapeHtml(judgeVerdict)}}">${{escapeHtml(judgeVerdict)}}</span>
                 <span class="pill">${{escapeHtml(totalScore)}} / 10</span>
                 <span class="pill blue">Confidence: ${{escapeHtml(formatConfidence(judge.confidence))}}</span>
               </div>
               ${{savedHumanVerdict
-                ? `<span id="savedReviewBadge" class="pill ok">✓ Saved Human Verdict: ${{escapeHtml(savedHumanVerdict)}}</span>`
-                : '<span id="savedReviewBadge" class="pill">Unlabeled · Awaiting human calibration</span>'}}
+                ? `<span id="savedReviewBadge" class="pill ok">✓ Your Verdict: ${{escapeHtml(formatVerdict(savedHumanVerdict))}}</span>`
+                : '<span id="savedReviewBadge" class="pill">Needs your verdict</span>'}}
             </div>
-            <div style="font-size:0.92rem; color:var(--text);">${{escapeHtml(judge.rationale || judge.summary || 'Judge synthesis pending.')}}</div>
+            <div style="font-size:0.92rem; color:var(--text);">${{escapeHtml(judge.rationale || judge.summary || 'Judge summary pending.')}}</div>
           </div>
 
           ${{tasteHtml}}
 
           <div class="hitl-bar">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-              <strong style="font-size:0.88rem;">Human-in-the-Loop Calibration (Trains <code>gemini-decision-1</code> Rubric via DSPy)</strong>
+              <strong style="font-size:0.88rem;">Your Verdict (Updates Your Taste Profile)</strong>
               ${{isOverride
-                ? `<span class="pill amber">Override vs. Judge (${{escapeHtml(judgeVerdict)}} → ${{escapeHtml(selectedVerdict)}})</span>`
-                : '<span class="mono">Matches Judge verdict</span>'}}
+                ? `<span class="pill amber">Override (${{escapeHtml(formatVerdict(judgeVerdict))}} → ${{escapeHtml(formatVerdict(selectedVerdict))}})</span>`
+                : '<span class="mono">Agrees with Judge</span>'}}
             </div>
             <div class="hitl-controls-row">
-              <div class="verdict-btn-group" role="group" aria-label="Human Verdict Choice">
+              <div class="verdict-btn-group" role="group" aria-label="Your Verdict Choice">
                 <button type="button" class="verdict-choice-btn ${{selectedVerdict === 'ELEVATE' ? 'selected' : ''}}" data-verdict="ELEVATE">Elevate</button>
                 <button type="button" class="verdict-choice-btn ${{selectedVerdict === 'WATCH' ? 'selected' : ''}}" data-verdict="WATCH">Watch</button>
                 <button type="button" class="verdict-choice-btn ${{selectedVerdict === 'PASS' ? 'selected' : ''}}" data-verdict="PASS">Pass</button>
@@ -950,18 +1000,18 @@ def render_screening_page() -> str:
                 id="humanReasonInput"
                 class="reason-input"
                 value="${{escapeHtml(existingReason)}}"
-                placeholder="Why? (trains judging rubric — especially on overrides)"
+                placeholder="Why? Share a quick note to refine your taste profile"
               />
               <button type="button" id="saveAndNextBtn" class="btn primary" data-packet-id="${{escapeHtml(packetId)}}" data-lead-id="${{escapeHtml(leadId)}}" data-stage-name="${{escapeHtml(d.stageName)}}">
                 Save &amp; Next →
               </button>
             </div>
             <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; padding-top:8px; border-top:1px solid var(--border); margin-top:4px;">
-              <span class="mono" style="font-size:0.78rem;">Advance candidate to next stage:</span>
+              <span class="mono" style="font-size:0.78rem;">Next steps:</span>
               <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-                <a class="btn" href="/investigate?lead=${{encodeURIComponent(leadId)}}" style="font-size:0.78rem; padding:5px 10px;">← Inspect Dossier</a>
+                <a class="btn" href="/investigate?lead=${{encodeURIComponent(leadId)}}" style="font-size:0.78rem; padding:5px 10px;">← View Dossier</a>
                 <a class="btn" href="/?tab=review&amp;subtab=screened&amp;lead=${{encodeURIComponent(leadId)}}" style="font-size:0.78rem; padding:5px 10px;">Open in Talent Review →</a>
-                <a class="btn primary" href="/?tab=pipeline&amp;phase=4_producer&amp;lead=${{encodeURIComponent(leadId)}}&amp;subject=${{encodeURIComponent(d.stageName)}}" style="font-size:0.78rem; padding:5px 10px;">Draft Callback (Phase 4) →</a>
+                <a class="btn primary" href="/?tab=pipeline&amp;phase=4_producer&amp;lead=${{encodeURIComponent(leadId)}}&amp;subject=${{encodeURIComponent(d.stageName)}}" style="font-size:0.78rem; padding:5px 10px;">Draft Callback →</a>
               </div>
             </div>
           </div>
@@ -1030,7 +1080,7 @@ def render_screening_page() -> str:
           }}),
         }});
         const data = await res.json().catch(() => ({{}}));
-        if (!res.ok) throw new Error(data.error || 'Failed to save human label');
+        if (!res.ok) throw new Error(data.error || 'Could not save your verdict.');
 
         pkt.human_review = data.label || data.human_review || {{
           packet_id: packetId,
@@ -1040,7 +1090,7 @@ def render_screening_page() -> str:
           reason,
           saved_at: new Date().toISOString(),
         }};
-        showBanner(`Saved ${{selectedVerdict}} calibration label for ${{d.stageName}}.`, 'info');
+        showBanner(`Saved ${{formatVerdict(selectedVerdict)}} verdict for ${{d.stageName}}.`, 'info');
 
         const updatedFiltered = getFilteredPackets();
         if (currentFilter === 'unlabeled') {{
@@ -1070,23 +1120,25 @@ def render_screening_page() -> str:
         || payload;
 
       const version = active.policy_id || active.policy_version || active.version || active.model_id || 'v1.0-seed';
+      const profileLabel = formatProfileVersion(version);
       const labelCount = active.human_label_count != null
         ? active.human_label_count
         : (active.training_label_count != null
           ? active.training_label_count
           : (active.label_count != null ? active.label_count : (active.train_count != null ? active.train_count : 0)));
+      const voteWord = Number(labelCount) === 1 ? 'vote' : 'votes';
       const rawAcc = active.val_accuracy != null
         ? active.val_accuracy
         : (active.accuracy != null ? active.accuracy : (active.train_accuracy != null ? active.train_accuracy : active.agreement_rate));
       const accStr = rawAcc != null
-        ? (Number(rawAcc) <= 1 ? `${{Math.round(Number(rawAcc) * 100)}}% acc` : `${{Math.round(Number(rawAcc))}}% acc`)
-        : 'untrained';
+        ? (Number(rawAcc) <= 1 ? `${{Math.round(Number(rawAcc) * 100)}}% match` : `${{Math.round(Number(rawAcc))}}% match`)
+        : 'not trained yet';
 
-      el('activeModelBadge').textContent = `Policy ${{version}} · ${{labelCount}} label(s) · ${{accStr}}`;
-      el('policySummaryBadge').textContent = `gemini-decision-1: ${{version}} (${{accStr}})`;
+      el('activeModelBadge').textContent = `${{profileLabel}} · ${{labelCount}} ${{voteWord}} · ${{accStr}}`;
+      el('policySummaryBadge').textContent = `Taste Profile: ${{profileLabel}} (${{accStr}})`;
 
       const qConfig = active.questions_config || payload.questions_config || active.compiled_policy || active;
-      el('policyMetaBox').textContent = `Active policy ${{version}} · trained on ${{labelCount}} human calibration label(s) · accuracy: ${{accStr}}`;
+      el('policyMetaBox').textContent = `Active ${{profileLabel}} · built from ${{labelCount}} ${{voteWord}} · agreement: ${{accStr}}`;
       el('questionsConfigJson').textContent = JSON.stringify(qConfig, null, 2);
     }}
 
@@ -1098,7 +1150,7 @@ def render_screening_page() -> str:
       const scoreText = overall != null
         ? (Number(overall) <= 1 ? `${{Math.round(Number(overall) * 100)}}%` : String(overall))
         : 'completed';
-      el('evalSummaryBadge').textContent = `3-Layer Evals: ${{scoreText}}`;
+      el('evalSummaryBadge').textContent = `Quality Checks: ${{scoreText}}`;
 
       const layers = payload.layers || payload.layer_scores || {{}};
       const l1 = layers.layer_1 ?? payload.layer_1_score ?? payload.deterministic_score;
@@ -1106,9 +1158,9 @@ def render_screening_page() -> str:
       const l3 = layers.layer_3 ?? payload.layer_3_score ?? payload.judge_alignment_score;
 
       const parts = [`Overall: ${{scoreText}}`];
-      if (l1 != null) parts.push(`L1 Contract: ${{typeof l1 === 'object' ? JSON.stringify(l1) : l1}}`);
-      if (l2 != null) parts.push(`L2 Adversarial Process: ${{typeof l2 === 'object' ? JSON.stringify(l2) : l2}}`);
-      if (l3 != null) parts.push(`L3 Outcome Calibration: ${{typeof l3 === 'object' ? JSON.stringify(l3) : l3}}`);
+      if (l1 != null) parts.push(`Format: ${{typeof l1 === 'object' ? JSON.stringify(l1) : l1}}`);
+      if (l2 != null) parts.push(`Evidence: ${{typeof l2 === 'object' ? JSON.stringify(l2) : l2}}`);
+      if (l3 != null) parts.push(`Alignment: ${{typeof l3 === 'object' ? JSON.stringify(l3) : l3}}`);
 
       el('evalBreakdownBox').textContent = parts.join(' · ');
       el('evalRawJson').style.display = 'block';
@@ -1149,7 +1201,7 @@ def render_screening_page() -> str:
         const data = await res.json();
         renderModelState(data);
       }} else {{
-        el('activeModelBadge').textContent = 'Policy v1.0-seed · 0 labels';
+        el('activeModelBadge').textContent = 'Baseline · 0 votes';
       }}
     }}
 
@@ -1202,11 +1254,11 @@ def render_screening_page() -> str:
       }}
     }});
 
-    // Top Control Strip Fleet / DSPy / Eval buttons
+    // Top Control Strip action buttons
     el('runScreeningBtn').onclick = async () => {{
       const isLive = Boolean(el('liveScreeningToggle').checked);
       el('runScreeningBtn').disabled = true;
-      showBanner(`Running Stage 3 Neon Screening Fleet (${{isLive ? 'live' : 'simulated/cached'}})…`, 'info');
+      showBanner(`Screening artists (${{isLive ? 'live' : 'cached'}})…`, 'info');
       try {{
         const res = await fetch('/api/screening/run', {{
           method: 'POST',
@@ -1214,7 +1266,7 @@ def render_screening_page() -> str:
           body: JSON.stringify({{ live: isLive }}),
         }});
         const data = await res.json().catch(() => ({{}}));
-        if (!res.ok) throw new Error(data.error || 'Screening run failed');
+        if (!res.ok) throw new Error(data.error || 'Screening could not finish.');
         if (Array.isArray(data.packets) && data.packets.length) {{
           allPackets = data.packets;
           currentIndex = 0;
@@ -1223,7 +1275,7 @@ def render_screening_page() -> str:
         }}
         await loadPackets();
         await loadModels();
-        showBanner(`Screening fleet completed: ${{allPackets.length}} candidate packet(s) ready for review.`, 'info');
+        showBanner(`Screening finished. ${{allPackets.length}} artist(s) ready to review.`, 'info');
       }} catch (err) {{
         showBanner(err.message, 'err');
       }} finally {{
@@ -1233,7 +1285,7 @@ def render_screening_page() -> str:
 
     el('trainModelBtn').onclick = async () => {{
       el('trainModelBtn').disabled = true;
-      showBanner('Compiling gemini-decision-1 judging policy with DSPy from human calibration labels…', 'info');
+      showBanner('Updating your taste profile from saved verdicts…', 'info');
       try {{
         const res = await fetch('/api/screening/train', {{
           method: 'POST',
@@ -1241,11 +1293,11 @@ def render_screening_page() -> str:
           body: JSON.stringify({{}}),
         }});
         const data = await res.json().catch(() => ({{}}));
-        if (!res.ok) throw new Error(data.error || 'DSPy policy compilation failed');
+        if (!res.ok) throw new Error(data.error || 'Could not update taste profile.');
         renderModelState(data);
         await loadModels();
         el('policyInspectorDrawer').open = true;
-        showBanner('Compiled updated gemini-decision-1 judging model from human labels.', 'info');
+        showBanner('Updated your taste profile from saved verdicts.', 'info');
       }} catch (err) {{
         showBanner(err.message, 'err');
       }} finally {{
@@ -1258,7 +1310,7 @@ def render_screening_page() -> str:
       const cardBtn = el('cardTasteEngineBtn');
       if (topBtn) topBtn.disabled = true;
       if (cardBtn) cardBtn.disabled = true;
-      showBanner('Running calibrated Taste Engine (gemini-decision-1 · 0 output tokens)…', 'info');
+      showBanner('Scoring artist with your taste profile…', 'info');
       try {{
         const bodyObj = targetLeadId ? {{ lead_id: targetLeadId, live: true }} : {{ live: true }};
         const res = await fetch('/api/screening/taste-score', {{
@@ -1267,7 +1319,7 @@ def render_screening_page() -> str:
           body: JSON.stringify(bodyObj),
         }});
         const data = await res.json().catch(() => ({{}}));
-        if (!res.ok) throw new Error(data.error || 'Taste Engine evaluation failed');
+        if (!res.ok) throw new Error(data.error || 'Could not score artist.');
         await loadPackets();
         await loadModels();
         const ts = data.taste_score || data;
@@ -1275,7 +1327,7 @@ def render_screening_page() -> str:
           ? Math.round(Number(ts.probabilities.elevate) * 100) + '%'
           : '—';
         showBanner(
-          `Taste Engine (gemini-decision-1 · 0 tok): P(elevate)=${{pE}}, verdict=${{(ts.taste_verdict || '').toUpperCase()}} (${{ts.policy_id || 'policy_v1'}}).`,
+          `Taste Profile Score: ${{formatVerdict(ts.taste_verdict)}} · Elevate Likelihood ${{pE}} (${{formatProfileVersion(ts.policy_id)}}).`,
           'info'
         );
       }} catch (err) {{
@@ -1296,7 +1348,7 @@ def render_screening_page() -> str:
     el('runEvalsBtn').onclick = async () => {{
       const isLive = Boolean(el('liveScreeningToggle').checked);
       el('runEvalsBtn').disabled = true;
-      showBanner('Running 3-layer Stage 3 Screening Rubric Evals…', 'info');
+      showBanner('Running quality checks…', 'info');
       try {{
         const res = await fetch('/api/screening/evals/run', {{
           method: 'POST',
@@ -1304,10 +1356,10 @@ def render_screening_page() -> str:
           body: JSON.stringify({{ live: isLive }}),
         }});
         const data = await res.json().catch(() => ({{}}));
-        if (!res.ok) throw new Error(data.error || 'Rubric eval run failed');
+        if (!res.ok) throw new Error(data.error || 'Quality checks failed.');
         renderEvalState(data);
         el('policyInspectorDrawer').open = true;
-        showBanner('Completed 3-layer Stage 3 Screening Rubric Evals.', 'info');
+        showBanner('Quality checks finished.', 'info');
       }} catch (err) {{
         showBanner(err.message, 'err');
       }} finally {{
