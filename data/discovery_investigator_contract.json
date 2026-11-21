@@ -1,0 +1,404 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://simon.local/schemas/discovery_investigator_contract.json",
+  "title": "Simon Stage 1 (Discovery) to Stage 2 (Scout Investigator) Data Contract",
+  "description": "Shared boundary contract between Kevin's Stage 1 Discovery agent (output: unranked people + seed sources) and JT's Stage 2 Generalist Scout Investigator agent (output: objective, feasible factual dossiers + process trace, with zero ranking or scoring).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "stage_1_discovery_handoff": {
+      "$ref": "#/$defs/DiscoveryHandoff"
+    },
+    "stage_2_investigator_output": {
+      "$ref": "#/$defs/InvestigatorBatchOutput"
+    }
+  },
+  "$defs": {
+    "SourceDiscoveryEntry": {
+      "type": "object",
+      "description": "High-signal source logged to the shared Source Discovery Log for reuse across Discovery and Investigator agents.",
+      "required": ["url", "source_channel", "why_useful"],
+      "additionalProperties": false,
+      "properties": {
+        "url": { "type": "string", "format": "uri" },
+        "source_channel": {
+          "type": "string",
+          "enum": [
+            "youtube_live_session",
+            "diy_venue_calendar",
+            "diy_venue_flyer_ocr",
+            "bandcamp_local_arrival",
+            "open_mic_lineup",
+            "bgv_or_session_credit_graph",
+            "musicbrainz",
+            "event_listing",
+            "other"
+          ]
+        },
+        "title_or_node": { "type": ["string", "null"] },
+        "why_useful": { "type": "string" },
+        "discovered_by": {
+          "type": "string",
+          "enum": ["stage_1_discovery", "stage_2_investigator"]
+        }
+      }
+    },
+    "SeedSource": {
+      "type": "object",
+      "required": ["url", "source_channel"],
+      "additionalProperties": false,
+      "properties": {
+        "url": { "type": "string", "format": "uri" },
+        "source_channel": {
+          "type": "string",
+          "enum": [
+            "youtube_live_session",
+            "diy_venue_calendar",
+            "diy_venue_flyer_ocr",
+            "bandcamp_local_arrival",
+            "open_mic_lineup",
+            "bgv_or_session_credit_graph",
+            "event_listing",
+            "other"
+          ]
+        },
+        "seed_query_or_venue_node": { "type": ["string", "null"] },
+        "discovered_at": { "type": ["string", "null"], "format": "date-time" },
+        "notes": { "type": ["string", "null"] }
+      }
+    },
+    "DiscoveryLead": {
+      "type": "object",
+      "description": "One unranked person/act handed from Stage 1 Discovery to a solo Stage 2 Investigator.",
+      "required": ["lead_id", "stage_name", "seed_sources"],
+      "additionalProperties": false,
+      "properties": {
+        "lead_id": { "type": "string", "minLength": 1 },
+        "stage_name": { "type": "string", "minLength": 1 },
+        "seed_sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/SeedSource" }
+        },
+        "attribution_status": {
+          "type": "string",
+          "enum": ["verified", "uncertain"],
+          "default": "uncertain"
+        },
+        "context_snippet": {
+          "type": ["string", "null"],
+          "description": "Short factual discovery note (no scores or rankings)."
+        }
+      }
+    },
+    "DiscoveryHandoff": {
+      "type": "object",
+      "description": "Stage 1 Discovery output -> Stage 2 Scout Investigator input.",
+      "required": ["contract_version", "run_id", "search_brief", "requested_count", "leads"],
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": { "type": "string", "const": "1.0.0" },
+        "run_id": { "type": "string", "minLength": 1 },
+        "search_brief": { "type": "string", "minLength": 1 },
+        "requested_count": { "type": "integer", "minimum": 1 },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "leads": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DiscoveryLead" }
+        },
+        "discovered_sources": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/SourceDiscoveryEntry" }
+        }
+      }
+    },
+    "MediaLink": {
+      "type": "object",
+      "description": "Queued public media link checked via metadata/oEmbed (zero audio/video decoding required in v1).",
+      "required": ["url", "title", "oembed_live_embeddable"],
+      "additionalProperties": false,
+      "properties": {
+        "url": { "type": "string", "format": "uri" },
+        "title": { "type": "string" },
+        "uploader_channel": { "type": ["string", "null"] },
+        "duration_seconds": { "type": ["integer", "null"], "minimum": 0 },
+        "oembed_live_embeddable": { "type": "boolean" }
+      }
+    },
+    "ShowRecord": {
+      "type": "object",
+      "required": ["venue", "city", "date"],
+      "additionalProperties": false,
+      "properties": {
+        "venue": { "type": "string" },
+        "city": { "type": "string" },
+        "date": { "type": "string" },
+        "billing_slot": {
+          "type": ["string", "null"],
+          "enum": ["headliner", "direct_support", "opener", "showcase", "open_mic", "festival", "unknown", null]
+        },
+        "source_url": { "type": ["string", "null"], "format": "uri" }
+      }
+    },
+    "NotableCommenter": {
+      "type": "object",
+      "required": ["handle", "role_or_context"],
+      "additionalProperties": false,
+      "properties": {
+        "handle": { "type": "string" },
+        "channel_url": { "type": ["string", "null"], "format": "uri" },
+        "role_or_context": { "type": "string" },
+        "comment_excerpt": { "type": ["string", "null"] }
+      }
+    },
+    "CollaboratorCredit": {
+      "type": "object",
+      "required": ["name", "role"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "source_url": { "type": ["string", "null"], "format": "uri" }
+      }
+    },
+    "ProcessStepTrace": {
+      "type": "object",
+      "description": "Verifiable execution log entry used by Stage 2 process evals to confirm the agent ran each required step.",
+      "required": ["step", "tool", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "step": { "type": "string" },
+        "tool": { "type": "string" },
+        "status": { "type": "string", "enum": ["ok", "empty", "skipped", "error"] },
+        "evidence_urls": {
+          "type": "array",
+          "default": [],
+          "items": { "type": "string", "format": "uri" }
+        },
+        "notes": { "type": ["string", "null"] }
+      }
+    },
+    "InvestigatorDossier": {
+      "type": "object",
+      "description": "Stage 2 Investigator output for one subject: 22 feasible, objective factual datapoints across 5 groups, plus process trace. Zero ranking or scoring.",
+      "required": [
+        "lead_id",
+        "identity_and_contact",
+        "source_and_media_queue",
+        "public_footprint",
+        "comment_forensics",
+        "live_history_and_credits",
+        "process_trace"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "lead_id": { "type": "string", "minLength": 1 },
+        "identity_and_contact": {
+          "type": "object",
+          "required": [
+            "stage_name",
+            "aliases",
+            "pronouns",
+            "project_type",
+            "home_city",
+            "home_neighborhood",
+            "platform_urls",
+            "musicbrainz_mbid",
+            "has_public_business_contact",
+            "contact_route_type"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "stage_name": { "type": "string", "minLength": 1 },
+            "aliases": { "type": "array", "items": { "type": "string" } },
+            "pronouns": { "type": ["string", "null"] },
+            "project_type": {
+              "type": "string",
+              "enum": ["solo_vocalist", "duo", "band", "collective", "unknown"]
+            },
+            "home_city": { "type": ["string", "null"] },
+            "home_neighborhood": { "type": ["string", "null"] },
+            "platform_urls": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "youtube": { "type": ["string", "null"], "format": "uri" },
+                "instagram": { "type": ["string", "null"], "format": "uri" },
+                "tiktok": { "type": ["string", "null"], "format": "uri" },
+                "spotify": { "type": ["string", "null"], "format": "uri" },
+                "apple_music": { "type": ["string", "null"], "format": "uri" },
+                "soundcloud": { "type": ["string", "null"], "format": "uri" },
+                "bandcamp": { "type": ["string", "null"], "format": "uri" },
+                "linktree": { "type": ["string", "null"], "format": "uri" }
+              }
+            },
+            "musicbrainz_mbid": { "type": ["string", "null"] },
+            "has_public_business_contact": { "type": "boolean" },
+            "contact_route_type": {
+              "type": "string",
+              "enum": ["bio_email", "mgmt_email", "open_dm", "none"]
+            }
+          }
+        },
+        "source_and_media_queue": {
+          "type": "object",
+          "required": [
+            "source_channel",
+            "seed_source_url",
+            "attribution_status",
+            "bio_text",
+            "primary_genre",
+            "subgenres",
+            "media_links"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "source_channel": { "type": "string" },
+            "seed_source_url": { "type": "string", "format": "uri" },
+            "attribution_status": { "type": "string", "enum": ["verified", "uncertain"] },
+            "bio_text": { "type": ["string", "null"] },
+            "primary_genre": { "type": ["string", "null"] },
+            "subgenres": { "type": "array", "items": { "type": "string" } },
+            "media_links": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/MediaLink" }
+            }
+          }
+        },
+        "public_footprint": {
+          "type": "object",
+          "required": ["footprint_regime", "public_reach", "top_release_view_share_pct"],
+          "additionalProperties": false,
+          "properties": {
+            "footprint_regime": {
+              "type": "string",
+              "enum": ["pre_dsp_underground", "early_dsp_inflection", "established_streaming", "unknown"]
+            },
+            "public_reach": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "youtube_subscribers": { "type": ["integer", "null"], "minimum": 0 },
+                "top_video_views": { "type": ["integer", "null"], "minimum": 0 },
+                "bandcamp_releases_count": { "type": ["integer", "null"], "minimum": 0 },
+                "bandcamp_supporters_count": { "type": ["integer", "null"], "minimum": 0 },
+                "released_tracks_count": { "type": ["integer", "null"], "minimum": 0 }
+              }
+            },
+            "top_release_view_share_pct": {
+              "type": ["number", "null"],
+              "minimum": 0,
+              "maximum": 100
+            }
+          }
+        },
+        "comment_forensics": {
+          "type": "object",
+          "required": ["comment_intent_counts", "notable_commenters"],
+          "additionalProperties": false,
+          "properties": {
+            "comment_intent_counts": {
+              "type": "object",
+              "required": [
+                "sample_size",
+                "release_requests",
+                "live_show_requests",
+                "genuine_praise",
+                "jokes_or_spam"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "sample_size": { "type": "integer", "minimum": 0 },
+                "release_requests": { "type": "integer", "minimum": 0 },
+                "live_show_requests": { "type": "integer", "minimum": 0 },
+                "genuine_praise": { "type": "integer", "minimum": 0 },
+                "jokes_or_spam": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "notable_commenters": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/NotableCommenter" }
+            }
+          }
+        },
+        "live_history_and_credits": {
+          "type": "object",
+          "required": [
+            "show_history",
+            "upcoming_shows",
+            "highest_venue_cap_observed",
+            "public_team_mentions",
+            "collaborator_credits"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "show_history": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/ShowRecord" }
+            },
+            "upcoming_shows": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/ShowRecord" }
+            },
+            "highest_venue_cap_observed": {
+              "type": ["integer", "null"],
+              "minimum": 0
+            },
+            "public_team_mentions": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "management": { "type": ["string", "null"] },
+                "booking_agent": { "type": ["string", "null"] },
+                "label": { "type": ["string", "null"] },
+                "distributor": { "type": ["string", "null"] }
+              }
+            },
+            "collaborator_credits": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/CollaboratorCredit" }
+            }
+          }
+        },
+        "process_trace": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/ProcessStepTrace" }
+        },
+        "newly_discovered_sources": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/SourceDiscoveryEntry" }
+        },
+        "missing_fields": {
+          "type": "array",
+          "default": [],
+          "description": "Fields explicitly checked by tools that had no public data available.",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "InvestigatorBatchOutput": {
+      "type": "object",
+      "description": "Stage 2 Investigator batch output handed to storage / future Stage 3 Rules Engine.",
+      "required": ["contract_version", "run_id", "investigated_at", "no_ranking_or_scoring", "dossiers"],
+      "additionalProperties": false,
+      "properties": {
+        "contract_version": { "type": "string", "const": "1.0.0" },
+        "run_id": { "type": "string", "minLength": 1 },
+        "investigated_at": { "type": "string", "format": "date-time" },
+        "no_ranking_or_scoring": { "type": "boolean", "const": true },
+        "dossiers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/InvestigatorDossier" }
+        },
+        "discovered_sources": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/SourceDiscoveryEntry" }
+        }
+      }
+    }
+  }
+}
