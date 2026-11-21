@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import inspect
 import json
 import os
 from pathlib import Path
@@ -63,6 +64,19 @@ from .registry import (
     upsert_discovery_source,
 )
 from .scout import DEFAULT_TASTE_BRIEF, load_dotenv_if_present, run_scout
+from .screening import (
+    compile_judging_model,
+    evaluate_with_taste_engine,
+    list_judging_models,
+    list_screening_deck,
+    list_screening_evals,
+    list_screening_labels,
+    list_taste_scores,
+    render_fallback_screening_html,
+    run_screening_batch,
+    run_screening_evals,
+    save_screening_label,
+)
 from .store import SimonStore, create_store
 
 
@@ -246,6 +260,84 @@ def dispatch_http_request(
 
         if parsed.path == "/investigate":
             return (HTTPStatus.OK, "text/html; charset=utf-8", INVESTIGATE_HTML.encode("utf-8"))
+
+        if parsed.path in ("/screen", "/screening"):
+            try:
+                from .screening_ui import render_screening_page  # type: ignore[import-not-found]
+
+                sig = inspect.signature(render_screening_page)
+                params = list(sig.parameters.values())
+                accepts_varargs = any(
+                    p.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+                    for p in params
+                )
+                if "store" in sig.parameters:
+                    rendered = render_screening_page(store=store)
+                elif len(params) >= 1 or accepts_varargs:
+                    rendered = render_screening_page(store)
+                else:
+                    rendered = render_screening_page()
+                html_bytes = rendered if isinstance(rendered, bytes) else str(rendered).encode("utf-8")
+            except ImportError:
+                html_bytes = render_fallback_screening_html().encode("utf-8")
+            return (HTTPStatus.OK, "text/html; charset=utf-8", html_bytes)
+
+        if parsed.path == "/api/screening/packets":
+            qs = parse_qs(parsed.query)
+            limit = int((qs.get("limit") or ["100"])[0])
+            verdict_filter = (qs.get("verdict") or [None])[0]
+            deck = list_screening_deck(store, limit=limit, verdict_filter=verdict_filter)
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps(deck, ensure_ascii=False).encode("utf-8"),
+            )
+
+        if parsed.path == "/api/screening/labels":
+            qs = parse_qs(parsed.query)
+            lead_id = (qs.get("lead_id") or [None])[0]
+            limit = int((qs.get("limit") or ["100"])[0])
+            labels = list_screening_labels(store, lead_id=lead_id, limit=limit)
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps({"count": len(labels), "labels": labels}, ensure_ascii=False).encode("utf-8"),
+            )
+
+        if parsed.path == "/api/screening/models":
+            qs = parse_qs(parsed.query)
+            limit = int((qs.get("limit") or ["25"])[0])
+            models = list_judging_models(store, limit=limit)
+            active = next((m for m in models if m.get("is_active")), models[0] if models else None)
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps(
+                    {"count": len(models), "active_model": active, "models": models},
+                    ensure_ascii=False,
+                ).encode("utf-8"),
+            )
+
+        if parsed.path in ("/api/screening/taste-scores", "/api/screening/taste-score"):
+            qs = parse_qs(parsed.query)
+            lead_id = (qs.get("lead_id") or [None])[0]
+            limit = int((qs.get("limit") or ["100"])[0])
+            scores = list_taste_scores(store, lead_id=lead_id, limit=limit)
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps({"count": len(scores), "taste_scores": scores}, ensure_ascii=False).encode("utf-8"),
+            )
+
+        if parsed.path == "/api/screening/evals":
+            qs = parse_qs(parsed.query)
+            limit = int((qs.get("limit") or ["25"])[0])
+            evals_payload = list_screening_evals(store, limit=limit)
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps(evals_payload, ensure_ascii=False).encode("utf-8"),
+            )
 
         if parsed.path == "/evals":
             return (HTTPStatus.OK, "text/html; charset=utf-8", EVALS_HTML.encode("utf-8"))
@@ -530,6 +622,190 @@ def dispatch_http_request(
             HTTPStatus.NOT_FOUND,
             "application/json; charset=utf-8",
             json.dumps({"error": "Not found."}).encode("utf-8"),
+        )
+
+    if method == "POST" and parsed.path == "/api/screening/run":
+        try:
+            req = json.loads((raw_body or b"{}").decode("utf-8"))
+        except ValueError:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "Invalid JSON request body."}).encode("utf-8"),
+            )
+        lead_id = str(req.get("lead_id") or "").strip() or None
+        dossier_obj = req.get("dossier") if isinstance(req.get("dossier"), dict) else None
+        live = bool(req.get("live", False))
+        api_key = str(req.get("api_key") or "").strip() or None
+        prefix = str(req.get("prefix") or "").strip() or None
+        load_dotenv_if_present()
+        try:
+            packets = run_screening_batch(
+                store=store,
+                lead_id=lead_id,
+                dossier=dossier_obj,
+                live=live,
+                api_key=api_key,
+                prefix=prefix,
+            )
+        except (ValueError, RuntimeError, OSError) as exc:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": str(exc)}).encode("utf-8"),
+            )
+        deck = list_screening_deck(store)
+        response_payload = {
+            "ok": True,
+            "mode": packets[0].get("mode", "deterministic_baseline") if packets else "deterministic_baseline",
+            "count": len(packets),
+            "packet": packets[0] if len(packets) == 1 else None,
+            "packets": packets,
+            "deck": deck,
+        }
+        return (
+            HTTPStatus.OK,
+            "application/json; charset=utf-8",
+            json.dumps(response_payload, ensure_ascii=False).encode("utf-8"),
+        )
+
+    if method == "POST" and parsed.path == "/api/screening/labels":
+        try:
+            req = json.loads((raw_body or b"{}").decode("utf-8"))
+        except ValueError:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "Invalid JSON request body."}).encode("utf-8"),
+            )
+        try:
+            saved_label = save_screening_label(store, req)
+        except ValueError as exc:
+            return (
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+                "application/json; charset=utf-8",
+                json.dumps({"error": str(exc)}).encode("utf-8"),
+            )
+        out = dict(saved_label)
+        out["ok"] = True
+        out["label"] = saved_label
+        return (
+            HTTPStatus.CREATED,
+            "application/json; charset=utf-8",
+            json.dumps(out, ensure_ascii=False).encode("utf-8"),
+        )
+
+    if method == "POST" and parsed.path == "/api/screening/train":
+        try:
+            _ = json.loads((raw_body or b"{}").decode("utf-8"))
+        except ValueError:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "Invalid JSON request body."}).encode("utf-8"),
+            )
+        try:
+            policy = compile_judging_model(store)
+        except (ValueError, RuntimeError, OSError) as exc:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": str(exc)}).encode("utf-8"),
+            )
+        out = dict(policy)
+        out["ok"] = True
+        out["policy"] = policy
+        return (
+            HTTPStatus.OK,
+            "application/json; charset=utf-8",
+            json.dumps(out, ensure_ascii=False).encode("utf-8"),
+        )
+
+    if method == "POST" and parsed.path == "/api/screening/taste-score":
+        try:
+            req = json.loads((raw_body or b"{}").decode("utf-8"))
+        except ValueError:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "Invalid JSON request body."}).encode("utf-8"),
+            )
+        load_dotenv_if_present()
+        live = bool(req.get("live", True))
+        api_key = str(req.get("api_key") or "").strip() or None
+        dossier_obj = req.get("dossier") if isinstance(req.get("dossier"), dict) else None
+        target_id = str(req.get("lead_id") or req.get("packet_id") or "").strip() or None
+        try:
+            if dossier_obj is not None:
+                score_doc = evaluate_with_taste_engine(store, dossier_obj, live=live, api_key=api_key)
+                out = dict(score_doc)
+                out["ok"] = True
+                out["taste_score"] = score_doc
+                return (
+                    HTTPStatus.OK,
+                    "application/json; charset=utf-8",
+                    json.dumps(out, ensure_ascii=False).encode("utf-8"),
+                )
+            if target_id:
+                score_doc = evaluate_with_taste_engine(store, target_id, live=live, api_key=api_key)
+                out = dict(score_doc)
+                out["ok"] = True
+                out["taste_score"] = score_doc
+                return (
+                    HTTPStatus.OK,
+                    "application/json; charset=utf-8",
+                    json.dumps(out, ensure_ascii=False).encode("utf-8"),
+                )
+            deck = list_screening_deck(store, limit=50)
+            results = [
+                evaluate_with_taste_engine(store, pkt["lead_id"], live=live, api_key=api_key)
+                for pkt in (deck.get("packets") or [])
+            ]
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps(
+                    {
+                        "ok": True,
+                        "count": len(results),
+                        "taste_scores": results,
+                        "taste_score": results[0] if results else None,
+                    },
+                    ensure_ascii=False,
+                ).encode("utf-8"),
+            )
+        except (ValueError, RuntimeError, OSError) as exc:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": str(exc)}).encode("utf-8"),
+            )
+
+    if method == "POST" and parsed.path == "/api/screening/evals/run":
+        try:
+            req = json.loads((raw_body or b"{}").decode("utf-8"))
+        except ValueError:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "Invalid JSON request body."}).encode("utf-8"),
+            )
+        trigger = str(req.get("trigger") or "platform_ui").strip() or "platform_ui"
+        try:
+            eval_report = run_screening_evals(store, trigger=trigger)
+        except (ValueError, RuntimeError, OSError) as exc:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": str(exc)}).encode("utf-8"),
+            )
+        out = dict(eval_report)
+        out["ok"] = True
+        out["eval_run"] = eval_report
+        return (
+            HTTPStatus.OK,
+            "application/json; charset=utf-8",
+            json.dumps(out, ensure_ascii=False).encode("utf-8"),
         )
 
     if method == "POST" and parsed.path == "/api/reports/archive":

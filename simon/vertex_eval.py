@@ -45,6 +45,7 @@ EVALS_DIR = REPO_ROOT / "data" / "evals"
 RUBRICS_PATH = EVALS_DIR / "discovery_rubrics.json"
 EVAL_CASES_PATH = EVALS_DIR / "discovery_eval_cases.json"
 DEMO_HANDOFF_PATH = REPO_ROOT / "examples" / "discovery_handoff_demo.json"
+DEMO_SCREENING_PATH = REPO_ROOT / "examples" / "screening_demo.json"
 
 VERIFY_SCRIPT_DIR = REPO_ROOT / "agents" / "discovery-scout" / "skills" / "music" / "scripts"
 if str(VERIFY_SCRIPT_DIR) not in sys.path:
@@ -61,6 +62,8 @@ RANKING_PRAISE_RE = re.compile(
 AGENT_FILE_ALIASES = {
     "discovery-scout": "discovery",
     "simon-discovery-scout": "discovery",
+    "screening-judge": "screening",
+    "simon-screening-judge": "screening",
 }
 
 
@@ -184,6 +187,35 @@ def _load_golden_samples(agent: str = "discovery-scout") -> List[Dict[str, Any]]
                 "context": "Pulled discovered_sources via simon-db, inspected YouTube live sessions and DIY venue calendars via channel-videos and url_context, ran verify_handoff.py.",
             }
         )
+
+    if slug == "screening-judge" and DEMO_SCREENING_PATH.is_file():
+        demo_batch = json.loads(DEMO_SCREENING_PATH.read_text(encoding="utf-8"))
+        for pkt in (demo_batch.get("packets") or []):
+            if not isinstance(pkt, dict):
+                continue
+            samples.append(
+                {
+                    "case_id": str(pkt.get("packet_id") or pkt.get("lead_id") or f"golden_scr_{len(samples) + 1}"),
+                    "source": "golden_dataset",
+                    "brief": f"Stage 3 adversarial screening for {pkt.get('stage_name')}",
+                    "output": pkt,
+                    "handoff": None,
+                    "report": {
+                        "report_id": f"rep_scr_{pkt.get('lead_id')}",
+                        "agent_name": "Stage 3 Screening Judge",
+                        "stage": "screening",
+                        "status": "completed",
+                        "headline": f"Screened {pkt.get('stage_name')}: {(pkt.get('judge_decision') or {}).get('verdict')}",
+                        "steps": [
+                            {"phase": "looking_at", "title": "Scored 5 dossier rubrics"},
+                            {"phase": "finding", "title": "Weighed Advocate vs. Skeptic cases"},
+                            {"phase": "analysis", "title": "Issued calibrated Judge verdict"},
+                        ],
+                    },
+                    "expected_valid": True,
+                    "context": "Stage 3 ScreeningPacket v1.0.0 validated via simon-db and verify_judgment.py.",
+                }
+            )
 
     cases_path = _resolve_cases_path(slug)
     if cases_path and cases_path.is_file():
@@ -491,7 +523,13 @@ def _evaluate_deterministic_gates(
                 ok = leaks_ok
                 if not ok:
                     case_failures.append(f"{rid}: leaked {', '.join(leaks)}")
-            elif "rank" in rid or "score" in rid or "objective" in rid:
+            elif ("rank" in rid or "objective" in rid) and slug in (
+                "discovery-scout",
+                "identity-resolver",
+                "footprint-profiler",
+                "signal-forensics",
+                "track-record-mapper",
+            ):
                 ok = no_ranking_ok
                 if not ok:
                     case_failures.append(f"{rid}: subjective or ranking language detected")

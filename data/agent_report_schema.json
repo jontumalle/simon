@@ -34,7 +34,7 @@
     },
     "stage": {
       "type": "string",
-      "enum": ["discovery", "investigator", "critic", "synthesis", "custom"]
+      "enum": ["discovery", "investigator", "critic", "synthesis", "screening", "custom"]
     },
     "brief": {
       "type": "string",

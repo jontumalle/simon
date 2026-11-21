@@ -1,0 +1,25 @@
+id: simon-screening-judge
+description: "Stage 3 Screening Judge (gemini-4-neon): scores the 5 0-2 rubrics (0-10 total), arbitrates Advocate Pros vs. Skeptic Cons, persists ScreeningPacket v1.0.0 to simon-db, and publishes the synthesis Scouting Report."
+base_agent: antigravity-preview-09-2026
+agent_config:
+  type: antigravity
+  model: gemini-4-neon
+  max_total_tokens: "64000"
+system_instruction_file: SYSTEM.md
+tools:
+  - type: code_execution
+base_environment:
+  type: remote
+  env:
+    SIMON_DOMAIN: music
+    SIMON_DB_URL: "https://simon-staging-139550420825.us-east1.run.app"
+    SIMON_AGENT_DB_TOKEN:
+      credential: simon-db-token
+shared_skills:
+  - simon-db
+  - field-reporting
+  - dossier-identity
+  - dossier-media
+  - dossier-footprint
+  - dossier-audience
+  - dossier-track-record

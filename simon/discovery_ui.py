@@ -982,6 +982,7 @@ _NAV_CSS = """
   }
   .nav-group.stage-discovery .nav-group-label { color: var(--accent); }
   .nav-group.stage-investigation .nav-group-label { color: var(--teal, var(--ok)); }
+  .nav-group.stage-screening .nav-group-label { color: var(--purple, #7e22ce); }
   .nav-group a {
     padding: 5px 10px; border-radius: 8px; font-weight: 600; font-size: 0.8rem;
     border: 1px solid transparent; background: transparent; color: var(--muted);
@@ -994,6 +995,9 @@ _NAV_CSS = """
   .nav-group.stage-investigation a.active {
     background: var(--teal-bg, var(--ok-bg)); border-color: var(--teal, var(--ok)); color: var(--teal, var(--ok));
   }
+  .nav-group.stage-screening a.active {
+    background: var(--purple-bg, rgba(192, 132, 252, 0.15)); border-color: var(--purple, #7e22ce); color: var(--purple, #7e22ce);
+  }
   .nav-theme-btn {
     padding: 5px 10px; border-radius: 8px; font-weight: 600; font-size: 0.78rem;
     border: 1px solid var(--border); background: var(--panel-2, var(--surface-2));
@@ -1004,7 +1008,7 @@ _NAV_CSS = """
 
 
 def render_top_nav(active_path: str) -> str:
-    """Render the shared two-section top navigation (Discovery vs Investigation)."""
+    """Render the shared three-section top navigation (Discovery, Investigation, Screening)."""
     def _link(href: str, label: str, elem_id: str = "") -> str:
         cls = ' class="active"' if active_path == href else ""
         id_attr = f' id="{elem_id}"' if elem_id else ""
@@ -1024,6 +1028,7 @@ def render_top_nav(active_path: str) -> str:
             _link("/evals", "6. Evals", "evalsNavLink"),
         ]
     )
+    screening_links = _link("/screen", "6. Screening Deck", "screenNavLink")
     theme_btn = (
         ""
         if active_path == "/"
@@ -1051,9 +1056,16 @@ def render_top_nav(active_path: str) -> str:
         '<span class="nav-group-label">Investigation</span>'
         f"{investigation_links}"
         "</div>"
+        '<div class="nav-group stage-screening">'
+        '<span class="nav-group-label">Screening</span>'
+        f"{screening_links}"
+        "</div>"
         f"{theme_btn}"
         "</nav>"
     )
+
+
+_render_top_nav = render_top_nav
 
 
 _SHARED_CSS = (
@@ -1061,9 +1073,9 @@ _SHARED_CSS = (
   :root {
     --bg: #f7f5f0; --panel: #ffffff; --panel-2: #f1eee7; --input-bg: #f7f5f0; --border: #e3ded3;
     --text: #181715; --muted: #666158; --accent: #b45309; --accent-hover: #92400e; --accent-fg: #ffffff;
-    --teal: #0f766e; --warn: #be123c; --blue: #1d4ed8;
+    --teal: #0f766e; --warn: #be123c; --blue: #1d4ed8; --purple: #7e22ce;
     --amber-bg: #fef3c7; --teal-bg: #ccfbf1;
-    --warn-bg: #ffe4e6; --blue-bg: #dbeafe;
+    --warn-bg: #ffe4e6; --blue-bg: #dbeafe; --purple-bg: #f3e8ff;
     --shadow: 0 2px 10px rgba(24, 23, 21, 0.05);
     --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
@@ -1071,9 +1083,9 @@ _SHARED_CSS = (
   [data-theme="dark"] {
     --bg: #0c0e13; --panel: #141821; --panel-2: #1c2230; --input-bg: #0d1018; --border: #283044;
     --text: #f1f4fa; --muted: #98a3bc; --accent: #f59e0b; --accent-hover: #fbbf24; --accent-fg: #111318;
-    --teal: #2dd4bf; --warn: #fb7185; --blue: #60a5fa;
+    --teal: #2dd4bf; --warn: #fb7185; --blue: #60a5fa; --purple: #c084fc;
     --amber-bg: rgba(245, 158, 11, 0.14); --teal-bg: rgba(45, 212, 191, 0.14);
-    --warn-bg: rgba(251, 113, 133, 0.15); --blue-bg: rgba(96, 165, 250, 0.14);
+    --warn-bg: rgba(251, 113, 133, 0.15); --blue-bg: rgba(96, 165, 250, 0.14); --purple-bg: rgba(192, 132, 252, 0.15);
     --shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
   }
   * { box-sizing: border-box; }
@@ -1105,6 +1117,7 @@ _SHARED_CSS = (
   .pill.warn { color: var(--warn); border-color: transparent; background: var(--warn-bg); }
   .pill.amber { color: var(--accent); border-color: transparent; background: var(--amber-bg); }
   .pill.blue { color: var(--blue); border-color: transparent; background: var(--blue-bg); }
+  .pill.purple { color: var(--purple); border-color: transparent; background: var(--purple-bg); }
   .card {
     background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
     padding: 18px 20px; margin-bottom: 18px; box-shadow: var(--shadow);
@@ -2083,7 +2096,10 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
     <section class="card">
       <div class="section-head">
         <h2>3. Stored Investigator Dossiers <span id="dossiersCountBadge" class="pill ok">0 dossiers</span></h2>
-        <span class="pill ok">Objective Facts Only · Unranked</span>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <span class="pill ok">Objective Facts Only · Unranked</span>
+          <a class="btn" href="/screen" style="border-color:rgba(192,132,252,0.45); color:var(--purple);">Open Screening Deck →</a>
+        </div>
       </div>
       <div id="dossiersList" style="display:flex; flex-direction:column; gap:16px;">
         <div class="mono">Loading stored investigator dossiers…</div>
