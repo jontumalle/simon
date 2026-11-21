@@ -34,6 +34,7 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 ## Recent sessions
 *Working memory (LRU pointer cache, max 12, most recent first). Maintained by the `project-manager` skill/subagent.*
 
+- 2026-11-21 · screening, taste & demo flow · shipped Stage 3 Screening Fleet, `/screen`, `/taste-profile` & clean staging demo (PRs #24/#28) → `pm/log/2026-11-21-screening-taste-and-demo-flow.md`, `simon/screening.py`, `simon/demo_flow.py`
 - 2026-11-21 · label-signing recall eval · live 3-worker recall run (192k tokens, 24 leads), `/evals` trace selector & honest offline scoring (`602a30c`) → `pm/log/2026-11-21-label-signing-recall-eval.md`, `simon/vertex_eval.py`, `agents/discovery-scout/`
 - 2026-11-21 · multi-agent vertex evals · merged PR #20 (runner, /evals UI, 65/65 tests) & 9-agent 3-layer rubrics baseline (119 rubrics) → `pm/log/2026-11-21-discovery-vertex-evals.md`, `simon/vertex_eval.py`, `data/evals/`
 - 2026-11-21 · discovery dashboard ui · removed redundant section 3, expanded source selector with search/genres/chips/tray (PR #18) → `pm/log/2026-11-21-discovery-dashboard-ui.md`, `simon/discovery_ui.py`
@@ -45,4 +46,3 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 - 2026-11-21 · discovery agent & evals · upgraded Stage 1 discovery scout (PR #7), source registry seed & 37/37 evals → `agents/discovery-scout/`, `data/`, `notes/managed-agents/`, `tests/`
 - 2026-11-21 · managed-agents deploy & ci · merged PR #2 (deploy CLI, fleet API, Actions CI) & live-deployed 5 staging agents → `pm/log/2026-11-21-managed-agents-deploy-ci.md`, `simon/`, `.github/`
 - 2026-11-21 · leadgen & investigator · aligned 2-stage music pipeline (Lead Gen + Generalist Investigator, objective data, 2-layer skills) → `pm/log/2026-11-21-leadgen-investigator-alignment.md`
-- 2026-11-21 · governance charters · added top-level governance/ (main + feature-branch code flow, Intake/Decision/Outcome domains, safety) → `governance/`, `AGENTS.md`, `.agents/`

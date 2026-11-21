@@ -2,7 +2,7 @@ id: simon-identity-resolver
 base_agent: antigravity-preview-09-2026
 agent_config:
   type: antigravity
-  model: gemini-4-hydrogen
+  model: gemini-4-argon
 system_instruction_file: SYSTEM.md
 tools:
   - type: google_search

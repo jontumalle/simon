@@ -43,10 +43,10 @@ Any agent can opt into shared sandbox tools by adding them to `shared_skills` in
 
 | Directory / Agent | Harness & Model | Network | Role | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| `identity-resolver` | `antigravity-preview-09-2026` (`gemini-4-hydrogen`) | Search + URL | **Stage 2 Phase A:** 2-step (`1a Generic -> 1b Domain`) identity, link graph, MusicBrainz MBID & contact route | **Active (Stage 2)** |
-| `footprint-profiler` | `antigravity-preview-09-2026` (`gemini-4-hydrogen`) | URL + Python | **Stage 2 Phase B (Parallel):** oEmbed media queue (zero decode), public reach & Python concentration math | **Active (Stage 2)** |
-| `signal-forensics` | `antigravity-preview-09-2026` (`gemini-4-hydrogen`) | URL + Python | **Stage 2 Phase B (Parallel):** Fetch ≤50 public comments & 1-pass merged generic/domain intent counts | **Active (Stage 2)** |
-| `track-record-mapper` | `antigravity-preview-09-2026` (`gemini-4-hydrogen`) | Search + URL | **Stage 2 Phase B (Parallel):** Public show history, venue caps, explicit team mentions & collaborator credits | **Active (Stage 2)** |
+| `identity-resolver` | `antigravity-preview-09-2026` (`gemini-4-argon`) | Search + URL | **Stage 2 Phase A:** 2-step (`1a Generic -> 1b Domain`) identity, link graph, MusicBrainz MBID & contact route | **Active (Stage 2)** |
+| `footprint-profiler` | `antigravity-preview-09-2026` (`gemini-4-argon`) | URL + Python | **Stage 2 Phase B (Parallel):** oEmbed media queue (zero decode), public reach & Python concentration math | **Active (Stage 2)** |
+| `signal-forensics` | `antigravity-preview-09-2026` (`gemini-4-argon`) | URL + Python | **Stage 2 Phase B (Parallel):** Fetch ≤50 public comments & 1-pass merged generic/domain intent counts | **Active (Stage 2)** |
+| `track-record-mapper` | `antigravity-preview-09-2026` (`gemini-4-argon`) | Search + URL | **Stage 2 Phase B (Parallel):** Public show history, venue caps, explicit team mentions & collaborator credits | **Active (Stage 2)** |
 | `screen-advocate` | `antigravity-preview-09-2026` (`gemini-4-carbon`) | Python + `simon-db` | **Stage 3 (Parallel Critic):** Builds strongest factual upside case (`pros` + `standout_hook`) across all 5 dossier blocks | **Active (Stage 3)** |
 | `screen-skeptic` | `antigravity-preview-09-2026` (`gemini-4-carbon`) | Python + `simon-db` | **Stage 3 (Parallel Critic):** Audits concrete risks (`>85%` view skew, studio-only, `uncertain` attribution, lockups) & `missing_fields` | **Active (Stage 3)** |
 | `screening-judge` | `antigravity-preview-09-2026` (`gemini-4-neon`) | Python + `simon-db` | **Stage 3 (Synthesis Judge):** Scores 5 `0–2` rubrics (`0..10`), weighs Pros vs. Cons, persists `ScreeningPacket` v1.0.0 & posts synthesis report | **Active (Stage 3)** |
