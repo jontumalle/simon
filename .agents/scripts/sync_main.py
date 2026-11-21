@@ -344,6 +344,27 @@ def main() -> int:
         errors.append("--branch is only for --code sync; Docs Sync always targets main directly.")
         return emit(1)
 
+    cur_branch_proc = run_git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=repo_root, env=env, timeout=5)
+    cur_branch = cur_branch_proc.stdout.strip() if cur_branch_proc.returncode == 0 else ""
+
+    if mode in ("code", "all"):
+        if args.branch:
+            if target_branch == "main":
+                errors.append(
+                    "Feature-branch governance: code changes cannot target main directly. "
+                    "Pass --branch <domain>/<slug> (e.g. intake/..., decision/..., outcome/..., feat/...)."
+                )
+                return emit(1)
+        else:
+            if cur_branch in ("", "HEAD", "main"):
+                errors.append(
+                    "Feature-branch governance: code changes cannot commit directly on main. "
+                    "Pass --branch <domain>/<slug> (e.g. intake/..., decision/..., outcome/..., feat/...) "
+                    "or switch to a feature branch first."
+                )
+                return emit(1)
+            target_branch = cur_branch
+
     # Normalize explicit --paths relative to repo_root if provided.
     rel_prefixes: Optional[List[str]] = None
     if args.paths:
@@ -360,21 +381,18 @@ def main() -> int:
                 rel_prefixes.append(str(cand))
 
     # Switch/create feature branch if --branch <name> was requested for --code.
-    if args.branch:
-        cur_branch_proc = run_git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=repo_root, env=env, timeout=5)
-        cur_branch = cur_branch_proc.stdout.strip() if cur_branch_proc.returncode == 0 else ""
-        if cur_branch != target_branch:
-            exists_proc = run_git(
-                ["show-ref", "--verify", "--quiet", f"refs/heads/{target_branch}"],
-                cwd=repo_root,
-                env=env,
-                timeout=5,
-            )
-            switch_args = ["checkout", target_branch] if exists_proc.returncode == 0 else ["checkout", "-b", target_branch]
-            sw_proc = run_git(switch_args, cwd=repo_root, env=env, timeout=10)
-            if sw_proc.returncode != 0:
-                errors.append(compact_err(f"Failed to switch to branch {target_branch}", sw_proc))
-                return emit(1)
+    if args.branch and cur_branch != target_branch:
+        exists_proc = run_git(
+            ["show-ref", "--verify", "--quiet", f"refs/heads/{target_branch}"],
+            cwd=repo_root,
+            env=env,
+            timeout=5,
+        )
+        switch_args = ["checkout", target_branch] if exists_proc.returncode == 0 else ["checkout", "-b", target_branch]
+        sw_proc = run_git(switch_args, cwd=repo_root, env=env, timeout=10)
+        if sw_proc.returncode != 0:
+            errors.append(compact_err(f"Failed to switch to branch {target_branch}", sw_proc))
+            return emit(1)
 
     if mode == "docs":
         if rel_prefixes:
@@ -449,7 +467,7 @@ def main() -> int:
     rebase_conflict = False
     pull_unreachable = False
 
-    if has_origin and target_branch == "main":
+    if has_origin and target_branch == "main" and (mode != "docs" or cur_branch in ("", "main")):
         try:
             pull_proc = run_git(
                 ["pull", "--rebase", "--autostash", "origin", "main"],
@@ -502,6 +520,11 @@ def main() -> int:
             pass
         else:
             can_push = True
+            push_args = (
+                ["push", "origin", "HEAD:main"]
+                if target_branch == "main"
+                else ["push", "-u", "origin", target_branch]
+            )
             if target_branch == "main" and mode == "docs":
                 diff_main_proc = run_git(
                     ["diff", "--name-only", "-z", "origin/main..HEAD"],
@@ -513,17 +536,15 @@ def main() -> int:
                     ahead_paths = [p for p in diff_main_proc.stdout.split("\0") if p]
                     non_doc_ahead = [p for p in ahead_paths if not is_doc_or_knowledge_path(p)]
                     if non_doc_ahead:
-                        can_push = False
-                        errors.append(
-                            "Skipped pushing HEAD:main in --docs-only mode because branch has "
-                            f"unmerged non-doc commits ({', '.join(non_doc_ahead[:3])})"
-                        )
+                        if cur_branch not in ("", "HEAD", "main"):
+                            push_args = ["push", "-u", "origin", cur_branch]
+                        else:
+                            can_push = False
+                            errors.append(
+                                "Skipped pushing HEAD:main in --docs-only mode because branch has "
+                                f"unmerged non-doc commits ({', '.join(non_doc_ahead[:3])})"
+                            )
             if can_push:
-                push_args = (
-                    ["push", "origin", "HEAD:main"]
-                    if target_branch == "main"
-                    else ["push", "-u", "origin", target_branch]
-                )
                 try:
                     push_proc = run_git(push_args, cwd=repo_root, env=env, timeout=20)
                     if push_proc.returncode == 0:

@@ -257,6 +257,21 @@ def _check_git(args: list[str], cwd: Path, workspace_roots: list[Path]) -> bool:
     if sub == "branch":
         return all(a in {"-a", "-r", "-v", "-vv", "--list", "--show-current", "--merged", "--no-merged"} for a in rest)
 
+    if sub == "switch":
+        if not rest:
+            return False
+        if any(
+            a in {"-f", "--force", "--discard-changes", "--detach", "-d", "--"}
+            or a.startswith("--conflict")
+            for a in rest
+        ):
+            return False
+        return True
+
+    if sub == "checkout":
+        # Allow only safe new-branch creation (`git checkout -b <branch>`); keep file checkout gated.
+        return len(rest) == 2 and rest[0] == "-b" and not rest[1].startswith("-")
+
     if sub == "remote":
         return not rest or rest[0] in {"-v", "show", "get-url"}
 

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -56,12 +57,15 @@ class AutoApproveToolchainHookTest(unittest.TestCase):
             "gh pr list",
             "gh pr create --fill --base main --head feat/audio-scout",
             "git status -sb",
+            "git switch main",
+            "git switch -c intake/flyer-ocr",
+            "git checkout -b decision/rubric-v2",
             "git pull --rebase --autostash && git push origin main",
             "python3 -m unittest",
             "python3 -m simon",
             "python3 .agents/scripts/session_start.py",
             "python3 .agents/scripts/sync_main.py --docs-only -m 'docs(pm): update status'",
-            "python3 .agents/scripts/sync_main.py --code --paths simon/__main__.py tests/test_smoke.py -m 'feat: slice'",
+            "python3 .agents/scripts/sync_main.py --code --branch intake/slice --paths simon/__main__.py tests/test_smoke.py -m 'feat: slice'",
             "PYTHONPATH=. .venv/bin/python -m pytest -q",
             "~/.local/bin/uv venv --python 3.12 .venv",
             "~/.local/bin/uv pip install --python .venv/bin/python -U google-genai pydantic",
@@ -83,6 +87,8 @@ class AutoApproveToolchainHookTest(unittest.TestCase):
             "sudo ls",
             "git push --force origin main",
             "git push origin :main",
+            "git switch --discard-changes main",
+            "git checkout -- simon/web.py",
             "git -c core.pager='sh -c whoami' log",
             "gh auth token",
             "gcloud auth print-access-token",
@@ -169,6 +175,65 @@ class AutoApproveToolchainHookTest(unittest.TestCase):
         )
         out = json.loads(proc.stdout)
         self.assertEqual(out["decision"], "auto_approve")
+
+    def test_code_sync_blocks_direct_main_and_allows_feature_branch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            subprocess.run(["git", "init", "-b", "main"], cwd=repo, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+            (repo / "README.md").write_text("# temp\n", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=repo, check=True)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=repo, check=True, capture_output=True)
+
+            (repo / "app.py").write_text("x = 1\n", encoding="utf-8")
+            blocked = subprocess.run(
+                [
+                    sys.executable,
+                    str(SYNC_SCRIPT),
+                    "--repo",
+                    str(repo),
+                    "--code",
+                    "--skip-verify",
+                    "--no-push",
+                    "--paths",
+                    "app.py",
+                    "-m",
+                    "feat: should block on main",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(blocked.returncode, 1)
+            blocked_json = json.loads(blocked.stdout)
+            self.assertFalse(blocked_json["committed"])
+            self.assertIn("Feature-branch governance", blocked_json["error"])
+
+            allowed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SYNC_SCRIPT),
+                    "--repo",
+                    str(repo),
+                    "--code",
+                    "--branch",
+                    "intake/test-feature",
+                    "--skip-verify",
+                    "--no-push",
+                    "--paths",
+                    "app.py",
+                    "-m",
+                    "feat(intake): commit on feature branch",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(allowed.returncode, 0)
+            allowed_json = json.loads(allowed.stdout)
+            self.assertTrue(allowed_json["committed"])
+            self.assertEqual(allowed_json["branch"], "intake/test-feature")
 
 
 if __name__ == "__main__":
