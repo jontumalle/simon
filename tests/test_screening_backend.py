@@ -404,7 +404,7 @@ class TestScreeningHTTPRoutesAndCLI(unittest.TestCase):
         st, ctype, body = dispatch_http_request(self.store, "GET", "/screen")
         self.assertEqual(st, HTTPStatus.OK)
         self.assertIn("text/html", ctype)
-        self.assertIn("Stage 3 Screening", body.decode("utf-8"))
+        self.assertIn("Screening Deck", body.decode("utf-8"))
 
         # 2. GET /api/screening/packets seeds and returns deck
         st, _, body = dispatch_http_request(self.store, "GET", "/api/screening/packets")
