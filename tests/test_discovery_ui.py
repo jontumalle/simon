@@ -243,6 +243,199 @@ class TestDiscoveryUIAndTraces(unittest.TestCase):
         self.assertIn(".agents/skills/field-reporting/scripts/field_report.py", targets)
         self.assertIn(".agents/skills/source-discovery/SKILL.md", targets)
 
+    def test_two_section_nav_across_all_five_pages(self) -> None:
+        store = self.store
+        expected_pages = [
+            ("/discovery", b"1. Discovery Dashboard"),
+            ("/field-news", b"2. Field News"),
+            ("/reports", b"3. Scouting Reports"),
+            ("/investigate", b"4. Investigator Desk"),
+            ("/", b"5. Vocal Studio"),
+        ]
+        for route, heading in expected_pages:
+            code, ctype, html = dispatch_http_request(store, "GET", route)
+            self.assertEqual(code, 200, f"Route {route} failed")
+            self.assertIn("text/html", ctype)
+            self.assertIn(heading, html)
+            # Both top-level section groups present
+            self.assertIn(b"nav-sections", html)
+            self.assertIn(b">Discovery<", html)
+            self.assertIn(b">Investigation<", html)
+            # All 5 page links present
+            for href in (
+                b'href="/discovery"',
+                b'href="/field-news"',
+                b'href="/reports"',
+                b'href="/investigate"',
+                b'href="/"',
+            ):
+                self.assertIn(href, html, f"Missing {href!r} on {route}")
+
+        # Scouting Reports has jump button to /investigate
+        _, _, reports_html = dispatch_http_request(store, "GET", "/reports")
+        self.assertIn(b"/investigate?subject=", reports_html)
+
+        # Investigator Desk never leaks raw interaction_id
+        _, _, inv_html = dispatch_http_request(store, "GET", "/investigate")
+        self.assertNotIn(b"interaction_id", inv_html)
+        self.assertIn(b"/api/field-news?stage=investigator", inv_html)
+        self.assertIn(b"/api/dossiers", inv_html)
+        self.assertIn(b"/api/leads", inv_html)
+
+    def test_api_dossiers_leads_and_investigator_field_news(self) -> None:
+        store = self.store
+        # Save a verified lead directly and a handoff containing the same + a second lead
+        save_agent_document(
+            store,
+            "leads",
+            {
+                "lead_id": "lead_maya_01",
+                "stage_name": "Maya Vance",
+                "attribution_status": "verified",
+                "context_snippet": "Live soul vocal set at Baby's All Right.",
+                "seed_sources": [
+                    {
+                        "url": "https://www.youtube.com/watch?v=3-K26i1go0s",
+                        "source_channel": "youtube_live_session",
+                    }
+                ],
+                "interaction_id": "int_should_be_stripped",
+            },
+        )
+        save_agent_document(
+            store,
+            "discovery_handoffs",
+            {
+                "contract_version": "1.0.0",
+                "run_id": "run_disc_01",
+                "search_brief": "NYC solo vocalists",
+                "requested_count": 2,
+                "leads": [
+                    {
+                        "lead_id": "lead_maya_01",
+                        "stage_name": "Maya Vance",
+                        "seed_sources": [
+                            {
+                                "url": "https://www.youtube.com/watch?v=3-K26i1go0s",
+                                "source_channel": "youtube_live_session",
+                            }
+                        ],
+                    },
+                    {
+                        "lead_id": "lead_clara_02",
+                        "stage_name": "Clara Reyes",
+                        "attribution_status": "verified",
+                        "seed_sources": [
+                            {
+                                "url": "https://babysallright.com/events/clara",
+                                "source_channel": "diy_venue_calendar",
+                            }
+                        ],
+                    },
+                ],
+            },
+        )
+
+        # Save an investigator dossier containing raw telemetry keys to confirm sanitization
+        save_agent_document(
+            store,
+            "investigator_dossiers",
+            {
+                "dossier_id": "dos_maya_01",
+                "lead_id": "lead_maya_01",
+                "stage_name": "Maya Vance",
+                "interaction_id": "int_secret_99",
+                "environment_id": "env_secret_99",
+                "metadata": {"raw": True},
+                "identity_and_contact": {
+                    "stage_name": "Maya Vance",
+                    "project_type": "solo_vocalist",
+                    "home_city": "New York",
+                    "home_neighborhood": "Brooklyn",
+                    "contact_route_type": "bio_email",
+                    "has_public_business_contact": True,
+                    "platform_urls": {"youtube": "https://youtube.com/@mayavance"},
+                },
+                "public_footprint": {
+                    "footprint_regime": "early_dsp_inflection",
+                    "public_reach": {"youtube_subscribers": 1420, "top_video_views": 18500},
+                    "trace_id": "trace_nested_strip",
+                },
+            },
+        )
+
+        # Save one discovery report and one investigator report
+        save_agent_document(
+            store,
+            "agent_reports",
+            {
+                "report_id": "rep_disc_1",
+                "agent_name": "Discovery Scout 01",
+                "stage": "discovery",
+                "status": "completed",
+                "headline": "Stage 1 report",
+                "steps": [],
+                "findings": [],
+            },
+        )
+        save_agent_document(
+            store,
+            "agent_reports",
+            {
+                "report_id": "rep_inv_1",
+                "agent_name": "Scout Investigator 01",
+                "stage": "investigator",
+                "status": "in_motion",
+                "headline": "Checking Maya Vance public credits and live history",
+                "steps": [
+                    {
+                        "step_number": 1,
+                        "phase": "looking_at",
+                        "title": "Checking YouTube channel & MusicBrainz",
+                        "looking_at": "Maya Vance public links",
+                        "finding": "Found 1,420 YouTube subscribers.",
+                        "analysis": "Early DSP inflection regime.",
+                    }
+                ],
+                "findings": [],
+            },
+        )
+
+        # Verify GET /api/dossiers returns sanitized dossiers and supports lead_id filter
+        code_d, _, body_d = dispatch_http_request(store, "GET", "/api/dossiers")
+        self.assertEqual(code_d, 200)
+        d_payload = json.loads(body_d)
+        self.assertEqual(d_payload["count"], 1)
+        dos = d_payload["dossiers"][0]
+        self.assertEqual(dos["lead_id"], "lead_maya_01")
+        self.assertNotIn("interaction_id", dos)
+        self.assertNotIn("environment_id", dos)
+        self.assertNotIn("metadata", dos)
+        self.assertNotIn("trace_id", dos["public_footprint"])
+        self.assertEqual(dos["identity_and_contact"]["home_city"], "New York")
+
+        code_df, _, body_df = dispatch_http_request(store, "GET", "/api/dossiers?lead_id=nonexistent")
+        self.assertEqual(code_df, 200)
+        self.assertEqual(json.loads(body_df)["count"], 0)
+
+        # Verify GET /api/leads deduplicates leads across collections and strips telemetry
+        code_l, _, body_l = dispatch_http_request(store, "GET", "/api/leads")
+        self.assertEqual(code_l, 200)
+        l_payload = json.loads(body_l)
+        self.assertEqual(l_payload["count"], 2)
+        lead_ids = {item["lead_id"] for item in l_payload["leads"]}
+        self.assertEqual(lead_ids, {"lead_maya_01", "lead_clara_02"})
+        for item in l_payload["leads"]:
+            self.assertNotIn("interaction_id", item)
+
+        # Verify GET /api/field-news?stage=investigator returns only Stage 2 reports
+        code_fn, _, body_fn = dispatch_http_request(store, "GET", "/api/field-news?stage=investigator")
+        self.assertEqual(code_fn, 200)
+        fn_payload = json.loads(body_fn)
+        self.assertEqual(fn_payload["count"], 1)
+        self.assertEqual(fn_payload["reports"][0]["report_id"], "rep_inv_1")
+        self.assertEqual(fn_payload["reports"][0]["stage"], "investigator")
+
 
 if __name__ == "__main__":
     unittest.main()
