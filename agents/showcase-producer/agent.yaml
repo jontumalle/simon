@@ -1,0 +1,17 @@
+id: simon-showcase-producer
+base_agent: antigravity-preview-09-2026
+agent_config:
+  type: antigravity
+  model: gemini-4-carbon
+system_instruction_file: SYSTEM.md
+tools:
+  - type: code_execution
+environment:
+  type: remote
+  network: disabled
+  mount_repo:
+    source: https://github.com/jontumalle/simon
+    target: /workspace/simon
+  inline_mounts:
+    - source: SYSTEM.md
+      target: .agents/AGENTS.md

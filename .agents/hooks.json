@@ -1,0 +1,11 @@
+{
+  "simon-session-context": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "python3 scripts/session_start.py",
+        "timeout": 5
+      }
+    ]
+  }
+}
