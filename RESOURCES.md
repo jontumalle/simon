@@ -114,6 +114,9 @@ export GEMINI_PRODUCER_MODEL="gemini-4-carbon"
 
 # Optional: GCP project ID when using gcloud / GCS mounts
 export GOOGLE_CLOUD_PROJECT="your-gcp-project-id"
+
+# Optional (stored in GCP Secret Manager + GitHub Actions secrets; synced to /v1beta/credentials as `youtube-api-key`)
+export YOUTUBE_API_KEY="your-youtube-data-api-v3-key"
 ```
 
 ---

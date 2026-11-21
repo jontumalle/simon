@@ -3,6 +3,9 @@
 *Updated: 2026-11-21*
 
 ## Live Now
+- **Shared YouTube Data API v3 Skill & Managed Agent Credential (PR #11, `feat/shared-youtube-skill`)**:
+  - **GCP & `/v1beta/credentials` Setup**: Enabled `youtube.googleapis.com` on GCP project `gemini4nyc26nyc-2203`, stored a YouTube-only API key in GCP Secret Manager (`YOUTUBE_API_KEY`) and GitHub Actions secrets, and synced `youtube-api-key` to `/v1beta/credentials` (trusted domain `www.googleapis.com`, header injection `X-Goog-Api-Key`).
+  - **Shared Skill (`agents/_shared/skills/youtube/`)**: Built `SKILL.md` + zero-dependency `scripts/youtube_api.py` (`video`, `channel`, `channel-videos`, `comments`, `search`), wired it into all 5 Stage 1/2 agents (`discovery-scout`, `identity-resolver`, `footprint-profiler`, `signal-forensics`, `track-record-mapper`), updated `.github/workflows/deploy-agents.yml`, and added 7 unit tests in `tests/test_youtube_skill.py` (**40/40** passing + live smoke tests). PR #11 open for merge into `main`.
 - **Stage 1 Discovery Agent Upgrade, Source Registry Seed & Evals (PR #7, `4414952`)**:
   - **Two-Layer Discovery Agent (`agents/discovery-scout/`)**: Upgraded to Layer 1 domain-agnostic discovery discipline (`SYSTEM.md`, unranked `N` leads, `simon-db` online persistence) + Layer 2 music skill pack (`skills/music/SKILL.md`) + standalone contract verifier (`skills/music/scripts/verify_handoff.py`) validating `DiscoveryHandoff` v1.0.0.
   - **Source Registry Data Model & Curated Seed (`data/`)**: Canonical queryable JSON schema in `data/source_registry_schema.json` and 36-source music reference seed in `data/reference/discovery_sources_seed.json` across all 9 `source_channel` enum values.
