@@ -1,83 +1,82 @@
 ---
 name: main-sync
 description: >-
-  Runbook for continuous trunk-based synchronization on origin/main in the Simon repository.
-  Explains the zero-repercussion policy for committing and pushing Markdown/knowledge-model
-  docs directly to main, how parallel chat windows and teammates stay conflict-free using
-  .agents/scripts/sync_main.py (pull --rebase --autostash), and how to push incremental code
-  slices cleanly. Use whenever syncing docs, wrapping up a session, resolving ahead/behind main
-  state, or landing tested code slices.
+  Dual-track repository synchronization skill for Simon separating zero-ceremony Documentation Sync
+  (--docs-only, direct to origin/main, auto-approved for Project Manager Steward) from gated Code
+  Sync (--code, requiring unit/smoke/lint verification, explicit --paths slice staging, and main or
+  feature-branch PR options). Activate whenever syncing documentation, running Project Manager
+  Steward distillation, or landing runtime code and test changes.
 ---
 
-# Main-Sync Skill (`origin/main` Trunk Workflow)
+# `main-sync` Skill — Dual-Track Synchronization (Docs Sync vs. Code Sync)
 
-Simon runs on **continuous trunk-based sync** directly on `main` so human teammates and multiple parallel Antigravity chat windows always share fresh context, Managed Agent specs, and toolchain manifests without branch drift.
+As Simon scales across parallel chat windows and teammates, **documentation** and **executable code** synchronize differently. Always choose the matching track below via `.agents/scripts/sync_main.py`.
+
+| Dimension | Track A · Docs & Knowledge Sync (`--docs-only`) | Track B · Code Sync (`--code`) |
+| :--- | :--- | :--- |
+| **Who uses it** | `Project Manager (Steward)` subagent & any doc/note update | Primary coding agents landing `simon/`, `tests/`, `examples/` |
+| **Paths allowed** | `PROJECT.md`, `AGENTS.md`, `RESOURCES.md`, `README.md`, `pm/**`, `notes/**`, `ideas/**`, `data/**`, `agents/**`, `.agents/**`, `*.md` | Explicit code/test slice via `--paths <files...>` |
+| **Permission (`PreToolUse`)** | **Auto-approved** (both doc file writes & `--docs-only` sync) | **Auto-approved ONLY when verified** (`--skip-verify` & raw `--all` fall back to manual prompt) |
+| **Pre-commit gate** | None — zero ceremony, zero repercussions | Mandatory `unittest` + `python -m simon` smoke check + `ruff check` (if installed) |
+| **Branch strategy** | Always rebases & pushes **straight to `origin/main`** (`--autostash` preserves dirty code) | Small verified slices → `origin/main`; breaking/multi-part changes → `--branch feat/<slug>` + PR |
 
 ---
 
-## 1. Zero-Repercussion Documentation & Knowledge Sync Policy
+## Track A · Documentation & Knowledge Sync (`--docs-only`)
 
-All Markdown and Life OS knowledge-model artifacts can be **committed and pushed directly to `main` at any time with zero repercussions**:
+All Markdown and Life OS knowledge-model files push **straight to `origin/main` immediately** without touching in-progress runtime code:
 
-- Root indices & manifests: `PROJECT.md`, `AGENTS.md`, `RESOURCES.md`, `README.md`
-- Governance & Steward memory: `pm/` (`current.md`, `scope.md`, `decisions.md`, `log/`, `inbox/`)
-- Engineering playbooks & ideas: `notes/`, `ideas/`
-- Curated agent configs, schemas & repo ops: `agents/`, `data/`, `.agents/`
-- Any nested `*.md` documentation (excluding gitignored `local/` and `.venv/`)
-
-### One-Command Safe Doc Sync
 ```bash
-python3 .agents/scripts/sync_main.py --docs-only -m "docs(pm): distill session findings and update status"
+python3 .agents/scripts/sync_main.py --docs-only -m "docs(pm): <concise summary>"
 ```
 
-What `sync_main.py --docs-only` guarantees:
-1. **Strict Scope Guard**: Stages *only* safe doc/knowledge paths (unstaging any accidentally pre-staged runtime code so unfinished `simon/` or `tests/` edits stay untouched in your working tree). Never stages `.env*`, `local/`, or `.venv/`.
-2. **Credential Helper Ready**: Automatically prepends `~/.local/bin` to `PATH` so `gh auth git-credential` authenticates HTTPS pushes seamlessly.
-3. **Conflict-Free Parallelism**: Runs `git pull --rebase --autostash origin main` before pushing, stashing any in-progress code edits, rebasing your doc commit cleanly atop teammates' or sibling chat windows' commits, and restoring your working tree.
-4. **Structured Diagnostics**: Prints a JSON summary (`committed`, `pulled`, `pushed`, `head`, `ahead`, `error`) and exits `0` whenever local commit succeeds — even if remote push hits a temporary 403/network issue (if `pushed: false`, report `error` clearly to the user).
+### Guarantees for the Steward & Parallel Windows
+1. **Never Sweeps Dirty Code**: Any accidentally staged `simon/` or `tests/` edits are automatically unstaged before committing, so half-written code stays safely in your working tree.
+2. **Auto-Approved End-to-End**: `.agents/scripts/auto_approve_toolchain.py` (`PreToolUse`) auto-approves creating/editing files in documentation buckets and running `sync_main.py --docs-only`.
+3. **Conflict-Free Rebase**: Runs `git pull --rebase --autostash origin main` and prepends `~/.local/bin` to `PATH` so `gh` credentials work out of the box.
 
 ---
 
-## 2. How Parallel Chat Windows & Teammates Stay Conflict-Free
+## Track B · Code Sync (`--code`)
 
-1. **Pull Early & Often**:
-   - At the start of work or before editing shared head files (`PROJECT.md`, `pm/current.md`, `RESOURCES.md`), pull latest `main`:
-     ```bash
-     git pull --rebase --autostash origin main
-     ```
-2. **Append-Oriented Knowledge Files**:
-   - Write new session logs as distinct dated files (`pm/log/YYYY-MM-DD-<topic>.md`) and append dated entries to `pm/decisions.md` to minimize overlapping line edits across parallel windows.
-3. **Automatic Lifecycle Guardrails**:
-   - **`SessionStart` (`.agents/scripts/session_start.py`)**: Injects `PROJECT.md` plus live `git status -sb` ahead/behind & dirty counts.
-   - **`Stop` (`.agents/scripts/stop_doc_sync.py`)**: Detects uncommitted doc/knowledge files at turn completion (`NO_TOOL_CALL`) and prompts one clean filing + `sync_main.py --docs-only` pass (guarded by `continuationActive` so it never loops).
-   - **Steward Subagent (`project-manager`)**: Launch the background `project-manager` subagent in every substantive chat window so discoveries and decisions are distilled and pushed to `main` automatically.
+Runtime code (`simon/`), tests (`tests/`), and fixtures (`examples/`) **never** piggyback on background Steward doc syncs. Choose **Verified Trunk Slice** or **Feature Branch / PR** depending on risk:
 
----
+### Option B1 · Verified Trunk Slice (Small, Non-Breaking, Tested Slice → `origin/main`)
+Always pass `--paths` naming the exact files in your slice so you never sweep in another chat window's unfinished edits:
 
-## 3. Pushing Incremental Code Slices to `main`
+```bash
+python3 .agents/scripts/sync_main.py --code \
+  --paths simon/orchestrator.py tests/test_orchestrator.py \
+  -m "feat(simon): wire parallel performance and booking critics"
+```
 
-Code and tests (`simon/`, `tests/`, `examples/`) should also land on `main` in **small, verified slices** rather than sitting unpushed across long sessions:
+What `--code` enforces automatically **before** creating a commit:
+1. Unstages anything outside `--paths` (and blocks `.env*`, `local/`, `.venv/`).
+2. Runs `python -m unittest discover -s tests`.
+3. Runs deterministic smoke check `python -m simon`.
+4. Runs `.venv/bin/ruff check` on staged `.py` files (when `.venv/bin/ruff` is present).
+5. If any check fails, unstages and exits non-zero (`"verified": false, "committed": false`) so broken code never lands on `main`.
 
-1. Run verification first:
-   ```bash
-   python3 -m unittest discover -s tests
-   ```
-2. Sync everything (code + tests + updated docs/manifests) to `main`:
-   ```bash
-   python3 .agents/scripts/sync_main.py --all -m "feat(simon): <concise slice summary>"
-   ```
-   *(Even with `--all`, `sync_main.py` blocks `.env*`, `local/`, and `.venv/` from ever being staged.)*
-3. For offline verification without pushing to GitHub yet, pass `--no-push`:
-   ```bash
-   python3 .agents/scripts/sync_main.py --docs-only --no-push -m "docs: local checkpoint"
-   ```
+### Option B2 · Feature Branch + PR (Breaking, Experimental, or Teammate-Reviewed Code)
+When refactoring core interfaces in `simon/`, touching shared schemas in breaking ways, or wanting teammate review before merging to `main`:
+
+```bash
+python3 .agents/scripts/sync_main.py --code \
+  --branch feat/managed-agent-runner \
+  --paths simon/ tests/ \
+  -m "feat(simon): add Managed Agents v1beta runner"
+
+gh pr create --fill --base main --head feat/managed-agent-runner
+```
 
 ---
 
-## 4. Handling Remote Push Errors (`pushed: false`)
+## Diagnostics & Error Recovery
 
-If `sync_main.py` returns `"committed": true, "pushed": false`:
-- Your changes are **safely committed locally** on `main` (`ahead > 0`).
-- Inspect the `"error"` field:
-  - **HTTP 403 / Collaborator Permission**: Tell the user their local commit succeeded (`head` SHA) and ask the repo owner to grant write access (or switch `gh auth switch` to the authorized GitHub account), after which `python3 .agents/scripts/sync_main.py --docs-only` will push all queued commits.
-  - **Rebase Conflict**: `sync_main.py` automatically aborts a conflicted rebase to keep the working tree clean; inspect the conflicting file manually, resolve, and re-run.
+`sync_main.py` prints a single JSON status line:
+```json
+{"mode": "code", "branch": "main", "verified": true, "committed": true, "pulled": true, "pushed": true, "head": "a1b2c3d", "ahead": 0, "error": null}
+```
+
+- **`verified: false`**: Fix the failing unit test, smoke check, or `ruff` lint error reported in `"error"` and re-run `--code`.
+- **`committed: true, pushed: false`**: Changes are safely committed locally (`ahead > 0`). Check `"error"` (e.g., offline Wi-Fi, `gh auth status`, or rebase conflict automatically aborted cleanly).

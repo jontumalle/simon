@@ -19,7 +19,7 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 | **[data/](./data/README.md)** | Data & Schemas | Manifest schemas, evaluation datasets (paired with `examples/` fixtures and gitignored `local/`) |
 | **[ideas/](./ideas/README.md)** | Ideas & Verticals | Product riffing, discovery sources, future verticals, and pitch framing |
 | **[tests/](./tests/)** | Verification | Unit tests, fixture smoke tests, and agent evaluation harnesses |
-| **[.agents/](./.agents/)** | Repo Agent Ops | Antigravity skills (`project-manager`, `knowledge-governance`, `managed-agents-curator`) & hooks |
+| **[.agents/](./.agents/)** | Repo Agent Ops | Antigravity skills (`project-manager`, `main-sync`, `knowledge-governance`, `managed-agents-curator`) & hooks |
 
 ---
 

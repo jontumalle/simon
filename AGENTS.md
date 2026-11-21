@@ -21,15 +21,20 @@ This repository uses a **Life OS-inspired knowledge model** to keep governance, 
   - `.agents/` — Repository skills, hooks, and sync utilities (`sync_main.py`).
 - **Ask When Unmapped (Setup-Stage Guardrail)**: Do **not** invent new top-level directories. Ask the user **only** when new work does not fit an established bucket above (or could reasonably live in two places) or would invent a new top-level folder. Files belonging to established documentation/knowledge buckets go straight into the model and push directly to `main`!
 
-## 3. Continuous `main` Sync & Zero-Repercussion Doc Pushing
-- **Zero-Repercussion Doc Pushing**: **Any documentation or knowledge-model file** (`*.md`, `PROJECT.md`, `RESOURCES.md`, `pm/**`, `notes/**`, `ideas/**`, `data/**`, `agents/**`, `.agents/**`) **can and should be committed and pushed directly to `origin/main` immediately with zero repercussions** — no PR ceremony, branch overhead, or hesitation needed for docs and shared context.
-- **Push & Pull Frequently**: Proactively encourage both the user and agent to push work to `main` frequently — **immediately** for docs/context (`python3 .agents/scripts/sync_main.py --docs-only`) and right after quick verification for code changes — while pulling `origin/main` with `--rebase --autostash` (`python3 .agents/scripts/sync_main.py`) so parallel chat windows and teammates never drift or lose context.
+## 3. Dual-Track Synchronization (`main-sync` Skill: Docs Sync vs. Code Sync)
+Always follow [`.agents/skills/main-sync/SKILL.md`](./.agents/skills/main-sync/SKILL.md) — documentation and runtime code synchronize differently:
+- **Track A · Docs & Knowledge Sync (`--docs-only`, Auto-Approved → Direct to `origin/main`)**:
+  - Any documentation or knowledge-model file (`*.md`, `PROJECT.md`, `RESOURCES.md`, `pm/**`, `notes/**`, `ideas/**`, `data/**`, `agents/**`, `.agents/**`) is **auto-approved** on creation/edit (`PreToolUse`) and commits/pushes **straight to `origin/main` immediately** with zero ceremony via `python3 .agents/scripts/sync_main.py --docs-only -m "docs: ..."`.
+  - `--docs-only` automatically leaves in-progress `simon/` or `tests/` edits untouched in your working tree (`--rebase --autostash`).
+- **Track B · Code Sync (`--code`, Gated by Tests & Scoped by `--paths` / `--branch`)**:
+  - Runtime code and tests (`simon/**`, `tests/**`, `examples/**`) **never** ride along in background Steward doc syncs.
+  - Sync code using `python3 .agents/scripts/sync_main.py --code --paths <files...> -m "feat(simon): ..."`, which enforces `unittest` + `python -m simon` smoke + `ruff` verification *before* committing (and supports `--branch feat/<slug>` + `gh pr create` when a change is breaking or needs teammate review before hitting `main`).
 
 ## 4. Background Project Manager (Steward) — Every Chat Window
-- In **every chat window**, whenever documents, research, artifacts, plans, architectural findings, decisions, or code milestones are produced, launch a **background `Project Manager (Steward)` subagent** (`invoke_subagent` following `.agents/skills/project-manager/SKILL.md`) to:
+- In **every chat window**, whenever documents, research, artifacts, plans, architectural findings, decisions, or code milestones are produced, launch a **background `Project Manager (Steward)` subagent** (`invoke_subagent` following `.agents/skills/project-manager/SKILL.md` + `.agents/skills/main-sync/SKILL.md`) to:
   1. **Harvest session documents & artifacts**: Grab any newly created standalone docs, research notes, plans, or reusable Antigravity brain/scratch artifacts (`<appDataDir>/brain/<conversation-id>/*.md`) so nothing stays trapped inside an ephemeral chat window or scratch artifact folder.
-  2. **Organize & distill into the Knowledge Model**: File reusable knowledge and session updates into the appropriate established buckets (`notes/`, `pm/log/YYYY-MM-DD-<topic>.md`, `pm/decisions.md`, `pm/current.md`, `ideas/`, `agents/`, `data/`, `RESOURCES.md`, and the `Recent sessions` LRU cache in `PROJECT.md`).
-  3. **Sync directly to `main`**: Commit and push those documentation/knowledge updates straight to `origin/main` via `python3 .agents/scripts/sync_main.py --docs-only`.
+  2. **Organize & distill into the Knowledge Model**: File reusable knowledge and session updates into the appropriate established buckets (`notes/`, `pm/log/YYYY-MM-DD-<topic>.md`, `pm/decisions.md`, `pm/current.md`, `ideas/`, `agents/`, `data/`, `RESOURCES.md`, and the `Recent sessions` LRU cache in `PROJECT.md`) — auto-approved by `.agents/hooks.json`.
+  3. **Sync docs via `main-sync` (`--docs-only`)**: Commit and push **only** documentation/knowledge updates straight to `origin/main` via `python3 .agents/scripts/sync_main.py --docs-only` while leaving code changes to Track B (`--code`).
 - Respect modality boundaries: never fabricate commitments or overwrite authored product code (`simon/`) during PM distillation, and ask the user only when an item is genuinely unmapped per the Setup-Stage Guardrail.
 
 ## 5. Partner Resource Sync (`RESOURCES.md`)

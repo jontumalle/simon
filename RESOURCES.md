@@ -40,6 +40,7 @@ Create a `uv`-managed Python 3.12 virtual environment (`.venv/` is gitignored):
 ~/.local/bin/uv venv --python 3.12 .venv
 ~/.local/bin/uv pip install --python .venv/bin/python -U \
   google-genai \
+  dspy \
   pydantic \
   pyyaml \
   soundfile \
@@ -54,7 +55,7 @@ Create a `uv`-managed Python 3.12 virtual environment (`.venv/` is gitignored):
 
 | Package Group | Packages | Why We Need It |
 | :--- | :--- | :--- |
-| **Managed Agents Core** | `google-genai`, `pydantic`, `pyyaml` | `v1beta` `client.agents`, `environments`, `interactions`, `credentials` + declarative `agent.yaml` & strict report schemas |
+| **Managed Agents & Decisions** | `google-genai`, `dspy`, `pydantic`, `pyyaml` | `v1beta` `client.decisions.create` (`gemini-decision-1`), `client.agents`, `interactions` + DSPy rubric compilation & strict schemas |
 | **Audio Forensics** | `soundfile`, `numpy`, `scipy`, `mutagen` | Crest-factor, clipping, silence/layering heuristics, and duration/MIME validation locally & inside sandboxes |
 | **Dev, Test & Local Agent** | `pytest`, `pytest-asyncio`, `ruff`, `google-antigravity` | Fast unit/contract suites, linting, and optional local interactive producer review harness |
 
@@ -95,9 +96,10 @@ Configure global MCP servers in `~/.gemini/config/mcp_config.json`:
 
 ---
 
-## 6. Repo-Scoped Antigravity Hooks (`.agents/hooks.json`)
+## 6. Repo-Scoped Antigravity Hooks & `main-sync` Skill (`.agents/`)
 
 Checked into Git so every teammate gets them automatically after `git pull`:
-- **`simon-toolchain-permissions` (`PreToolUse` → `.agents/scripts/auto_approve_toolchain.py`)** — Contextually inspects `run_command` calls and returns `"decision": "auto_approve"` for safe, non-destructive invocations of the CLIs in this manifest (`git`, `gh`, `uv`, `python3`, `pytest`, `ruff`, `gemini-api`, `gcloud`, `ffmpeg`/`ffprobe`, `yt-dlp`, `jq`), while falling back to Antigravity's default permission prompt on destructive flags, token-printing commands, shell injections, or unrecognized binaries.
+- **`simon-toolchain-permissions` (`PreToolUse` → `.agents/scripts/auto_approve_toolchain.py`)** — Auto-approves (`"decision": "auto_approve"`) both **Knowledge Model / Steward documentation writes** (`PROJECT.md`, `AGENTS.md`, `RESOURCES.md`, `pm/**`, `notes/**`, `ideas/**`, `data/**`, `agents/**`, `.agents/**`, `*.md`) and safe invocations of the CLIs in this manifest (`git`, `gh`, `uv`, `python3`, `pytest`, `ruff`, `gemini-api`, `gcloud`, `ffmpeg`/`ffprobe`, `yt-dlp`, `jq`), while falling back to Antigravity's default permission prompt on runtime code writes outside default policy, `--skip-verify` / `--all` syncs, destructive flags, or unrecognized binaries.
+- **`main-sync` Skill (`.agents/skills/main-sync/SKILL.md` → `.agents/scripts/sync_main.py`)** — Separates immediate **Docs Sync** (`--docs-only`, used by the `Project Manager (Steward)` straight to `origin/main`) from gated **Code Sync** (`--code --paths <files...>`, enforcing unit/smoke/ruff verification before commit and supporting `--branch feat/<slug>` PR workflows).
 - **`simon-session-context` (`SessionStart` → `.agents/scripts/session_start.py`)** — Injects `PROJECT.md` orientation at session start.
 - **`simon-stop-doc-sync` (`Stop` → `.agents/scripts/stop_doc_sync.py`)** — Keeps shared docs synced cleanly to `origin/main`.

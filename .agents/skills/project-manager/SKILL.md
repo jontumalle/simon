@@ -19,16 +19,16 @@ Whenever a chat window produces documents, research, brain artifacts, plans, arc
 - **`TypeName`**: `"self"`
 - **`Role`**: `"Project Manager (Steward)"`
 - **`Prompt`**: Pass:
-  1. Instruction to read `.agents/skills/project-manager/SKILL.md`, `PROJECT.md`, `pm/scope.md`, and `pm/current.md`.
+  1. Instruction to read `.agents/skills/project-manager/SKILL.md`, `.agents/skills/main-sync/SKILL.md`, `PROJECT.md`, `pm/scope.md`, and `pm/current.md`.
   2. The session's artifact directory path (`<appDataDir>/brain/<conversation-id>`) and paths to any standalone markdown docs, notes, or transcripts produced in the session so none stay trapped in the chat window.
   3. Concise summary of what happened, what code/files changed, confirmed owner decisions, and any new CLIs/SDKs/plugins/env vars introduced.
-  4. Instruction to commit and push all documentation/knowledge-model updates directly to `origin/main` via `python3 .agents/scripts/sync_main.py --docs-only`.
+  4. Instruction to delegate synchronization to the **`main-sync` skill (`Track A · Docs & Knowledge Sync`, `--docs-only`)** — noting that documentation file writes and `--docs-only` sync are auto-approved by `.agents/hooks.json`, and the Steward must **never** sync runtime code (`--code` belongs exclusively to coding agents).
 
 ---
 
 ## 2. Cross-Window Document Harvesting & `main` Sync Runbook (For Steward Agent)
 
-Before writing, read `PROJECT.md`, `pm/scope.md`, `pm/current.md`, and `pm/decisions.md`.
+Before writing, read `.agents/skills/main-sync/SKILL.md`, `PROJECT.md`, `pm/scope.md`, `pm/current.md`, and `pm/decisions.md`.
 
 ### Step 1 · Harvest Session Documents & Artifacts
 Check whether the chat session produced any standalone markdown documents, research reports, architecture notes, plans, transcripts, `pm/inbox/` captures, or Antigravity brain artifacts (`<appDataDir>/brain/<conversation-id>/*.md`) whose knowledge belongs in the repository:
@@ -50,15 +50,14 @@ Update the repository's governance and pointer files while respecting bucket mod
 | `ideas/` · `data/` | **Explorations, schemas & datasets** — product discovery/verticals (`ideas/`) and manifest schemas or eval benchmarks (`data/`). |
 | `PROJECT.md` (`Recent sessions`) | **LRU Working Memory (max 12)** — `- YYYY-MM-DD · <workstream> · <≤15 word summary> → <key paths>`. Touch & move to top if the workstream already exists; drop oldest if >12; never edit `## Focus` unless the owner explicitly changed priorities. |
 
-### Step 3 · Zero-Repercussion Sync to `main`
-Documentation and knowledge-model updates (`*.md`, `PROJECT.md`, `RESOURCES.md`, `pm/**`, `notes/**`, `ideas/**`, `data/**`, `agents/**`, `.agents/**`) carry **zero repercussions** to commit and push directly to `origin/main`:
+### Step 3 · Sync via `main-sync` Skill (`Track A · Docs Sync` Only)
+Follow [`.agents/skills/main-sync/SKILL.md`](../main-sync/SKILL.md) (**Track A · Docs & Knowledge Sync**). Creating/editing documentation in established buckets and running `--docs-only` sync are **auto-approved** by `.agents/scripts/auto_approve_toolchain.py` (`PreToolUse`):
 1. Run:
    ```bash
    python3 .agents/scripts/sync_main.py --docs-only -m "docs(pm): <concise summary>"
    ```
-   *(When invoking shell commands in a sandboxed environment, request host access / `BypassSandbox: true` as needed because `.git/` lockfiles and GitHub network remotes require host git/SSH/HTTPS access.)*
-2. This pulls `origin/main` with `--rebase --autostash`, commits only documentation/knowledge paths, and pushes straight to `origin/main` so every parallel chat window and teammate sees the latest context immediately.
-3. **Graceful Fallback**: If the remote `git push` fails (e.g., pending GitHub collaborator permissions, auth issue, or offline), verify that the **local commit on `main` succeeded** and report the exact remote push status/error clearly.
+   - **Strict Separation from Code Sync**: Never pass `--code` or `--all` from the Steward. Unfinished `simon/` or `tests/` code in the working tree stays untouched (`--docs-only` unstages non-doc paths and rebases with `--autostash`), because code changes follow `main-sync` **Track B (`--code`)** with mandatory test/smoke gates and `--paths` / `--branch` controls.
+2. **Graceful Fallback**: If the remote `git push` fails (e.g., offline or network error), verify that the **local commit on `main` succeeded** (`committed: true`) and report the exact remote push status/error clearly.
 
 ### Step 4 · Report Back
 Return (via `send_message` when running as a subagent) a concise summary covering:
