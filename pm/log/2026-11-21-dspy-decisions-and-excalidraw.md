@@ -12,3 +12,20 @@
   - Installed and activated `antigravity-plugins-official/plugin/gemini-api` (recorded in Section 5 of [RESOURCES.md](../../RESOURCES.md)), exposing live `gemini-api-docs` MCP search and `gemini-api-dev` / `gemini-api-cli` skills.
 - **Setup-Stage Guardrail Check**:
   - Held off on creating a new subfolder for standalone DSPy + Decisions API notes/artifacts pending owner confirmation on bucket placement (`notes/` vs. `ideas/`); captured distilled architectural details here in `pm/log/` and flagged the open question in [pm/current.md](../current.md).
+- **Installed `dspy==3.5.0` & Designed Part 1 Operational Architecture (`8e19edd`)**:
+  - Installed `dspy==3.5.0` into `.venv` (`Python 3.12.16`) alongside `google-genai==3.6.1` and recorded `dspy` in [RESOURCES.md](../../RESOURCES.md).
+  - Designed the **Part 1 Operational & Deployment Architecture** (Gemini Decisions API + DSPy rubric compiler + relational DB + local/cloud parity) and rendered it via the Excalidraw MCP App (`checkpointId: eaa2076dc41743f49f`).
+  - Defined a portable **4-table relational schema** shared across local SQLite and deployed Postgres:
+    1. `events` (`id`, `name`, `slot`, `fit_brief`, `artist_guarantee_usd`)
+    2. `auditions` (`id`, `event_id`, `artist_alias`, `consent`, `audio_uri`, `performance_notes`, `artist_notes`)
+    3. `rubric_versions` (`version_id`, `created_by`, `instructions_json`, `demos_json`, `val_accuracy`, `is_active`)
+    4. `decision_evaluations` (`id`, `audition_id`, `rubric_version_id`, `live_viable_prob`, `vocal_score`, `triage_choice`, `choice_probs_json`, `confidence`, `human_label`) — storing producer feedback (`human_label`) so future `dspy` runs compile `rubric_v2+`.
+- **Verified End-to-End Part 1 Prototype (`scratch/try_part1_decisions_dspy.py`)**:
+  - Validated exact `google-genai==3.6.1` `client.decisions.create(model="gemini-decision-1", ...)` (`v1beta`) Pydantic question & answer schemas:
+    - **`NoulQuestion`**: `{"type": "noul", "instructions": str, "criteria": {"true_description": str, "false_description": str}}` → `answer.noul` (`float` calibrated $P(\text{yes})$), `answer.confidence`.
+    - **`ChoiceQuestion`**: `{"type": "choice", "instructions": str, "criteria": dict[str, str]}` → `answer.choice`, `answer.probabilities` (`dict[str, float]`), `answer.confidence`.
+    - **`ScoreQuestion`**: `{"type": "score", "instructions": str, "criteria": list[str]}` (ordered rubric anchors `0..N-1`) → `answer.score`, `answer.legend`, `answer.probabilities`, `answer.confidence`.
+  - Compiled `rubric_v1` via `dspy.BootstrapFewShot`, persisted instructions + bootstrapped demos into `rubric_versions`, and scored `examples/showcase.json`:
+    - `a01` (*Mara Vance*) → `callback_shortlist` (`P(yes)=0.93`, `vocal_score=3.45/4.00`, `confidence=0.90`) → triggers downstream Critic Managed Agents (`performance-critic` + `booking-critic`).
+    - `a02` (*Devon Vale*) → `request_live_clip` (`P(yes)=0.41`, `vocal_score=2.95/4.00`, `confidence=0.87`) → auto-drafts raw single-take live clip request without invoking heavy Managed Agents.
+  - **DSPy + `google-genai` Engineering Gotcha**: Do **not** store `genai.Client` as an instance attribute on a `dspy.Module` subclass — `dspy.Module.deepcopy()` deep-copies all module fields during compilation (`BootstrapFewShot` / `MIPROv2`), which breaks or mishandles underlying `httpx` client/socket state. Inject/resolve `genai.Client` via an external getter/context or exclude it in `__deepcopy__`.
