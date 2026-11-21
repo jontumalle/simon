@@ -158,6 +158,8 @@ class TestAgencyStudioUIAndPhases(unittest.TestCase):
             ("/discovery", b"/?tab=discovery"),
             ("/reports", b"/?tab=pipeline&amp;phase=2a_identity"),
             ("/investigate", b"/?tab=pipeline&amp;phase=2a_identity"),
+            ("/screen", b"/?tab=pipeline&amp;phase=4_producer"),
+            ("/screen", b"/?tab=review&amp;subtab=screened"),
         ]:
             code, _, html = dispatch_http_request(self.store, "GET", route)
             self.assertEqual(code, 200)
@@ -197,6 +199,37 @@ class TestAgencyStudioUIAndPhases(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertIn(b"agent.default_input", js)
         self.assertIn(b"agent.input_hint", js)
+
+    def test_phase_2c_persists_dossier_for_investigate_and_screening(self) -> None:
+        code, _, resp = dispatch_http_request(
+            self.store,
+            "POST",
+            "/api/phases/run",
+            json.dumps({"phase_id": "2c_dossier", "payload": {}, "live": False}).encode("utf-8"),
+        )
+        self.assertEqual(code, 200, f"Phase 2C failed: {resp}")
+        rec = json.loads(resp)
+        self.assertTrue(rec["passed"])
+        self.assertTrue(rec["output"]["dossier_saved"])
+        lead_id = rec["output"]["lead_id"]
+
+        # Dossier must now be visible in /api/dossiers
+        code, _, dossiers_body = dispatch_http_request(self.store, "GET", f"/api/dossiers?lead_id={lead_id}")
+        self.assertEqual(code, 200)
+        dossiers = json.loads(dossiers_body)["dossiers"]
+        self.assertGreaterEqual(len(dossiers), 1)
+
+        # And immediately runnable in Stage 3 Screening
+        code, _, screen_body = dispatch_http_request(
+            self.store,
+            "POST",
+            "/api/screening/run",
+            json.dumps({"lead_id": lead_id, "live": False}).encode("utf-8"),
+        )
+        self.assertEqual(code, 200, f"Screening run failed: {screen_body}")
+        screen_data = json.loads(screen_body)
+        self.assertTrue(screen_data["ok"])
+        self.assertGreaterEqual(screen_data["count"], 1)
 
 
 if __name__ == "__main__":

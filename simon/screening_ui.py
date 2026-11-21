@@ -937,6 +937,14 @@ def render_screening_page() -> str:
                 Save &amp; Next →
               </button>
             </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; padding-top:8px; border-top:1px solid var(--border); margin-top:4px;">
+              <span class="mono" style="font-size:0.78rem;">Advance candidate to next stage:</span>
+              <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                <a class="btn" href="/investigate?lead=${{encodeURIComponent(leadId)}}" style="font-size:0.78rem; padding:5px 10px;">← Inspect Dossier</a>
+                <a class="btn" href="/?tab=review&amp;subtab=screened&amp;lead=${{encodeURIComponent(leadId)}}" style="font-size:0.78rem; padding:5px 10px;">Open in Talent Review →</a>
+                <a class="btn primary" href="/?tab=pipeline&amp;phase=4_producer&amp;lead=${{encodeURIComponent(leadId)}}&amp;subject=${{encodeURIComponent(d.stageName)}}" style="font-size:0.78rem; padding:5px 10px;">Draft Callback (Phase 4) →</a>
+              </div>
+            </div>
           </div>
         </footer>
       `;

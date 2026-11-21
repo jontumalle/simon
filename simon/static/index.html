@@ -16,28 +16,34 @@
           <div class="brand-mark">S</div>
           <div>
             <div class="brand-title">Simon</div>
-            <div class="brand-sub">Talent Review</div>
+            <div id="brandSubLabel" class="brand-sub">Talent Review</div>
           </div>
         </div>
 
-        <nav class="nav-tabs" aria-label="Studio Views">
+        <nav class="nav-tabs" aria-label="Primary Pipeline Stages">
           <button class="nav-tab" data-tab="discovery" type="button">Discovery</button>
+          <a class="nav-tab" href="/investigate">Investigate</a>
+          <a class="nav-tab" href="/screen">Screening</a>
           <button class="nav-tab active" data-tab="review" type="button">Talent Review</button>
-          <button class="nav-tab" data-tab="pipeline" type="button">Pipeline</button>
-          <button class="nav-tab" data-tab="lab" type="button">Agent Lab</button>
         </nav>
       </div>
 
       <div class="topbar-actions">
-        <select id="historySelect" class="select-compact" title="Saved Scouting Runs">
-          <option value="">Saved runs…</option>
-        </select>
+        <div id="reviewTopbarControls" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <select id="historySelect" class="select-compact" title="Saved Scouting Runs">
+            <option value="">Saved runs…</option>
+          </select>
 
-        <button id="openBriefBtn" class="btn btn-primary" type="button">+ New Brief</button>
+          <button id="openBriefBtn" class="btn btn-primary" type="button">+ New Brief</button>
+        </div>
 
         <details class="more-menu" id="moreMenu">
-          <summary class="btn">More ▾</summary>
+          <summary class="btn">Tools ▾</summary>
           <div class="more-popover">
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button class="btn" data-tab="pipeline" type="button" style="flex:1;">Pipeline Stepper</button>
+              <button class="btn" data-tab="lab" type="button" style="flex:1;">Agent Lab</button>
+            </div>
             <!--__TOP_NAV__-->
             <div class="more-footer">
               <button id="openTraceBtn" class="btn" type="button">Run Trace</button>
@@ -210,11 +216,13 @@
           <div class="subtabs">
             <button id="subtabShortlistBtn" class="nav-tab active" data-subtab="shortlist" type="button">Shortlist (0)</button>
             <button id="subtabAllBtn" class="nav-tab" data-subtab="all" type="button">All Artists (0)</button>
+            <button id="subtabScreenedBtn" class="nav-tab" data-subtab="screened" type="button">Screened &amp; Elevated (0)</button>
           </div>
         </div>
 
         <div id="shortlistContainer" class="artist-list"></div>
         <div id="allLeadsContainer" class="artist-list hidden"></div>
+        <div id="screenedLeadsContainer" class="artist-list hidden"></div>
       </section>
     </div>
   </main>
