@@ -25,14 +25,19 @@ from .deploy import compile_agent_package, list_agent_packages
 from .discovery_ui import (
     DISCOVERY_HTML,
     FIELD_NEWS_HTML,
+    INVESTIGATE_HTML,
     REPORTS_HTML,
     TRACES_HTML,
+    _NAV_CSS,
     dispatch_discovery_batch,
     get_agent_report,
     list_agent_reports,
     list_discovery_batches,
+    list_discovery_leads,
+    list_investigator_dossiers,
     load_source_registry,
     refresh_discovery_batch,
+    render_top_nav,
 )
 from .fleet import dispatch_fleet
 from .registry import (
@@ -232,23 +237,24 @@ INDEX_HTML = """<!DOCTYPE html>
     }
     .status-banner.error { display: block; background: var(--warn-bg); border: 1px solid var(--warn); color: #fecdd3; }
     .status-banner.info { display: block; background: var(--amber-bg); border: 1px solid var(--accent); color: #fde68a; }
+    /*__NAV_CSS__*/
   </style>
 </head>
 <body>
   <div class="wrap">
     <header>
       <div class="brand">
-        <h1>Simon <span class="pill amber">Taste-Brief Vocal Scout MVP</span></h1>
+        <h1>Simon <span class="pill live">5. Vocal Studio</span></h1>
         <p>Enter a taste brief to scout public YouTube vocal performances, extract timestamped musical choices with <strong>Gemini 4 Hydrogen</strong>, and synthesize a human-verifiable listening shortlist via <strong>Gemini Managed Agents</strong>.</p>
       </div>
-      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-        <a href="/discovery" class="pill amber" style="text-decoration:none;">1. Discovery Dashboard</a>
-        <a href="/field-news" class="pill live" style="text-decoration:none;">2. Field News</a>
-        <a href="/reports" class="pill" style="text-decoration:none;">3. Scouting Reports</a>
-        <span id="serverKeyBadge" class="pill">Checking API status…</span>
-        <select id="historySelect" class="key-input" style="width:auto;" title="Saved SQLite Scout Runs">
-          <option value="">Recent saved runs…</option>
-        </select>
+      <div style="display:flex; flex-direction:column; gap:10px; align-items:flex-end;">
+        <!--__TOP_NAV__-->
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <span id="serverKeyBadge" class="pill">Checking API status…</span>
+          <select id="historySelect" class="key-input" style="width:auto;" title="Saved SQLite Scout Runs">
+            <option value="">Recent saved runs…</option>
+          </select>
+        </div>
       </div>
     </header>
 
@@ -861,7 +867,7 @@ INDEX_HTML = """<!DOCTYPE html>
   </script>
 </body>
 </html>
-"""
+""".replace("/*__NAV_CSS__*/", _NAV_CSS).replace("<!--__TOP_NAV__-->", render_top_nav("/"))
 
 
 def dispatch_http_request(
@@ -969,6 +975,34 @@ def dispatch_http_request(
 
         if parsed.path == "/reports":
             return (HTTPStatus.OK, "text/html; charset=utf-8", REPORTS_HTML.encode("utf-8"))
+
+        if parsed.path == "/investigate":
+            return (HTTPStatus.OK, "text/html; charset=utf-8", INVESTIGATE_HTML.encode("utf-8"))
+
+        if parsed.path == "/api/dossiers":
+            qs = parse_qs(parsed.query)
+            dossiers = list_investigator_dossiers(
+                store,
+                lead_id=(qs.get("lead_id") or [None])[0],
+                limit=int((qs.get("limit") or ["50"])[0]),
+            )
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps({"count": len(dossiers), "dossiers": dossiers}, ensure_ascii=False).encode("utf-8"),
+            )
+
+        if parsed.path == "/api/leads":
+            qs = parse_qs(parsed.query)
+            leads = list_discovery_leads(
+                store,
+                limit=int((qs.get("limit") or ["100"])[0]),
+            )
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps({"count": len(leads), "leads": leads}, ensure_ascii=False).encode("utf-8"),
+            )
 
         if parsed.path in ("/api/field-news", "/api/reports"):
             qs = parse_qs(parsed.query)

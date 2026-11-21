@@ -126,6 +126,7 @@ def _extract_findings_from_handoff(output_json: Optional[Dict[str, Any]]) -> Lis
         seeds = lead.get("seed_sources") or []
         first_seed = seeds[0] if seeds and isinstance(seeds[0], dict) else {}
         item = {
+            "lead_id": str(lead.get("lead_id") or ""),
             "title": str(lead.get("stage_name") or lead.get("lead_id") or "Unnamed Subject"),
             "summary": str(lead.get("context_snippet") or first_seed.get("notes") or "Discovered lead."),
             "source_name": str(first_seed.get("seed_query_or_venue_node") or first_seed.get("source_channel") or ""),
@@ -376,6 +377,76 @@ def get_agent_report(store: SimonStore, report_id: str) -> Optional[Dict[str, An
     if not isinstance(doc, dict):
         return None
     return sanitize_agent_report(doc)
+
+
+def list_investigator_dossiers(
+    store: SimonStore,
+    lead_id: Optional[str] = None,
+    limit: int = 50,
+) -> List[Dict[str, Any]]:
+    """List stored Stage 2 investigator dossiers with all telemetry keys stripped."""
+    docs = list_agent_documents(store, "investigator_dossiers", limit=max(limit, 100))
+    dossiers: List[Dict[str, Any]] = []
+    for row in docs:
+        doc = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else row
+        if not isinstance(doc, dict):
+            continue
+        clean = sanitize_agent_report(doc)
+        if lead_id and clean.get("lead_id") != lead_id and clean.get("_doc_id") != lead_id:
+            continue
+        dossiers.append(clean)
+    dossiers.sort(
+        key=lambda d: str(d.get("updated_at") or d.get("_saved_at") or d.get("created_at") or ""),
+        reverse=True,
+    )
+    return dossiers[:limit]
+
+
+def list_discovery_leads(
+    store: SimonStore,
+    limit: int = 100,
+) -> List[Dict[str, Any]]:
+    """List verified/discovered leads from `leads` and `discovery_handoffs`, deduplicated and sanitized."""
+    leads_out: List[Dict[str, Any]] = []
+    seen_keys = set()
+
+    def _add_lead(raw: Dict[str, Any], handoff_meta: Optional[Dict[str, Any]] = None) -> None:
+        if not isinstance(raw, dict):
+            return
+        lead_id = str(raw.get("lead_id") or raw.get("_doc_id") or "").strip()
+        stage_name = str(raw.get("stage_name") or "").strip()
+        if not lead_id and not stage_name:
+            return
+        dedupe_key = (lead_id or stage_name).lower()
+        if dedupe_key in seen_keys:
+            return
+        seen_keys.add(dedupe_key)
+        item = dict(raw)
+        if handoff_meta:
+            item.setdefault("run_id", handoff_meta.get("run_id"))
+            item.setdefault("search_brief", handoff_meta.get("search_brief"))
+            item.setdefault("discovered_at", handoff_meta.get("generated_at"))
+        leads_out.append(sanitize_agent_report(item))
+
+    for row in list_agent_documents(store, "leads", limit=max(limit, 100)):
+        doc = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else row
+        if isinstance(doc, dict):
+            _add_lead(doc)
+
+    for row in list_agent_documents(store, "discovery_handoffs", limit=50):
+        doc = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else row
+        if not isinstance(doc, dict):
+            continue
+        meta = {
+            "run_id": doc.get("run_id"),
+            "search_brief": doc.get("search_brief"),
+            "generated_at": doc.get("generated_at") or doc.get("_saved_at"),
+        }
+        for lead in doc.get("leads") or []:
+            if isinstance(lead, dict):
+                _add_lead(lead, handoff_meta=meta)
+
+    return leads_out[:limit]
 
 
 def _validate_handoff_payload(output_json: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -805,7 +876,70 @@ def refresh_discovery_batch(
     return batch
 
 
-_SHARED_CSS = """
+_NAV_CSS = """
+  .nav-sections { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .nav-group {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    padding: 5px 8px; border-radius: 12px; border: 1px solid var(--border);
+    background: rgba(25, 31, 46, 0.72);
+  }
+  .nav-group-label {
+    font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); padding: 0 7px 0 4px; border-right: 1px solid var(--border);
+  }
+  .nav-group.stage-discovery .nav-group-label { color: var(--accent); }
+  .nav-group.stage-investigation .nav-group-label { color: var(--teal); }
+  .nav-group a {
+    padding: 6px 11px; border-radius: 8px; font-weight: 600; font-size: 0.84rem;
+    border: 1px solid transparent; background: transparent; color: var(--muted);
+    text-decoration: none;
+  }
+  .nav-group a:hover { color: var(--text); text-decoration: none; border-color: var(--border); background: var(--panel-2); }
+  .nav-group.stage-discovery a.active {
+    background: var(--amber-bg); border-color: var(--accent); color: var(--accent);
+  }
+  .nav-group.stage-investigation a.active {
+    background: var(--teal-bg); border-color: var(--teal); color: var(--teal);
+  }
+"""
+
+
+def render_top_nav(active_path: str) -> str:
+    """Render the shared two-section top navigation (Discovery vs Investigation)."""
+    def _link(href: str, label: str, elem_id: str = "") -> str:
+        cls = ' class="active"' if active_path == href else ""
+        id_attr = f' id="{elem_id}"' if elem_id else ""
+        return f'<a href="{href}"{id_attr}{cls}>{label}</a>'
+
+    discovery_links = "".join(
+        [
+            _link("/discovery", "1. Discovery Dashboard"),
+            _link("/field-news", "2. Field News", "tracesNavLink"),
+            _link("/reports", "3. Scouting Reports", "reportsNavLink"),
+        ]
+    )
+    investigation_links = "".join(
+        [
+            _link("/investigate", "4. Investigator Desk"),
+            _link("/", "5. Vocal Studio"),
+        ]
+    )
+    return (
+        '<nav class="nav-sections" aria-label="Simon Pipeline Navigation">'
+        '<div class="nav-group stage-discovery">'
+        '<span class="nav-group-label">Discovery</span>'
+        f"{discovery_links}"
+        "</div>"
+        '<div class="nav-group stage-investigation">'
+        '<span class="nav-group-label">Investigation</span>'
+        f"{investigation_links}"
+        "</div>"
+        "</nav>"
+    )
+
+
+_SHARED_CSS = (
+    """
   :root {
     --bg: #0b0d12; --panel: #131722; --panel-2: #191f2e; --border: #262f45;
     --text: #eef2ff; --muted: #9aa5c4; --accent: #f59e0b; --accent-hover: #fbbf24;
@@ -862,8 +996,9 @@ _SHARED_CSS = """
   .btn {
     background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
     border-radius: 9px; padding: 8px 14px; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 5px;
   }
-  .btn:hover { border-color: var(--accent); }
+  .btn:hover { border-color: var(--accent); text-decoration: none; }
   .btn.primary {
     background: var(--accent); color: #111318; border-color: var(--accent); font-weight: 800; padding: 10px 18px;
   }
@@ -901,7 +1036,17 @@ _SHARED_CSS = """
     background: #0d1018; border-left: 3px solid var(--accent); border-radius: 6px;
     padding: 8px 11px; margin-bottom: 8px; font-size: 0.84rem;
   }
+  .kv-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 8px;
+  }
+  .kv-cell {
+    background: #0d1018; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+  }
+  .kv-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 700; }
+  .kv-val { font-size: 0.86rem; font-weight: 600; margin-top: 2px; word-break: break-word; }
 """
+    + _NAV_CSS
+)
 
 
 DISCOVERY_HTML = f"""<!DOCTYPE html>
@@ -919,12 +1064,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
         <h1>Simon <span class="pill amber">1. Discovery Dashboard</span></h1>
         <p>Decide what you want to scout: set your brief, pick active sources, dispatch scouts, and follow their live progress in <strong>Field News</strong>.</p>
       </div>
-      <nav class="nav">
-        <a href="/discovery" class="active">1. Discovery Dashboard</a>
-        <a href="/field-news" id="tracesNavLink">2. Field News</a>
-        <a href="/reports" id="reportsNavLink">3. Scouting Reports</a>
-        <a href="/">Vocal Studio</a>
-      </nav>
+      {render_top_nav("/discovery")}
     </header>
 
     <div id="banner" class="banner"></div>
@@ -1202,12 +1342,7 @@ FIELD_NEWS_HTML = f"""<!DOCTYPE html>
         <h1>Simon <span class="pill ok">2. Field News</span></h1>
         <p>Agents in motion: live human-first updates on what each scout is looking at, what they are finding, and their analysis through the process.</p>
       </div>
-      <nav class="nav">
-        <a href="/discovery">1. Discovery Dashboard</a>
-        <a href="/field-news" class="active">2. Field News</a>
-        <a href="/reports" id="reportsNavLink">3. Scouting Reports</a>
-        <a href="/">Vocal Studio</a>
-      </nav>
+      {render_top_nav("/field-news")}
     </header>
 
     <section class="card">
@@ -1385,12 +1520,7 @@ REPORTS_HTML = f"""<!DOCTYPE html>
         <h1>Simon <span class="pill blue">3. Scouting Reports</span></h1>
         <p>Human-first scouting reports with verified findings, process summaries, and stored agent outputs ready for review.</p>
       </div>
-      <nav class="nav">
-        <a href="/discovery">1. Discovery Dashboard</a>
-        <a href="/field-news">2. Field News</a>
-        <a href="/reports" class="active">3. Scouting Reports</a>
-        <a href="/">Vocal Studio</a>
-      </nav>
+      {render_top_nav("/reports")}
     </header>
 
     <section class="card">
@@ -1447,10 +1577,13 @@ REPORTS_HTML = f"""<!DOCTYPE html>
                   ${{f.attribution_status ? `<span class="pill ok">${{esc(f.attribution_status)}}</span>` : ''}}
                 </div>
                 <div style="font-size:0.84rem; color:var(--muted); margin-top:4px;">${{esc(f.summary)}}</div>
-                <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center;">
-                  ${{f.source_name ? `<span class="pill">${{esc(f.source_name)}}</span>` : ''}}
-                  ${{f.source_channel ? `<span class="pill">${{esc(f.source_channel)}}</span>` : ''}}
-                  ${{f.url ? `<a href="${{esc(f.url)}}" target="_blank" rel="noopener" style="font-size:0.82rem;">Open source ↗</a>` : ''}}
+                <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center; justify-content:space-between;">
+                  <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                    ${{f.source_name ? `<span class="pill">${{esc(f.source_name)}}</span>` : ''}}
+                    ${{f.source_channel ? `<span class="pill">${{esc(f.source_channel)}}</span>` : ''}}
+                    ${{f.url ? `<a href="${{esc(f.url)}}" target="_blank" rel="noopener" style="font-size:0.82rem;">Open source ↗</a>` : ''}}
+                  </div>
+                  <a class="btn" href="/investigate?subject=${{encodeURIComponent(f.title || '')}}${{f.lead_id ? '&lead=' + encodeURIComponent(f.lead_id) : ''}}" style="font-size:0.78rem; padding:5px 10px; color:var(--teal); border-color:rgba(45,212,191,0.4);">Investigate →</a>
                 </div>
               </div>`).join('')}}
           </div>` : '<div style="color:var(--muted); font-size:0.86rem;">No verified findings recorded in this report yet.</div>';
@@ -1513,3 +1646,299 @@ REPORTS_HTML = f"""<!DOCTYPE html>
 </body>
 </html>
 """
+
+
+INVESTIGATE_HTML = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Simon · 4. Investigator Desk (Stage 2)</title>
+  <style>{_SHARED_CSS}</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <h1>Simon <span class="pill ok">4. Investigator Desk</span></h1>
+        <p>Stage 2 Investigation: inspect verified leads from Discovery, follow live Investigator Field News, and review objective factual dossiers (zero ranking or scoring).</p>
+      </div>
+      {render_top_nav("/investigate")}
+    </header>
+
+    <div id="focusBanner" class="banner"></div>
+
+    <section class="card">
+      <div class="section-head">
+        <h2>1. Verified Leads Ready for Stage 2 Investigation <span id="leadsCountBadge" class="pill blue">0 leads</span></h2>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <input id="leadSearchInput" type="text" placeholder="Filter by artist or lead ID…" style="min-width:220px;" />
+          <button id="clearFocusBtn" class="btn" type="button" style="display:none;">Show All</button>
+          <button id="refreshDeskBtn" class="btn" type="button">Refresh Desk</button>
+        </div>
+      </div>
+      <div id="leadsGrid" class="worker-grid">
+        <div class="mono">Loading verified leads from Discovery…</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <h2>2. Stage 2 Investigator Field News <span id="invNewsCountBadge" class="pill amber">0 dispatches</span></h2>
+        <span class="pill">stage=investigator</span>
+      </div>
+      <div id="invFieldNews" class="worker-grid">
+        <div class="mono">Loading Stage 2 investigator field news…</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <h2>3. Stored Investigator Dossiers <span id="dossiersCountBadge" class="pill ok">0 dossiers</span></h2>
+        <span class="pill ok">Objective Facts Only · Unranked</span>
+      </div>
+      <div id="dossiersList" style="display:flex; flex-direction:column; gap:16px;">
+        <div class="mono">Loading stored investigator dossiers…</div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const el = (id) => document.getElementById(id);
+    function esc(s) {{ const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }}
+    const params = new URLSearchParams(window.location.search);
+    let focusLeadId = params.get('lead') || '';
+    let focusSubject = params.get('subject') || '';
+    let allLeads = [];
+    let allDossiers = [];
+
+    function statusPill(status) {{
+      if (status === 'completed' || status === 'verified') return '<span class="pill ok">' + esc(status) + '</span>';
+      if (status === 'in_motion' || status === 'starting' || status === 'uncertain') return '<span class="pill amber">' + esc(status.replace('_', ' ')) + '</span>';
+      return '<span class="pill warn">' + esc(status || 'unknown') + '</span>';
+    }}
+
+    function phaseBadge(phase) {{
+      if (phase === 'looking_at') return '<span class="pill blue">Looking At</span>';
+      if (phase === 'finding') return '<span class="pill amber">Finding</span>';
+      if (phase === 'analysis') return '<span class="pill ok">Analysis</span>';
+      return '<span class="pill">Saved</span>';
+    }}
+
+    function matchesFocus(itemName, itemLeadId) {{
+      const q = (el('leadSearchInput').value || '').trim().toLowerCase();
+      if (q) {{
+        const hay = `${{itemName || ''}} ${{itemLeadId || ''}}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }}
+      if (focusLeadId && itemLeadId && itemLeadId !== focusLeadId) {{
+        if (!focusSubject || (itemName || '').toLowerCase() !== focusSubject.toLowerCase()) return false;
+      }} else if (focusSubject && !focusLeadId) {{
+        if ((itemName || '').toLowerCase() !== focusSubject.toLowerCase()) return false;
+      }}
+      return true;
+    }}
+
+    function updateFocusBanner() {{
+      const b = el('focusBanner');
+      if (focusLeadId || focusSubject) {{
+        const label = focusSubject || focusLeadId;
+        b.textContent = `Focused on lead: ${{label}}${{focusLeadId ? ' (' + focusLeadId + ')' : ''}}`;
+        b.className = 'banner info';
+        b.style.display = 'block';
+        el('clearFocusBtn').style.display = 'inline-flex';
+      }} else {{
+        b.style.display = 'none';
+        el('clearFocusBtn').style.display = 'none';
+      }}
+    }}
+
+    function renderLeads() {{
+      const dossierLeadIds = new Set(allDossiers.map((d) => String(d.lead_id || '').toLowerCase()));
+      const dossierNames = new Set(allDossiers.map((d) => String((d.identity_and_contact && d.identity_and_contact.stage_name) || d.stage_name || '').toLowerCase()));
+      const visible = allLeads.filter((l) => matchesFocus(l.stage_name, l.lead_id));
+      el('leadsCountBadge').textContent = `${{visible.length}} lead(s)`;
+      if (!visible.length) {{
+        el('leadsGrid').innerHTML = '<div class="mono">No matching leads found yet. Run Stage 1 Discovery or clear the filter.</div>';
+        return;
+      }}
+      el('leadsGrid').innerHTML = visible.map((l) => {{
+        const hasDossier = dossierLeadIds.has(String(l.lead_id || '').toLowerCase())
+          || dossierNames.has(String(l.stage_name || '').toLowerCase());
+        const seeds = l.seed_sources || [];
+        return `
+          <div class="worker-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+              <strong>${{esc(l.stage_name || l.lead_id)}}</strong>
+              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                ${{statusPill(l.attribution_status || 'uncertain')}}
+                ${{hasDossier ? '<span class="pill ok">Dossier Stored</span>' : '<span class="pill blue">Ready for Stage 2</span>'}}
+              </div>
+            </div>
+            <div class="mono">lead_id: ${{esc(l.lead_id || '—')}}</div>
+            <div style="font-size:0.84rem; color:var(--muted);">${{esc(l.context_snippet || 'Discovered in Stage 1.')}}</div>
+            <div style="display:flex; flex-direction:column; gap:4px;">
+              ${{seeds.map((ss) => `<a class="mono" href="${{esc(ss.url)}}" target="_blank" rel="noopener">↗ [${{esc(ss.source_channel || 'source')}}] ${{esc(ss.url)}}</a>`).join('')}}
+            </div>
+            <div style="margin-top:auto; padding-top:6px; display:flex; justify-content:space-between; align-items:center;">
+              <button class="btn" type="button" data-focus-lead="${{esc(l.lead_id || '')}}" data-focus-name="${{esc(l.stage_name || '')}}" style="font-size:0.78rem; padding:5px 10px;">Focus Lead &amp; Dossier</button>
+              <a href="/reports" style="font-size:0.8rem;">View Discovery Report →</a>
+            </div>
+          </div>`;
+      }}).join('');
+
+      document.querySelectorAll('[data-focus-lead]').forEach((btn) => {{
+        btn.onclick = () => {{
+          focusLeadId = btn.dataset.focusLead || '';
+          focusSubject = btn.dataset.focusName || '';
+          updateFocusBanner();
+          renderLeads();
+          renderDossiers();
+        }};
+      }});
+    }}
+
+    function renderInvestigatorFieldNews(reports) {{
+      el('invNewsCountBadge').textContent = `${{reports.length}} dispatch(es)`;
+      if (!reports.length) {{
+        el('invFieldNews').innerHTML = '<div class="mono">No Stage 2 investigator field dispatches yet. Dispatches posted with stage="investigator" appear here automatically.</div>';
+        return;
+      }}
+      el('invFieldNews').innerHTML = reports.map((r) => {{
+        const steps = r.steps || [];
+        const stepsHtml = steps.length ? steps.map((st) => `
+          <div class="step-row">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:4px;">
+              <strong>${{esc(st.step_number)}}. ${{esc(st.title)}}</strong>
+              ${{phaseBadge(st.phase)}}
+            </div>
+            ${{st.looking_at ? `<div style="font-size:0.82rem;"><strong>Looking at:</strong> ${{esc(st.looking_at)}}</div>` : ''}}
+            ${{st.finding ? `<div style="font-size:0.82rem; margin-top:2px;"><strong>Finding:</strong> ${{esc(st.finding)}}</div>` : ''}}
+            ${{st.analysis ? `<div style="font-size:0.82rem; color:var(--muted); margin-top:2px;"><strong>Analysis:</strong> ${{esc(st.analysis)}}</div>` : ''}}
+          </div>`).join('') : '<div class="mono">Investigator starting…</div>';
+
+        return `
+          <div class="worker-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+              <strong>${{esc(r.agent_name)}}</strong>
+              ${{statusPill(r.status)}}
+            </div>
+            <div style="font-size:0.9rem; font-weight:600;">${{esc(r.headline || '')}}</div>
+            ${{r.current_focus ? `<div style="font-size:0.82rem; color:var(--teal);">Current focus: ${{esc(r.current_focus)}}</div>` : ''}}
+            <div>${{stepsHtml}}</div>
+          </div>`;
+      }}).join('');
+    }}
+
+    function renderDossiers() {{
+      const visible = allDossiers.filter((d) => {{
+        const idObj = d.identity_and_contact || {{}};
+        const name = idObj.stage_name || d.stage_name || d.lead_id || '';
+        return matchesFocus(name, d.lead_id);
+      }});
+      el('dossiersCountBadge').textContent = `${{visible.length}} dossier(s)`;
+      if (!visible.length) {{
+        el('dossiersList').innerHTML = '<div class="mono">No stored investigator dossiers match this view yet.</div>';
+        return;
+      }}
+      el('dossiersList').innerHTML = visible.map((d) => {{
+        const idObj = d.identity_and_contact || {{}};
+        const srcObj = d.source_and_media_queue || {{}};
+        const fpObj = d.public_footprint || {{}};
+        const reach = fpObj.public_reach || {{}};
+        const cfObj = d.comment_forensics || {{}};
+        const intents = cfObj.comment_intent_counts || {{}};
+        const liveObj = d.live_history_and_credits || {{}};
+        const team = liveObj.public_team_mentions || {{}};
+        const stageName = idObj.stage_name || d.stage_name || d.lead_id || 'Unnamed Subject';
+        const city = [idObj.home_neighborhood, idObj.home_city].filter(Boolean).join(', ') || d.home_city || '—';
+        const projectType = idObj.project_type || d.project_type || 'unknown';
+        const contactRoute = idObj.contact_route_type || (idObj.has_public_business_contact ? 'public_contact' : 'none');
+        const regime = fpObj.footprint_regime || d.footprint_regime || 'unknown';
+        const platformUrls = idObj.platform_urls || {{}};
+        const platformLinks = Object.entries(platformUrls)
+          .filter(([, url]) => Boolean(url))
+          .map(([k, url]) => `<a class="pill blue" href="${{esc(url)}}" target="_blank" rel="noopener">${{esc(k)}} ↗</a>`)
+          .join('');
+        const mediaLinks = (srcObj.media_links || []).map((m) => `
+          <div class="lead-box" style="padding:8px 10px;">
+            <div style="display:flex; justify-content:space-between; gap:8px;">
+              <strong>${{esc(m.title || m.url)}}</strong>
+              <span class="pill ${{m.oembed_live_embeddable ? 'ok' : ''}}">${{m.oembed_live_embeddable ? 'embeddable' : 'link'}}</span>
+            </div>
+            <a class="mono" href="${{esc(m.url)}}" target="_blank" rel="noopener">${{esc(m.url)}}</a>
+          </div>`).join('');
+        const shows = (liveObj.show_history || []).concat(liveObj.upcoming_shows || []);
+        const showsHtml = shows.length ? shows.slice(0, 6).map((sh) => `
+          <span class="pill">${{esc(sh.venue || 'Venue')}} · ${{esc(sh.city || '')}} (${{esc(sh.date || '')}})</span>`).join(' ') : '<span class="mono">No public show dates logged.</span>';
+
+        return `
+          <div class="worker-card" style="background:var(--panel-2);">
+            <div class="section-head" style="margin-bottom:4px;">
+              <div>
+                <strong style="font-size:1.08rem;">${{esc(stageName)}}</strong>
+                <span class="pill ok" style="margin-left:8px;">${{esc(projectType)}}</span>
+                <span class="pill blue">${{esc(regime)}}</span>
+              </div>
+              <span class="mono">lead_id: ${{esc(d.lead_id || '—')}}</span>
+            </div>
+            ${{srcObj.bio_text ? `<div style="font-size:0.86rem; color:var(--muted);">${{esc(srcObj.bio_text)}}</div>` : ''}}
+            <div class="kv-grid">
+              <div class="kv-cell"><div class="kv-label">Location</div><div class="kv-val">${{esc(city)}}</div></div>
+              <div class="kv-cell"><div class="kv-label">Contact Route</div><div class="kv-val">${{esc(contactRoute)}}</div></div>
+              <div class="kv-cell"><div class="kv-label">YouTube Subscribers</div><div class="kv-val">${{reach.youtube_subscribers != null ? esc(reach.youtube_subscribers) : '—'}}</div></div>
+              <div class="kv-cell"><div class="kv-label">Top Video Views</div><div class="kv-val">${{reach.top_video_views != null ? esc(reach.top_video_views) : '—'}}</div></div>
+              <div class="kv-cell"><div class="kv-label">Comment Forensics</div><div class="kv-val">${{intents.sample_size != null ? `${{intents.sample_size}} sampled · ${{intents.release_requests || 0}} release req · ${{intents.live_show_requests || 0}} show req` : '—'}}</div></div>
+              <div class="kv-cell"><div class="kv-label">Public Team</div><div class="kv-val">${{esc(team.management || team.label || team.booking_agent || 'Independent / none observed')}}</div></div>
+            </div>
+            ${{platformLinks ? `<div style="display:flex; gap:6px; flex-wrap:wrap;">${{platformLinks}}</div>` : ''}}
+            ${{mediaLinks ? `<div style="display:flex; flex-direction:column; gap:6px;">${{mediaLinks}}</div>` : ''}}
+            <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">${{showsHtml}}</div>
+            <details>
+              <summary style="cursor:pointer; font-size:0.84rem; color:var(--teal); font-weight:600;">Inspect Full Factual Dossier JSON</summary>
+              <pre class="json-view">${{esc(JSON.stringify(d, null, 2))}}</pre>
+            </details>
+          </div>`;
+      }}).join('');
+    }}
+
+    async function loadDesk() {{
+      const [leadsRes, newsRes, dossiersRes] = await Promise.all([
+        fetch('/api/leads'),
+        fetch('/api/field-news?stage=investigator'),
+        fetch('/api/dossiers'),
+      ]);
+      if (leadsRes.ok) {{
+        const data = await leadsRes.json();
+        allLeads = data.leads || [];
+      }}
+      if (dossiersRes.ok) {{
+        const data = await dossiersRes.json();
+        allDossiers = data.dossiers || [];
+      }}
+      if (newsRes.ok) {{
+        const data = await newsRes.json();
+        renderInvestigatorFieldNews(data.reports || []);
+      }}
+      updateFocusBanner();
+      renderLeads();
+      renderDossiers();
+    }}
+
+    el('leadSearchInput').oninput = () => {{ renderLeads(); renderDossiers(); }};
+    el('clearFocusBtn').onclick = () => {{
+      focusLeadId = '';
+      focusSubject = '';
+      el('leadSearchInput').value = '';
+      updateFocusBanner();
+      renderLeads();
+      renderDossiers();
+    }};
+    el('refreshDeskBtn').onclick = loadDesk;
+
+    loadDesk();
+  </script>
+</body>
+</html>
+"""
+
