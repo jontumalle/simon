@@ -5,7 +5,7 @@
   const state = {
     currentRun: null,
     activeTab: 'review',
-    activeSubtab: 'shortlist',
+    activeSubtab: 'screened',
     selectedLeads: new Set(),
     sources: [],
     filteredSources: [],
@@ -41,7 +41,6 @@
     'showcase-producer': 'Showcase Producer',
     'performance-critic': 'Performance Critic',
     'booking-critic': 'Booking Critic',
-    'synthesis-scout': 'Shortlist Scout',
   };
 
   function formatLabel(val) {
@@ -145,7 +144,7 @@
         url.searchParams.delete('subtab');
       } else if (tabName === 'review') {
         url.searchParams.delete('phase');
-        if (state.activeSubtab && state.activeSubtab !== 'shortlist') {
+        if (state.activeSubtab && state.activeSubtab !== 'screened') {
           url.searchParams.set('subtab', state.activeSubtab);
         } else {
           url.searchParams.delete('subtab');
@@ -198,7 +197,7 @@
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab') || 'review';
     const phase = params.get('phase');
-    const subtab = params.get('subtab') || 'shortlist';
+    const subtab = params.get('subtab') || 'screened';
     if (phase && state.phases.some((p) => p.id === phase)) {
       selectPhase(phase);
     }
@@ -210,7 +209,10 @@
 
   // --- DRAWERS & POPOVER DISMISSAL ---
   function closeDrawers() {
-    ['profileDrawer', 'briefDrawer', 'traceDrawer'].forEach((id) => $(id).classList.add('hidden'));
+    ['profileDrawer', 'traceDrawer'].forEach((id) => {
+      const el = $(id);
+      if (el) el.classList.add('hidden');
+    });
   }
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -228,12 +230,14 @@
   document.querySelectorAll('[data-close-drawer]').forEach((btn) => {
     btn.addEventListener('click', closeDrawers);
   });
-  ['profileDrawer', 'briefDrawer', 'traceDrawer'].forEach((id) => {
-    $(id).addEventListener('click', (e) => {
-      if (e.target.id === id) closeDrawers();
-    });
+  ['profileDrawer', 'traceDrawer'].forEach((id) => {
+    const el = $(id);
+    if (el) {
+      el.addEventListener('click', (e) => {
+        if (e.target.id === id) closeDrawers();
+      });
+    }
   });
-  $('openBriefBtn').addEventListener('click', () => $('briefDrawer').classList.remove('hidden'));
   $('openTraceBtn').addEventListener('click', () => {
     const m = $('moreMenu');
     if (m) m.removeAttribute('open');
@@ -798,162 +802,10 @@
     switchTab('pipeline');
   }
 
-  function renderRun(run) {
-    state.currentRun = run;
-    state.selectedLeads.clear();
-    updatePromoteBar();
-
-    const briefPrompt = (run.brief && run.brief.prompt) || '';
-    $('briefInput').value = briefPrompt;
-    $('activeBriefHeading').textContent = briefPrompt ? `“${briefPrompt}”` : 'Active Scouting Run';
-
-    const modeBadge = $('runModeBadge');
-    modeBadge.textContent = run.mode === 'live' ? 'Live Scouts' : 'YouTube Demo';
-    modeBadge.className = 'pill ' + (run.mode === 'live' ? 'ok' : 'accent');
-
-    const leads = run.artist_leads || [];
-    const clips = run.clip_evidence || [];
-    const shortlist = run.shortlist || [];
-    $('recordCountBadge').textContent = `${leads.length} artists · ${clips.length} clips`;
-    $('subtabShortlistBtn').textContent = `Shortlist (${shortlist.length})`;
-    $('subtabAllBtn').textContent = `All Artists (${leads.length})`;
-
-    // Cue #1 shortlist artist without autoplay on initial load
-    if (shortlist.length > 0) {
-      const first = shortlist[0];
-      const lead = leads.find((l) => l.stage_name === first.stage_name) || {};
-      const moments = lead.lead_id ? getArtistMoments(run, lead.lead_id, first.stage_name) : [];
-      playMoment(
-        first.play_first_embed_url,
-        first.play_first_url,
-        `${first.stage_name} @ ${first.play_first_timestamp}`,
-        first.play_first_clip_title,
-        first.why_it_fits,
-        false,
-        moments
-      );
-    }
-
-    // Render Shortlist Cards
-    const shortlistEl = $('shortlistContainer');
-    shortlistEl.innerHTML = shortlist
-      .map((item) => {
-        const lead = leads.find((l) => l.stage_name === item.stage_name) || { lead_id: item.lead_id || '' };
-        const badges = [];
-        badges.push(`<span class="pill ${item.recording_context === 'live' ? 'ok' : ''}">${esc(formatLabel(item.recording_context))}</span>`);
-        badges.push(
-          item.single_clip_flag
-            ? `<span class="pill warn">⚠ 1 Clip Only</span>`
-            : `<span class="pill ok">Multi-Clip</span>`
-        );
-        if (item.uncertain_attribution_flag) {
-          badges.push(`<span class="pill warn">⚠ Uncertain Attribution</span>`);
-        }
-        return `
-          <article class="card artist-card">
-            <div class="artist-card-top">
-              <div>
-                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                  <span class="pill accent">#${esc(item.rank)}</span>
-                  <h3 class="artist-name">${esc(item.stage_name)}</h3>
-                </div>
-                <div class="badges">${badges.join('')}</div>
-              </div>
-              <button type="button" class="btn open-profile-btn" data-lead-id="${esc(lead.lead_id)}">Full Profile →</button>
-            </div>
-            <p class="artist-fit">${esc(item.why_it_fits)}</p>
-            <div class="artist-footer">
-              <button type="button" class="btn btn-primary play-first-btn"
-                data-lead-id="${esc(lead.lead_id)}"
-                data-name="${esc(item.stage_name)}"
-                data-embed="${esc(item.play_first_embed_url)}"
-                data-watch="${esc(item.play_first_url)}"
-                data-label="${esc(item.stage_name + ' @ ' + item.play_first_timestamp)}"
-                data-title="${esc(item.play_first_clip_title)}"
-                data-note="${esc(item.why_it_fits)}">
-                ▶ Play First @ ${esc(item.play_first_timestamp)}
-              </button>
-              <div class="artist-next"><strong>Next:</strong> ${esc(item.what_to_hear_next)}</div>
-            </div>
-          </article>`;
-      })
-      .join('');
-
-    // Render All Leads list
-    const assessByLead = {};
-    (run.assessments || []).forEach((a) => { assessByLead[a.lead_id] = a; });
-    const clipsByLead = {};
-    clips.forEach((c) => { (clipsByLead[c.lead_id] = clipsByLead[c.lead_id] || []).push(c); });
-
-    const allEl = $('allLeadsContainer');
-    allEl.innerHTML = leads
-      .map((lead) => {
-        const assess = assessByLead[lead.lead_id] || {};
-        const leadClips = clipsByLead[lead.lead_id] || [];
-        const shortlisted = shortlist.find((s) => s.stage_name === lead.stage_name);
-        return `
-          <article class="card artist-card">
-            <div class="artist-card-top">
-              <div>
-                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                  <span class="pill ${shortlisted ? 'accent' : ''}">${shortlisted ? '#' + shortlisted.rank : 'Artist'}</span>
-                  <h3 class="artist-name">${esc(lead.stage_name)}</h3>
-                </div>
-                <div class="badges">
-                  <span class="pill ${lead.attribution_status === 'uncertain' ? 'warn' : 'ok'}">${lead.attribution_status === 'uncertain' ? '⚠ Uncertain Credit' : 'Verified'}</span>
-                  <span class="pill">${leadClips.length} Clips</span>
-                </div>
-              </div>
-              <button type="button" class="btn open-profile-btn" data-lead-id="${esc(lead.lead_id)}">Full Profile →</button>
-            </div>
-            <p class="artist-fit">${esc(assess.fit_rationale || lead.attribution_notes || '')}</p>
-          </article>`;
-      })
-      .join('');
-
-    // Wire events on both lists
-    document.querySelectorAll('.play-first-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const moments = btn.dataset.leadId ? getArtistMoments(run, btn.dataset.leadId, btn.dataset.name) : [];
-        playMoment(btn.dataset.embed, btn.dataset.watch, btn.dataset.label, btn.dataset.title, btn.dataset.note, true, moments);
-      });
-    });
-    document.querySelectorAll('.open-profile-btn').forEach((btn) => {
-      btn.addEventListener('click', () => openFullProfile(btn.dataset.leadId));
-    });
-    document.querySelectorAll('.lead-check').forEach((cb) => {
-      cb.addEventListener('change', () => {
-        const id = cb.dataset.leadId;
-        if (!id) return;
-        if (cb.checked) state.selectedLeads.add(id);
-        else state.selectedLeads.delete(id);
-        updatePromoteBar();
-      });
-    });
-
-    // Trace Drawer
-    $('traceContainer').innerHTML = (run.trace || [])
-      .map(
-        (step) => `
-        <div class="output-card">
-          <div class="output-card-head">
-            <span>${esc(formatLabel(step.stage))}</span>
-            <span>${esc(step.duration_ms)} ms</span>
-          </div>
-          <div class="muted" style="font-size:11.5px; font-weight:600;">${esc(formatAgentName(step.actor))}</div>
-          <div style="margin-top:6px;">${esc(step.summary)}</div>
-          <div class="muted" style="font-size:11px; margin-top:4px;">Run Reference: ${esc(step.interaction_id || 'Local Demo')}</div>
-        </div>`
-      )
-      .join('');
-  }
-
-  // Subtabs in Tab 1 (Shortlist, All Artists, Screened & Elevated)
+  // Subtabs in Tab 1 (Screened & Elevated)
   function selectSubtab(target, updateUrl = true) {
-    state.activeSubtab = target || 'shortlist';
+    state.activeSubtab = target || 'screened';
     document.querySelectorAll('[data-subtab]').forEach((b) => b.classList.toggle('active', b.dataset.subtab === state.activeSubtab));
-    $('shortlistContainer').classList.toggle('hidden', state.activeSubtab !== 'shortlist');
-    $('allLeadsContainer').classList.toggle('hidden', state.activeSubtab !== 'all');
     if ($('screenedLeadsContainer')) {
       $('screenedLeadsContainer').classList.toggle('hidden', state.activeSubtab !== 'screened');
     }
@@ -1039,6 +891,9 @@
     }).length;
     if (btn) {
       btn.textContent = `Screened & Elevated (${elevatedCount || sorted.length})`;
+    }
+    if ($('recordCountBadge')) {
+      $('recordCountBadge').textContent = `${sorted.length} screened · ${elevatedCount} elevated`;
     }
     if (!container) return;
     if (!sorted.length) {
@@ -1132,6 +987,19 @@
             []
           );
         }
+      }
+    } else if ($('ytPlayer') && !$('ytPlayer').getAttribute('src')) {
+      const firstPlayBtn = container.querySelector('.screened-play-btn');
+      if (firstPlayBtn) {
+        playMoment(
+          `https://www.youtube.com/embed/${encodeURIComponent(firstPlayBtn.dataset.yt)}`,
+          firstPlayBtn.dataset.url,
+          `${firstPlayBtn.dataset.name} · Screened Clip`,
+          firstPlayBtn.dataset.name,
+          'Loaded from Stage 3 Screening.',
+          false,
+          []
+        );
       }
     }
   }
@@ -1362,7 +1230,7 @@
     }
 
     const wantLive = state.pipelineMode === 'live';
-    const keyOverride = $('apiKeyInput').value.trim();
+    const keyOverride = $('apiKeyInput') ? $('apiKeyInput').value.trim() : '';
     const phaseObj = state.phases.find((p) => p.id === phaseId);
     const phaseLabel = phaseObj ? `Phase ${phaseObj.code} — ${phaseObj.name}` : formatLabel(phaseId);
     setBanner(`Running ${phaseLabel} (${wantLive ? 'Live' : 'Test'})…`, 'info');
@@ -1394,16 +1262,11 @@
       renderPhaseResult(data);
       renderCheckpoints();
 
-      // If Phase 1 ran, refresh Discovery batches/leads & Talent Review runs
+      // If Phase 1 ran, refresh Discovery batches/leads
       if (phaseId === '1_discovery') {
         await refreshDiscoveryData();
         if (data.output && data.output.batch_id) {
           syncDiscoveryBatchLinks(data.output.batch_id);
-        }
-        if (data.run_id) {
-          await refreshHistory();
-          const runRes = await fetch('/api/runs?id=' + encodeURIComponent(data.run_id));
-          if (runRes.ok) renderRun(await runRes.json());
         }
       } else if (phaseId === '3_screening') {
         await refreshScreeningPackets();
@@ -1533,7 +1396,7 @@
     }
     const assignments = Array.isArray(parsed) ? parsed : [parsed];
     const dryRun = $('labDryRunToggle').checked;
-    const keyOverride = $('apiKeyInput').value.trim();
+    const keyOverride = $('apiKeyInput') ? $('apiKeyInput').value.trim() : '';
 
     $('labRunBtn').disabled = true;
     setBanner(`Running ${formatAgentName(state.activeAgent.package)} (${dryRun ? 'Dry Run' : 'Live'})…`, 'info');
@@ -1618,70 +1481,7 @@
   });
 
   // =========================================================
-  // BRIEF, DEMO & HISTORY HANDLERS
-  // =========================================================
-  async function refreshHistory() {
-    const res = await fetch('/api/runs');
-    if (!res.ok) return;
-    const data = await res.json();
-    const opts = [`<option value="">Saved runs (${data.runs.length})…</option>`];
-    data.runs.forEach((r) => {
-      opts.push(`<option value="${esc(r.run_id)}">[${esc(formatStatus(r.mode))}] ${esc(r.brief_prompt.slice(0, 46))}…</option>`);
-    });
-    $('historySelect').innerHTML = opts.join('');
-  }
-
-  $('historySelect').addEventListener('change', async () => {
-    const id = $('historySelect').value;
-    if (!id) return;
-    const res = await fetch('/api/runs?id=' + encodeURIComponent(id));
-    if (res.ok) renderRun(await res.json());
-  });
-
-  document.querySelectorAll('.preset-btn').forEach((btn) => {
-    btn.addEventListener('click', () => { $('briefInput').value = btn.dataset.brief; });
-  });
-
-  async function triggerScout(wantLive) {
-    const keyOverride = $('apiKeyInput').value.trim();
-    closeDrawers();
-    setBanner(
-      wantLive
-        ? 'Running Discovery Scout → Vocal Clip Review → Shortlist Builder… (20–50s)'
-        : 'Loading verified public YouTube performances & shortlist…',
-      'info'
-    );
-    $('scoutBtn').disabled = true;
-    try {
-      const res = await fetch('/api/scout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          brief: $('briefInput').value,
-          live: wantLive,
-          api_key: keyOverride || null,
-        }),
-      });
-      const payload = await res.json();
-      if (!res.ok) {
-        setBanner(payload.error || 'Scout run failed.', 'error');
-        return;
-      }
-      setBanner('', 'info');
-      renderRun(payload);
-      await refreshHistory();
-    } catch (err) {
-      setBanner('Network error talking to Simon server: ' + err.message, 'error');
-    } finally {
-      $('scoutBtn').disabled = false;
-    }
-  }
-
-  $('demoBtn').addEventListener('click', () => triggerScout(false));
-  $('scoutBtn').addEventListener('click', () => triggerScout($('liveToggle').checked));
-
-  // =========================================================
-  // INITIALIZE ALL 4 TABS
+  // INITIALIZE ALL TABS
   // =========================================================
   async function init() {
     const [statusRes, phasesRes, agentsRes, evalsRes, sourcesRes, screenRes] = await Promise.all([
@@ -1694,14 +1494,11 @@
     ]);
 
     const status = await statusRes.json();
-    $('briefInput').value = status.default_brief || '';
     const keyBadge = $('serverKeyBadge');
     if (status.has_api_key) {
       keyBadge.innerHTML = `<span class="dot ok"></span><span>Live Ready</span>`;
-      $('liveToggle').checked = true;
     } else {
       keyBadge.innerHTML = `<span class="dot accent"></span><span>Demo Mode</span>`;
-      $('liveToggle').checked = false;
     }
 
     if (sourcesRes && sourcesRes.ok) {
@@ -1800,23 +1597,6 @@
     } else if (reqTab) {
       switchTab(reqTab, false);
     }
-
-    // Load newest saved run or seed demo
-    const runsRes = await fetch('/api/runs');
-    if (runsRes.ok) {
-      const runsData = await runsRes.json();
-      if (runsData.runs && runsData.runs.length > 0) {
-        const latestId = runsData.runs[0].run_id;
-        const latestRes = await fetch('/api/runs?id=' + encodeURIComponent(latestId));
-        if (latestRes.ok) {
-          renderRun(await latestRes.json());
-          await refreshHistory();
-          $('historySelect').value = latestId;
-          return;
-        }
-      }
-    }
-    await triggerScout(false);
   }
 
   init();

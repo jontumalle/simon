@@ -30,14 +30,6 @@
       </div>
 
       <div class="topbar-actions">
-        <div id="reviewTopbarControls" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-          <select id="historySelect" class="select-compact" title="Saved Scouting Runs">
-            <option value="">Saved runs…</option>
-          </select>
-
-          <button id="openBriefBtn" class="btn btn-primary" type="button">+ New Brief</button>
-        </div>
-
         <details class="more-menu" id="moreMenu">
           <summary class="btn">Tools ▾</summary>
           <div class="more-popover">
@@ -185,17 +177,17 @@
   </main>
 
   <!-- ========================================================= -->
-  <!-- TAB 1: TALENT REVIEW (AGENCY-FIRST VIEW)                  -->
+  <!-- TAB 1: TALENT REVIEW (SCREENED & ELEVATED)                -->
   <!-- ========================================================= -->
   <main id="tab-review" class="container tab-panel">
     <div class="brief-header">
       <div>
-        <div class="eyebrow">Active Brief</div>
-        <h1 id="activeBriefHeading" class="brief-headline">Loading latest scouting run…</h1>
+        <div class="eyebrow">Stage 4 · Talent Review</div>
+        <h1 id="activeBriefHeading" class="brief-headline">Screened &amp; Elevated Talent</h1>
       </div>
       <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-        <span id="recordCountBadge" class="pill ok">0 artists · 0 clips</span>
-        <span id="runModeBadge" class="pill hidden">—</span>
+        <span id="recordCountBadge" class="pill ok">0 screened · 0 elevated</span>
+        <a class="btn" href="/screen">Screening Deck →</a>
       </div>
     </div>
 
@@ -229,19 +221,15 @@
         </div>
       </section>
 
-      <!-- RIGHT: SHORTLIST QUEUE + ALL SCOUTED LEADS -->
+      <!-- RIGHT: SCREENED & ELEVATED QUEUE -->
       <section>
         <div class="queue-toolbar">
           <div class="subtabs">
-            <button id="subtabShortlistBtn" class="nav-tab active" data-subtab="shortlist" type="button">Shortlist (0)</button>
-            <button id="subtabAllBtn" class="nav-tab" data-subtab="all" type="button">All Artists (0)</button>
-            <button id="subtabScreenedBtn" class="nav-tab" data-subtab="screened" type="button">Screened &amp; Elevated (0)</button>
+            <button id="subtabScreenedBtn" class="nav-tab active" data-subtab="screened" type="button">Screened &amp; Elevated (0)</button>
           </div>
         </div>
 
-        <div id="shortlistContainer" class="artist-list"></div>
-        <div id="allLeadsContainer" class="artist-list hidden"></div>
-        <div id="screenedLeadsContainer" class="artist-list hidden"></div>
+        <div id="screenedLeadsContainer" class="artist-list"></div>
       </section>
     </div>
   </main>
@@ -413,44 +401,6 @@
         <button class="btn" data-close-drawer type="button">✕ Close</button>
       </div>
       <div id="profileDrawerBody" style="display:flex; flex-direction:column; gap:14px;"></div>
-    </div>
-  </div>
-
-  <!-- ========================================================= -->
-  <!-- DRAWER: NEW BRIEF & SETTINGS                              -->
-  <!-- ========================================================= -->
-  <div id="briefDrawer" class="drawer-backdrop hidden">
-    <div class="drawer-panel">
-      <div class="drawer-head">
-        <div>
-          <div class="eyebrow">New Scouting Run</div>
-          <h2 style="margin:4px 0 0; font-size:18px; font-weight:800;">Write or Pick a Taste Brief</h2>
-        </div>
-        <button class="btn" data-close-drawer type="button">✕ Close</button>
-      </div>
-
-      <div style="display:flex; flex-direction:column; gap:8px;">
-        <label for="briefInput" style="font-size:12.5px; font-weight:700;">Describe the sound and vocal choices to scout for</label>
-        <textarea id="briefInput" class="field-input" rows="4"></textarea>
-        <div style="display:flex; flex-wrap:wrap; gap:6px;">
-          <button class="btn preset-btn" type="button" data-brief="Find singers who reinterpret familiar songs through distinctive phrasing, micro-dynamics, or stripped-back live arrangements.">Preset: Phrasing &amp; Reinterpretation</button>
-          <button class="btn preset-btn" type="button" data-brief="Stripped-back soul vocalists in live rooms who shift effortlessly from whispered intimacy to chest-voice power without heavy studio polish.">Preset: Live Room Soul</button>
-          <button class="btn preset-btn" type="button" data-brief="Acoustic session or open-mic singers with elastic behind-the-beat pocket and sparse guitar or piano accompaniment.">Preset: Acoustic Pocket</button>
-        </div>
-      </div>
-
-      <div class="output-card" style="display:flex; flex-direction:column; gap:10px;">
-        <label style="display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:600; cursor:pointer;">
-          <input type="checkbox" id="liveToggle" />
-          <span>Run Live (Scouts + YouTube)</span>
-        </label>
-        <input type="password" id="apiKeyInput" class="field-input" placeholder="Optional Gemini API key override…" />
-      </div>
-
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button id="scoutBtn" class="btn btn-primary" style="flex:1; padding:10px 14px;" type="button">Scout Singers &amp; Build Shortlist</button>
-        <button id="demoBtn" class="btn" style="padding:10px 14px;" type="button">Load Instant Demo</button>
-      </div>
     </div>
   </div>
 
