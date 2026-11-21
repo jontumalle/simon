@@ -14,11 +14,16 @@ from .discovery_ui import _SHARED_CSS, _render_top_nav
 _SCREENING_EXTRA_CSS = """
   .control-strip {
     display: flex; flex-direction: column; gap: 14px;
-    background: linear-gradient(180deg, rgba(25, 31, 46, 0.94) 0%, var(--panel) 100%);
-    border-color: rgba(192, 132, 252, 0.28);
+    background: var(--panel);
+    border-color: var(--purple);
   }
   .control-row-top, .control-row-bottom {
     display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;
+  }
+  .culmination-flow-strip {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 9px 12px; border-radius: 10px; background: var(--purple-bg); border: 1px solid var(--border);
+    font-size: 0.8rem; color: var(--text);
   }
   .filter-pills { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .filter-pill {
@@ -33,18 +38,23 @@ _SCREENING_EXTRA_CSS = """
   }
   .filter-count {
     font-family: var(--mono); font-size: 0.72rem; padding: 1px 6px; border-radius: 999px;
-    background: rgba(11, 13, 18, 0.65); color: var(--text);
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
   }
   .fleet-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .btn.neon {
-    background: linear-gradient(135deg, #a855f7, #f59e0b); color: #0b0d12;
+    background: linear-gradient(135deg, #a855f7, #f59e0b); color: #ffffff;
     border: none; font-weight: 800; padding: 9px 16px;
   }
   .btn.neon:hover { filter: brightness(1.08); }
-  .btn.dspy {
-    border-color: rgba(192, 132, 252, 0.45); color: var(--purple); background: rgba(192, 132, 252, 0.09);
+  .btn.taste {
+    background: linear-gradient(135deg, #0f766e, #7e22ce); color: #ffffff;
+    border: none; font-weight: 800; padding: 9px 15px;
   }
-  .btn.dspy:hover { border-color: var(--purple); background: rgba(192, 132, 252, 0.18); }
+  .btn.taste:hover { filter: brightness(1.08); }
+  .btn.dspy {
+    border-color: var(--purple); color: var(--purple); background: var(--purple-bg);
+  }
+  .btn.dspy:hover { filter: brightness(1.05); }
 
   .stepper-bar {
     display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
@@ -88,7 +98,7 @@ _SCREENING_EXTRA_CSS = """
   .hero-aliases { color: var(--muted); font-size: 0.88rem; margin-top: 4px; }
   .hero-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 12px; }
   .hero-bio {
-    font-size: 0.9rem; color: #d6def8; background: #0d1018; border: 1px solid var(--border);
+    font-size: 0.9rem; color: var(--text); background: var(--input-bg); border: 1px solid var(--border);
     border-radius: 10px; padding: 10px 13px; margin-bottom: 12px;
   }
   .reach-grid {
@@ -96,7 +106,7 @@ _SCREENING_EXTRA_CSS = """
   }
   @media (max-width: 680px) { .reach-grid { grid-template-columns: repeat(2, 1fr); } }
   .reach-cell {
-    background: #0d1018; border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px;
+    background: var(--input-bg); border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px;
   }
   .reach-label {
     font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 700;
@@ -119,10 +129,10 @@ _SCREENING_EXTRA_CSS = """
   }
   .media-queue-item {
     display: flex; justify-content: space-between; align-items: center; gap: 8px;
-    background: #0d1018; border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px;
+    background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px;
     font-size: 0.82rem;
   }
-  .media-queue-item.active { border-color: var(--purple); background: rgba(192, 132, 252, 0.1); }
+  .media-queue-item.active { border-color: var(--purple); background: var(--purple-bg); }
   .media-play-btn {
     background: transparent; border: none; color: var(--text); font-weight: 600; cursor: pointer;
     text-align: left; padding: 0; font-size: 0.82rem; flex: 1;
@@ -134,7 +144,7 @@ _SCREENING_EXTRA_CSS = """
   }
   .rubric-rows { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
   .rubric-row {
-    background: #0d1018; border: 1px solid var(--border); border-radius: 10px; padding: 10px 13px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 13px;
   }
   .rubric-row-top {
     display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px;
@@ -164,20 +174,31 @@ _SCREENING_EXTRA_CSS = """
   .debate-headline { font-size: 0.96rem; font-weight: 700; color: var(--text); }
   .debate-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 9px; }
   .debate-item {
-    background: #0d1018; border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; font-size: 0.85rem;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px; font-size: 0.85rem;
   }
   .standout-hook-box {
-    margin-top: auto; background: rgba(45, 212, 191, 0.1); border: 1px solid rgba(45, 212, 191, 0.35);
-    border-radius: 9px; padding: 9px 12px; font-size: 0.84rem; color: #ccfbf1;
+    margin-top: auto; background: var(--panel); border: 1px solid var(--teal);
+    border-radius: 9px; padding: 9px 12px; font-size: 0.84rem; color: var(--text);
   }
   .missing-flags-box {
-    margin-top: auto; padding-top: 8px; border-top: 1px solid rgba(251, 113, 133, 0.22);
+    margin-top: auto; padding-top: 8px; border-top: 1px solid var(--border);
   }
 
   .judge-footer {
-    background: linear-gradient(135deg, rgba(192, 132, 252, 0.1) 0%, rgba(25, 31, 46, 0.95) 100%);
-    border: 1px solid rgba(192, 132, 252, 0.38); border-radius: 14px; padding: 18px 20px;
+    background: var(--panel-2);
+    border: 1px solid var(--purple); border-radius: 14px; padding: 18px 20px;
     display: flex; flex-direction: column; gap: 16px;
+  }
+  .taste-engine-panel {
+    background: var(--panel); border: 1px solid var(--purple); border-radius: 12px;
+    padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .prob-grid {
+    display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 8px;
+  }
+  @media (max-width: 720px) { .prob-grid { grid-template-columns: repeat(2, 1fr); } }
+  .prob-cell {
+    background: var(--input-bg); border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px;
   }
   .verdict-badge {
     display: inline-flex; align-items: center; gap: 6px; padding: 5px 13px; border-radius: 999px;
@@ -188,7 +209,7 @@ _SCREENING_EXTRA_CSS = """
   .verdict-badge.PASS { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn); }
 
   .hitl-bar {
-    background: #0b0e15; border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
     display: flex; flex-direction: column; gap: 10px;
   }
   .hitl-controls-row {
@@ -268,6 +289,11 @@ def render_screening_page() -> str:
         </div>
       </div>
 
+      <div class="culmination-flow-strip">
+        <span><strong>The Culmination Loop:</strong> Stage 2 Dossier → Neon Advocate/Skeptic/Judge → Human Override → DSPy Compile → <strong>Instant Calibrated Taste Engine</strong></span>
+        <span class="pill purple">gemini-decision-1 · 0 output tokens</span>
+      </div>
+
       <div class="control-row-bottom">
         <div class="mono">Single-card executive review · Use buttons or <code>[</code> / <code>]</code> (or Left/Right arrows) to step candidates.</div>
         <div class="fleet-actions">
@@ -277,6 +303,7 @@ def render_screening_page() -> str:
           </label>
           <button id="runScreeningBtn" class="btn neon" type="button">Run Neon Screening Fleet</button>
           <button id="trainModelBtn" class="btn dspy" type="button">Compile Judging Model (DSPy)</button>
+          <button id="runTasteEngineBtn" class="btn taste" type="button">Run Taste Engine (gemini-decision-1 · 0 tok)</button>
           <button id="runEvalsBtn" class="btn" type="button">Run Rubric Evals</button>
         </div>
       </div>
@@ -368,10 +395,10 @@ def render_screening_page() -> str:
 
     const RUBRIC_DIMENSIONS = [
       {{ key: 'identity_reachability', label: '1. Identity & Reachability', defaultSkill: 'dossier-identity' }},
-      {{ key: 'live_vocal_proof', label: '2. Live Vocal Proof', defaultSkill: 'dossier-media-proof' }},
+      {{ key: 'live_vocal_proof', label: '2. Live Vocal Proof', defaultSkill: 'dossier-media' }},
       {{ key: 'early_window_depth', label: '3. Early-Window Depth', defaultSkill: 'dossier-footprint' }},
-      {{ key: 'listener_pull_cosigns', label: '4. Listener Pull & Co-Signs', defaultSkill: 'dossier-forensics' }},
-      {{ key: 'stage_momentum_whitespace', label: '5. Stage Momentum & Whitespace', defaultSkill: 'dossier-live-credits' }},
+      {{ key: 'listener_pull_cosigns', label: '4. Listener Pull & Co-Signs', defaultSkill: 'dossier-audience' }},
+      {{ key: 'stage_momentum_whitespace', label: '5. Stage Momentum & Whitespace', defaultSkill: 'dossier-track-record' }},
     ];
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -721,11 +748,59 @@ def render_screening_page() -> str:
           }}).join(' ')
         : '<span class="mono">None flagged</span>';
 
-      // Judge Synthesis + HITL Footer
+      // Judge Synthesis + Taste Engine + HITL Footer
       const judgeVerdict = normalizeVerdict(judge.verdict) || 'WATCH';
       const isOverride = selectedVerdict !== judgeVerdict;
       const existingReason = (humanReview && (humanReview.reason || humanReview.notes)) || '';
       const savedHumanVerdict = humanReview ? normalizeVerdict(humanReview.human_verdict || humanReview.verdict) : '';
+      const tasteScore = pkt.latest_taste_score || null;
+      const tasteVerdict = tasteScore ? (normalizeVerdict(tasteScore.taste_verdict) || 'WATCH') : '';
+      const tasteProbs = (tasteScore && tasteScore.probabilities) || {{}};
+      const pElev = tasteProbs.elevate != null ? Math.round(Number(tasteProbs.elevate) * 100) + '%' : '—';
+      const pWatch = tasteProbs.watch != null ? Math.round(Number(tasteProbs.watch) * 100) + '%' : '—';
+      const pPass = tasteProbs.pass != null ? Math.round(Number(tasteProbs.pass) * 100) + '%' : '—';
+      const pSignable = (tasteScore && tasteScore.live_signable && tasteScore.live_signable.noul != null)
+        ? Math.round(Number(tasteScore.live_signable.noul) * 100) + '%'
+        : '—';
+      const compFit = (tasteScore && tasteScore.composite_fit && tasteScore.composite_fit.score != null)
+        ? `${{Number(tasteScore.composite_fit.score).toFixed(2)}} / 4`
+        : '—';
+      const tasteOutTok = (tasteScore && tasteScore.usage && tasteScore.usage.output_tokens != null)
+        ? tasteScore.usage.output_tokens
+        : 0;
+      const tasteHtml = tasteScore
+        ? `<div class="taste-engine-panel">
+             <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px;">
+               <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
+                 <strong style="font-size:0.9rem;">Calibrated Taste Engine (<code>gemini-decision-1</code>)</strong>
+                 <span class="verdict-badge ${{escapeHtml(tasteVerdict)}}">${{escapeHtml(tasteVerdict)}}</span>
+                 <span class="pill purple">P(elevate): ${{escapeHtml(pElev)}}</span>
+                 <span class="pill blue">Confidence: ${{escapeHtml(formatConfidence(tasteScore.confidence))}}</span>
+                 <span class="pill ok">${{escapeHtml(String(tasteOutTok))}} output tokens</span>
+                 <span class="pill">${{escapeHtml(tasteScore.policy_id || 'policy_v1')}}</span>
+               </div>
+               <button type="button" id="cardTasteEngineBtn" class="btn taste" data-lead-id="${{escapeHtml(leadId)}}">
+                 Re-run Taste Engine (gemini-decision-1 · 0 tok)
+               </button>
+             </div>
+             <div class="prob-grid">
+               <div class="prob-cell"><div class="reach-label">P(elevate)</div><div class="reach-val">${{escapeHtml(pElev)}}</div></div>
+               <div class="prob-cell"><div class="reach-label">P(watch) · P(pass)</div><div class="reach-val">${{escapeHtml(pWatch)}} · ${{escapeHtml(pPass)}}</div></div>
+               <div class="prob-cell"><div class="reach-label">Live Signable (noul)</div><div class="reach-val">${{escapeHtml(pSignable)}}</div></div>
+               <div class="prob-cell"><div class="reach-label">Composite Fit</div><div class="reach-val">${{escapeHtml(compFit)}}</div></div>
+             </div>
+           </div>`
+        : `<div class="taste-engine-panel">
+             <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px;">
+               <div>
+                 <strong style="font-size:0.9rem;">Culmination Point · Calibrated Taste Engine (<code>gemini-decision-1</code>)</strong>
+                 <div class="mono" style="margin-top:3px;">Evaluate this dossier against the compiled DSPy policy in one pass with calibrated probabilities and 0 output tokens.</div>
+               </div>
+               <button type="button" id="cardTasteEngineBtn" class="btn taste" data-lead-id="${{escapeHtml(leadId)}}">
+                 Run Taste Engine (gemini-decision-1 · 0 tok)
+               </button>
+             </div>
+           </div>`;
 
       container.innerHTML = `
         <!-- 1. Hero Dossier Header -->
@@ -836,6 +911,8 @@ def render_screening_page() -> str:
             <div style="font-size:0.92rem; color:var(--text);">${{escapeHtml(judge.rationale || judge.summary || 'Judge synthesis pending.')}}</div>
           </div>
 
+          ${{tasteHtml}}
+
           <div class="hitl-bar">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
               <strong style="font-size:0.88rem;">Human-in-the-Loop Calibration (Trains <code>gemini-decision-1</code> Rubric via DSPy)</strong>
@@ -886,6 +963,10 @@ def render_screening_page() -> str:
       const saveBtn = el('saveAndNextBtn');
       if (saveBtn) {{
         saveBtn.onclick = saveCurrentLabelAndNext;
+      }}
+      const cardTasteBtn = el('cardTasteEngineBtn');
+      if (cardTasteBtn) {{
+        cardTasteBtn.onclick = () => runTasteEngineForLead(leadId);
       }}
       const reasonInput = el('humanReasonInput');
       if (reasonInput) {{
@@ -961,13 +1042,15 @@ def render_screening_page() -> str:
         || (Array.isArray(payload.models) && payload.models[0])
         || payload;
 
-      const version = active.policy_version || active.version || active.model_id || active.policy_id || 'v1.0-seed';
-      const labelCount = active.training_label_count != null
-        ? active.training_label_count
-        : (active.label_count != null ? active.label_count : (payload.label_count != null ? payload.label_count : 0));
-      const rawAcc = active.accuracy != null
-        ? active.accuracy
-        : (active.train_accuracy != null ? active.train_accuracy : active.agreement_rate);
+      const version = active.policy_id || active.policy_version || active.version || active.model_id || 'v1.0-seed';
+      const labelCount = active.human_label_count != null
+        ? active.human_label_count
+        : (active.training_label_count != null
+          ? active.training_label_count
+          : (active.label_count != null ? active.label_count : (active.train_count != null ? active.train_count : 0)));
+      const rawAcc = active.val_accuracy != null
+        ? active.val_accuracy
+        : (active.accuracy != null ? active.accuracy : (active.train_accuracy != null ? active.train_accuracy : active.agreement_rate));
       const accStr = rawAcc != null
         ? (Number(rawAcc) <= 1 ? `${{Math.round(Number(rawAcc) * 100)}}% acc` : `${{Math.round(Number(rawAcc))}}% acc`)
         : 'untrained';
@@ -1141,6 +1224,46 @@ def render_screening_page() -> str:
       }} finally {{
         el('trainModelBtn').disabled = false;
       }}
+    }};
+
+    async function runTasteEngineForLead(targetLeadId) {{
+      const topBtn = el('runTasteEngineBtn');
+      const cardBtn = el('cardTasteEngineBtn');
+      if (topBtn) topBtn.disabled = true;
+      if (cardBtn) cardBtn.disabled = true;
+      showBanner('Running calibrated Taste Engine (gemini-decision-1 · 0 output tokens)…', 'info');
+      try {{
+        const bodyObj = targetLeadId ? {{ lead_id: targetLeadId, live: true }} : {{ live: true }};
+        const res = await fetch('/api/screening/taste-score', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify(bodyObj),
+        }});
+        const data = await res.json().catch(() => ({{}}));
+        if (!res.ok) throw new Error(data.error || 'Taste Engine evaluation failed');
+        await loadPackets();
+        await loadModels();
+        const ts = data.taste_score || data;
+        const pE = ts.probabilities && ts.probabilities.elevate != null
+          ? Math.round(Number(ts.probabilities.elevate) * 100) + '%'
+          : '—';
+        showBanner(
+          `Taste Engine (gemini-decision-1 · 0 tok): P(elevate)=${{pE}}, verdict=${{(ts.taste_verdict || '').toUpperCase()}} (${{ts.policy_id || 'policy_v1'}}).`,
+          'info'
+        );
+      }} catch (err) {{
+        showBanner(err.message, 'err');
+      }} finally {{
+        if (el('runTasteEngineBtn')) el('runTasteEngineBtn').disabled = false;
+        if (el('cardTasteEngineBtn')) el('cardTasteEngineBtn').disabled = false;
+      }}
+    }}
+
+    el('runTasteEngineBtn').onclick = () => {{
+      const filtered = getFilteredPackets();
+      const pkt = filtered[currentIndex];
+      const leadId = pkt ? (pkt.lead_id || '') : '';
+      runTasteEngineForLead(leadId);
     }};
 
     el('runEvalsBtn').onclick = async () => {{

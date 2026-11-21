@@ -34,8 +34,8 @@ Any agent can opt into shared sandbox tools by adding them to `shared_skills` in
   1. **`dossier-identity`** (`identity_and_contact` -> `identity_reachability`): Stage identity coherence, scene/city anchor, platform link graph, and direct outreach route (`bio_email`, `mgmt_email`, `open_dm` vs. `none`).
   2. **`dossier-media`** (`source_and_media_queue` -> `live_vocal_proof`): Performer `attribution_status` (`verified` vs. `uncertain`), grassroots live-room provenance vs. studio-only uploads, and `oembed_live_embeddable` clip depth.
   3. **`dossier-footprint`** (`public_footprint` -> `early_window_depth`): Discovery window regime (`pre_dsp_underground` / `early_dsp_inflection` vs. `established_streaming`), Bandcamp support, and single-clip concentration (`top_release_view_share_pct > 85%` risk).
-  4. **`dossier-comments`** (`comment_forensics` -> `listener_pull_cosigns`): Unprompted `release_requests` + `live_show_requests`, `genuine_praise` vs. `jokes_or_spam` ratio, and peer/venue/producer `notable_commenters`.
-  5. **`dossier-live-history`** (`live_history_and_credits` -> `stage_momentum_whitespace`): Verified `show_history` / `upcoming_shows`, venue cap progression, `collaborator_credits`, and unsigned/indie label whitespace vs. major-label lockup.
+  4. **`dossier-audience`** (`comment_forensics` -> `listener_pull_cosigns`): Unprompted `release_requests` + `live_show_requests`, `genuine_praise` vs. `jokes_or_spam` ratio, and peer/venue/producer `notable_commenters`.
+  5. **`dossier-track-record`** (`live_history_and_credits` -> `stage_momentum_whitespace`): Verified `show_history` / `upcoming_shows`, venue cap progression, `collaborator_credits`, and unsigned/indie label whitespace vs. major-label lockup.
 
 ---
 

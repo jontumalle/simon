@@ -63,10 +63,12 @@ from .registry import (
 from .scout import DEFAULT_TASTE_BRIEF, load_dotenv_if_present, run_scout
 from .screening import (
     compile_judging_model,
+    evaluate_with_taste_engine,
     list_judging_models,
     list_screening_deck,
     list_screening_evals,
     list_screening_labels,
+    list_taste_scores,
     render_fallback_screening_html,
     run_screening_batch,
     run_screening_evals,
@@ -311,6 +313,17 @@ def dispatch_http_request(
                     {"count": len(models), "active_model": active, "models": models},
                     ensure_ascii=False,
                 ).encode("utf-8"),
+            )
+
+        if parsed.path in ("/api/screening/taste-scores", "/api/screening/taste-score"):
+            qs = parse_qs(parsed.query)
+            lead_id = (qs.get("lead_id") or [None])[0]
+            limit = int((qs.get("limit") or ["100"])[0])
+            scores = list_taste_scores(store, lead_id=lead_id, limit=limit)
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps({"count": len(scores), "taste_scores": scores}, ensure_ascii=False).encode("utf-8"),
             )
 
         if parsed.path == "/api/screening/evals":
@@ -654,6 +667,66 @@ def dispatch_http_request(
             "application/json; charset=utf-8",
             json.dumps(out, ensure_ascii=False).encode("utf-8"),
         )
+
+    if method == "POST" and parsed.path == "/api/screening/taste-score":
+        try:
+            req = json.loads((raw_body or b"{}").decode("utf-8"))
+        except ValueError:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "Invalid JSON request body."}).encode("utf-8"),
+            )
+        load_dotenv_if_present()
+        live = bool(req.get("live", True))
+        api_key = str(req.get("api_key") or "").strip() or None
+        dossier_obj = req.get("dossier") if isinstance(req.get("dossier"), dict) else None
+        target_id = str(req.get("lead_id") or req.get("packet_id") or "").strip() or None
+        try:
+            if dossier_obj is not None:
+                score_doc = evaluate_with_taste_engine(store, dossier_obj, live=live, api_key=api_key)
+                out = dict(score_doc)
+                out["ok"] = True
+                out["taste_score"] = score_doc
+                return (
+                    HTTPStatus.OK,
+                    "application/json; charset=utf-8",
+                    json.dumps(out, ensure_ascii=False).encode("utf-8"),
+                )
+            if target_id:
+                score_doc = evaluate_with_taste_engine(store, target_id, live=live, api_key=api_key)
+                out = dict(score_doc)
+                out["ok"] = True
+                out["taste_score"] = score_doc
+                return (
+                    HTTPStatus.OK,
+                    "application/json; charset=utf-8",
+                    json.dumps(out, ensure_ascii=False).encode("utf-8"),
+                )
+            deck = list_screening_deck(store, limit=50)
+            results = [
+                evaluate_with_taste_engine(store, pkt["lead_id"], live=live, api_key=api_key)
+                for pkt in (deck.get("packets") or [])
+            ]
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps(
+                    {
+                        "ok": True,
+                        "count": len(results),
+                        "taste_scores": results,
+                        "taste_score": results[0] if results else None,
+                    },
+                    ensure_ascii=False,
+                ).encode("utf-8"),
+            )
+        except (ValueError, RuntimeError, OSError) as exc:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": str(exc)}).encode("utf-8"),
+            )
 
     if method == "POST" and parsed.path == "/api/screening/evals/run":
         try:

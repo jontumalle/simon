@@ -160,8 +160,16 @@ class TestScreeningAgentPackages(unittest.TestCase):
                 targets = {src["target"] for src in env["sources"]}
                 self.assertIn(".agents/AGENTS.md", targets)
                 self.assertIn(expected_script_mount, targets)
-                self.assertIn(".agents/skills/simon-db/SKILL.md", targets)
-                self.assertIn(".agents/skills/field-reporting/SKILL.md", targets)
+                for shared_skill in (
+                    "simon-db",
+                    "field-reporting",
+                    "dossier-identity",
+                    "dossier-media",
+                    "dossier-footprint",
+                    "dossier-audience",
+                    "dossier-track-record",
+                ):
+                    self.assertIn(f".agents/skills/{shared_skill}/SKILL.md", targets)
 
     def test_agent_json_and_yaml_parity(self) -> None:
         for pkg_name in self.EXPECTED_AGENTS:

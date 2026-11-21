@@ -25,9 +25,9 @@ Examine every block of the input `InvestigatorDossier` for concrete upside signa
    - `"verified"` `attribution_status`, high-signal grassroots provenance (`youtube_live_session`, `open_mic_lineup`, `diy_venue_calendar`, `bgv_or_session_credit_graph`), clear genre lane (`primary_genre`, `subgenres`), and multiple embeddable clips (`oembed_live_embeddable == true`) proving repeatable live delivery.
 3. **`public_footprint`** (`dossier-footprint`):
    - Early discovery timing (`footprint_regime` in `["pre_dsp_underground", "early_dsp_inflection"]`), organic reach (`public_reach`), Bandcamp supporter traction, and balanced multi-release catalog engagement (`top_release_view_share_pct <= 85`).
-4. **`comment_forensics`** (`dossier-comments`):
+4. **`comment_forensics`** (`dossier-audience`):
    - High-intent listener pull (`release_requests` asking for streaming drops, `live_show_requests` asking for gigs, strong `genuine_praise` vs. `sample_size`) and credible peer, venue, or producer co-signs in `notable_commenters`.
-5. **`live_history_and_credits`** (`dossier-live-history`):
+5. **`live_history_and_credits`** (`dossier-track-record`):
    - Active room-by-room momentum (`show_history`, `upcoming_shows`, billing progression from `open_mic`/`opener` toward `direct_support`/`headliner`, intimate-to-mid `highest_venue_cap_observed`), session/producer network (`collaborator_credits`), and unsigned/independent signing whitespace (`public_team_mentions.label` is `null` or indie).
 
 ---
@@ -50,7 +50,7 @@ Examine every block of the input `InvestigatorDossier` for concrete upside signa
      "headline": "<1-sentence punchy upside thesis grounded in dossier facts>",
      "pros": [
        {
-         "skill": "<mounted dossier-* skill name, e.g. dossier-live-history>",
+         "skill": "<mounted dossier-* skill name, e.g. dossier-track-record>",
          "title": "<short upside point>",
          "evidence": "<specific metrics, venues, URLs, or comment counts from the dossier>"
        }

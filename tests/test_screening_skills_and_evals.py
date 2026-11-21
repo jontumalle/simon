@@ -13,7 +13,81 @@ import unittest
 from pathlib import Path
 from typing import Any, Callable, Dict, List
 
-from jsonschema import Draft202012Validator, ValidationError
+try:
+    from jsonschema import Draft202012Validator, ValidationError  # type: ignore[import-not-found]
+except ImportError:
+
+    class ValidationError(Exception):  # type: ignore[no-redef]
+        pass
+
+    class Draft202012Validator:  # type: ignore[no-redef]
+        def __init__(self, schema: Dict[str, Any]) -> None:
+            self.schema = schema
+            self._defs = schema.get("$defs") or {}
+
+        @staticmethod
+        def check_schema(schema: Dict[str, Any]) -> None:
+            if not isinstance(schema, dict):
+                raise ValidationError("Schema must be a dict.")
+
+        def _resolve(self, node: Dict[str, Any]) -> Dict[str, Any]:
+            ref = node.get("$ref")
+            if isinstance(ref, str) and ref.startswith("#/$defs/"):
+                def_name = ref[len("#/$defs/") :]
+                if def_name not in self._defs:
+                    raise ValidationError(f"Unknown $ref {ref}")
+                return self._defs[def_name]
+            return node
+
+        def _check_type(self, val: Any, expected: Any) -> bool:
+            if isinstance(expected, list):
+                return any(self._check_type(val, t) for t in expected)
+            if expected == "object":
+                return isinstance(val, dict)
+            if expected == "array":
+                return isinstance(val, list)
+            if expected == "string":
+                return isinstance(val, str)
+            if expected == "boolean":
+                return isinstance(val, bool)
+            if expected == "integer":
+                return isinstance(val, int) and not isinstance(val, bool)
+            if expected == "number":
+                return isinstance(val, (int, float)) and not isinstance(val, bool)
+            if expected == "null":
+                return val is None
+            return True
+
+        def validate(self, instance: Any, node: Any = None) -> None:
+            cur = self._resolve(self.schema if node is None else node)
+            if "const" in cur and instance != cur["const"]:
+                raise ValidationError(f"Expected const {cur['const']!r}, got {instance!r}")
+            if "enum" in cur and instance not in cur["enum"]:
+                raise ValidationError(f"Value {instance!r} not in enum {cur['enum']!r}")
+            if "type" in cur and not self._check_type(instance, cur["type"]):
+                raise ValidationError(f"Value {instance!r} failed type {cur['type']!r}")
+            if isinstance(instance, (int, float)) and not isinstance(instance, bool):
+                if "minimum" in cur and instance < cur["minimum"]:
+                    raise ValidationError(f"{instance} < minimum {cur['minimum']}")
+                if "maximum" in cur and instance > cur["maximum"]:
+                    raise ValidationError(f"{instance} > maximum {cur['maximum']}")
+            if isinstance(instance, dict):
+                for req in cur.get("required") or []:
+                    if req not in instance:
+                        raise ValidationError(f"Missing required property {req!r}")
+                props = cur.get("properties") or {}
+                if cur.get("additionalProperties") is False:
+                    extra = set(instance.keys()) - set(props.keys())
+                    if extra:
+                        raise ValidationError(f"Unexpected properties: {sorted(extra)}")
+                for k, v in instance.items():
+                    if k in props:
+                        self.validate(v, props[k])
+                    elif isinstance(cur.get("additionalProperties"), dict):
+                        self.validate(v, cur["additionalProperties"])
+            if isinstance(instance, list) and isinstance(cur.get("items"), dict):
+                for item in instance:
+                    self.validate(item, cur["items"])
 
 from simon.investigator import evaluate_dossier_process
 

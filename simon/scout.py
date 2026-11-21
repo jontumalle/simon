@@ -31,7 +31,7 @@ from .models import (
     new_id,
 )
 from .store import SimonStore
-from .youtube import YouTubeConnector, build_play_first_url, canonical_watch_url, extract_video_id
+from .youtube import YouTubeConnector, canonical_watch_url, extract_video_id
 
 
 DEFAULT_DEMO_FIXTURE = Path(__file__).resolve().parents[1] / "examples" / "taste_brief_demo.json"

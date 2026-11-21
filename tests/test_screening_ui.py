@@ -137,11 +137,13 @@ class TestScreeningDeckUI(unittest.TestCase):
             "/api/screening/packets",
             "/api/screening/run",
             "/api/screening/train",
+            "/api/screening/taste-score",
             "/api/screening/evals/run",
             "/api/screening/models",
             "/api/screening/labels",
         ):
             self.assertIn(endpoint, html, f"Missing API binding: {endpoint}")
+        self.assertIn("Run Taste Engine (gemini-decision-1 · 0 tok)", html)
 
         # Label submission payload keys
         for key in ("packet_id", "lead_id", "stage_name", "human_verdict", "reason"):
@@ -149,9 +151,9 @@ class TestScreeningDeckUI(unittest.TestCase):
 
     def test_inline_script_syntax_valid(self) -> None:
         html = render_screening_page()
-        match = re.search(r"<script>(.*)</script>", html, flags=re.DOTALL)
-        self.assertIsNotNone(match, "Expected inline <script> block in screening page")
-        script_src = match.group(1)
+        scripts = re.findall(r"<script>(.*?)</script>", html, flags=re.DOTALL)
+        self.assertGreaterEqual(len(scripts), 1, "Expected inline <script> block in screening page")
+        script_src = "\n;\n".join(scripts)
 
         node_bin = shutil.which("node")
         if node_bin:

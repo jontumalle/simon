@@ -29,9 +29,9 @@ Check every block systematically and record every check in `dealbreakers_checked
 3. **`public_footprint`** (`dossier-footprint`):
    - **One-clip view concentration `>85%`** (`top_release_view_share_pct > 85`), signaling viral single-video skew rather than catalog depth.
    - `footprint_regime == "established_streaming"` (past early discovery window) or `"unknown"` with null reach counters.
-4. **`comment_forensics`** (`dossier-comments`):
+4. **`comment_forensics`** (`dossier-audience`):
    - **Spam / meme dominance**: `jokes_or_spam` outweighs or dilutes genuine engagement (e.g., `jokes_or_spam / max(sample_size, 1) > 0.30`), `sample_size < 5`, or zero `release_requests` and zero `live_show_requests`.
-5. **`live_history_and_credits`** (`dossier-live-history`):
+5. **`live_history_and_credits`** (`dossier-track-record`):
    - **Major label or commercial lockup**: `public_team_mentions.label` names a major label or major-distributed imprint (or full commercial agent/mgmt lockup removing early scouting whitespace).
    - Zero `show_history` and zero `upcoming_shows` (untested in live rooms), or zero `collaborator_credits`.
 

@@ -13,6 +13,8 @@ import os
 from pathlib import Path
 import re
 from typing import Any, Dict, List, Optional, Tuple
+import urllib.error
+import urllib.request
 import uuid
 
 from .db_tools import (
@@ -42,7 +44,7 @@ RUBRIC_ORDER: Tuple[str, ...] = (
 RUBRIC_META: Dict[str, Dict[str, str]] = {
     "identity_reachability": {
         "label": "Identity & Reachability",
-        "skill": "dossier-identity-reachability",
+        "skill": "dossier-identity",
         "block": "identity_and_contact",
         "level_0": "No verified identity links or public contact route (none).",
         "level_1": "Partial platform identity or open DM route, missing business email or home city.",
@@ -50,7 +52,7 @@ RUBRIC_META: Dict[str, Dict[str, str]] = {
     },
     "live_vocal_proof": {
         "label": "Live Vocal Proof",
-        "skill": "dossier-live-vocal-proof",
+        "skill": "dossier-media",
         "block": "source_and_media_queue",
         "level_0": "No embeddable performance clips in source_and_media_queue.",
         "level_1": "Single embeddable clip or uncertain performer attribution requiring second-take verification.",
@@ -58,7 +60,7 @@ RUBRIC_META: Dict[str, Dict[str, str]] = {
     },
     "early_window_depth": {
         "label": "Early-Window Catalog Depth",
-        "skill": "dossier-early-window-depth",
+        "skill": "dossier-footprint",
         "block": "public_footprint",
         "level_0": "Unknown footprint regime with zero public reach or catalog metrics.",
         "level_1": "Thin single-release footprint or already post-inflection established streaming act.",
@@ -66,7 +68,7 @@ RUBRIC_META: Dict[str, Dict[str, str]] = {
     },
     "listener_pull_cosigns": {
         "label": "Listener Pull & Scene Cosigns",
-        "skill": "dossier-listener-pull-cosigns",
+        "skill": "dossier-audience",
         "block": "comment_forensics",
         "level_0": "Zero sampled comment signal or spam-dominated comment section.",
         "level_1": "Modest organic listener praise without explicit release/live requests or peer cosigns.",
@@ -74,7 +76,7 @@ RUBRIC_META: Dict[str, Dict[str, str]] = {
     },
     "stage_momentum_whitespace": {
         "label": "Stage Momentum & A&R Whitespace",
-        "skill": "dossier-stage-momentum-whitespace",
+        "skill": "dossier-track-record",
         "block": "live_history_and_credits",
         "level_0": "Zero documented live show history, upcoming bills, or collaborator credits.",
         "level_1": "Early single-room show or credit activity, or active live act already signed to a label.",
@@ -138,6 +140,7 @@ def _match_rubric_key(name: str) -> Optional[str]:
         "window": "early_window_depth",
         "depth": "early_window_depth",
         "comment": "listener_pull_cosigns",
+        "audience": "listener_pull_cosigns",
         "cosign": "listener_pull_cosigns",
         "signal": "listener_pull_cosigns",
         "listener": "listener_pull_cosigns",
@@ -198,7 +201,9 @@ def _run_dynamic_skill_scripts(dossier: Dict[str, Any]) -> Tuple[Dict[str, Dict[
 
             if isinstance(raw_out, dict):
                 inferred_key = (
-                    _match_rubric_key(str(raw_out.get("rubric_id") or raw_out.get("rubric") or ""))
+                    _match_rubric_key(
+                        str(raw_out.get("rubric_key") or raw_out.get("rubric_id") or raw_out.get("rubric") or "")
+                    )
                     or rubric_key
                 )
                 if inferred_key in RUBRIC_META:
@@ -461,6 +466,47 @@ def _builtin_score_dossier(dossier: Dict[str, Any]) -> Dict[str, Dict[str, Any]]
     return out
 
 
+def _flatten_claim_items(items: List[Any]) -> List[str]:
+    out: List[str] = []
+    for raw in items:
+        if isinstance(raw, dict):
+            title = str(raw.get("title") or "").strip()
+            evidence = str(raw.get("evidence") or "").strip()
+            combined = f"{title}: {evidence}".strip(": ")
+            if combined:
+                out.append(combined)
+        elif raw is not None:
+            s = str(raw).strip()
+            if s:
+                out.append(s)
+    return _dedupe_strs(out)
+
+
+def _to_structured_claims(items: List[Any], default_skill: str = "dossier-identity") -> List[Dict[str, str]]:
+    out: List[Dict[str, str]] = []
+    for raw in items:
+        if isinstance(raw, dict):
+            title = str(raw.get("title") or raw.get("point") or raw.get("claim") or "").strip()
+            evidence = str(raw.get("evidence") or raw.get("detail") or raw.get("citation") or "").strip()
+            skill = str(raw.get("skill") or default_skill).strip()
+            if title or evidence:
+                out.append(
+                    {
+                        "skill": skill,
+                        "title": title or evidence,
+                        "evidence": evidence or title,
+                    }
+                )
+        elif isinstance(raw, str) and raw.strip():
+            text = raw.strip()
+            if ":" in text:
+                head, tail = text.split(":", 1)
+                out.append({"skill": default_skill, "title": head.strip(), "evidence": tail.strip()})
+            else:
+                out.append({"skill": default_skill, "title": text, "evidence": text})
+    return out
+
+
 def score_dossier_inputs(dossier: Dict[str, Any]) -> Dict[str, Any]:
     """Score all 5 Stage 2 `InvestigatorDossier` blocks (0..2 each -> 0..10 total).
 
@@ -481,6 +527,8 @@ def score_dossier_inputs(dossier: Dict[str, Any]) -> Dict[str, Any]:
     rubric_breakdown: List[Dict[str, Any]] = []
     all_pros: List[str] = []
     all_cons: List[str] = []
+    structured_pros: List[Dict[str, str]] = []
+    structured_cons: List[Dict[str, str]] = []
     missing_flags: List[str] = list(dossier.get("missing_fields") or [])
 
     for key in RUBRIC_ORDER:
@@ -489,14 +537,18 @@ def score_dossier_inputs(dossier: Dict[str, Any]) -> Dict[str, Any]:
         dyn = dynamic_results.get(key) or {}
 
         score_val = _clamp_rubric_score(dyn["score"] if "score" in dyn else base["score"])
-        rationale = str(dyn.get("rationale") or dyn.get("summary") or base["rationale"]).strip()
-        pros = _dedupe_strs(list(dyn.get("pros") or []) + list(base["pros"]))
-        cons = _dedupe_strs(list(dyn.get("cons") or []) + list(base["cons"]))
+        rationale = str(dyn.get("note") or dyn.get("rationale") or dyn.get("summary") or base["rationale"]).strip()
+        raw_pros = list(dyn.get("pros") or []) + list(base["pros"])
+        raw_cons = list(dyn.get("cons") or []) + list(base["cons"])
+        pros = _flatten_claim_items(raw_pros)
+        cons = _flatten_claim_items(raw_cons)
+        structured_pros.extend(_to_structured_claims(list(dyn.get("pros") or []) or list(base["pros"]), meta["skill"]))
+        structured_cons.extend(_to_structured_claims(list(dyn.get("cons") or []) or list(base["cons"]), meta["skill"]))
         missing = _dedupe_strs(
-            list(dyn.get("missing_evidence_flags") or dyn.get("missing_fields") or [])
+            list(dyn.get("missing") or dyn.get("missing_evidence_flags") or dyn.get("missing_fields") or [])
             + list(base["missing_evidence_flags"])
         )
-        evidence = _dedupe_strs(list(dyn.get("evidence") or []) + list(base["evidence"]))
+        evidence = _dedupe_strs(_flatten_claim_items(list(dyn.get("evidence") or []) + list(base["evidence"])))
 
         rubric_scores[key] = score_val
         rubric_breakdown.append(
@@ -525,6 +577,8 @@ def score_dossier_inputs(dossier: Dict[str, Any]) -> Dict[str, Any]:
         "max_score": 10,
         "pros": _dedupe_strs(all_pros),
         "cons": _dedupe_strs(all_cons),
+        "structured_pros": structured_pros[:6],
+        "structured_cons": structured_cons[:6],
         "missing_evidence_flags": _dedupe_strs(missing_flags),
         "input_skills_used": [RUBRIC_META[k]["skill"] for k in RUBRIC_ORDER],
         "dynamic_skills_loaded": dynamic_skills,
@@ -639,30 +693,51 @@ def _deterministic_cases_and_decision(
         "Confirm live vocal consistency and stage plot requirements before final booking guarantee."
     ]
 
+    structured_pros = list(baseline.get("structured_pros") or []) or _to_structured_claims(
+        advocate_points, "dossier-media"
+    )
+    structured_cons = list(baseline.get("structured_cons") or []) or _to_structured_claims(
+        skeptic_points, "dossier-track-record"
+    )
+    thesis_str = (
+        f"{stage_name} brings verifiable upside ({total}/10 across 5 rubrics): "
+        f"{advocate_points[0]}"
+    )
+    standout_str = (
+        "Act early before broader DSP/label discovery closes the local showcase window."
+        if scores["early_window_depth"] >= 1
+        else "Potential raw vocal upside if live room proof expands."
+    )
     advocate_case = {
         "role": "advocate",
         "agent_id": "simon-screen-advocate",
-        "thesis": (
-            f"{stage_name} brings verifiable upside ({total}/10 across 5 rubrics): "
-            f"{advocate_points[0]}"
-        ),
+        "headline": thesis_str,
+        "thesis": thesis_str,
+        "pros": structured_pros,
         "strongest_points": advocate_points,
         "cited_evidence": [b["rationale"] for b in baseline["rubric_breakdown"] if b["score"] >= 1][:3],
-        "upside_bet": (
-            "Act early before broader DSP/label discovery closes the local showcase window."
-            if scores["early_window_depth"] >= 1
-            else "Potential raw vocal upside if live room proof expands."
-        ),
+        "standout_hook": standout_str,
+        "upside_bet": standout_str,
     }
 
+    counter_str = f"Key diligence risk for {stage_name}: {skeptic_points[0]}"
     skeptic_case = {
         "role": "skeptic",
         "agent_id": "simon-screen-skeptic",
-        "counter_thesis": (
-            f"Key diligence risk for {stage_name}: {skeptic_points[0]}"
-        ),
+        "headline": counter_str,
+        "counter_thesis": counter_str,
+        "cons": structured_cons,
         "risk_points": skeptic_points,
+        "missing_evidence_flags": missing[:6],
         "missing_proof": missing[:5],
+        "dealbreakers_checked": [
+            "one_clip_view_concentration_gt_85pct",
+            "studio_only_media",
+            "uncertain_attribution",
+            "contact_route_none",
+            "major_label_lockup",
+            "spam_comments",
+        ],
         "verification_needed": (
             f"Resolve {len(missing)} missing evidence flag(s) ({', '.join(missing[:2])})."
             if missing
@@ -677,6 +752,15 @@ def _deterministic_cases_and_decision(
         "pass": f"Pass {stage_name} ({total}/10) — insufficient verified vocal, audience, or reachability proof.",
     }[verdict]
 
+    jd_rubric_scores = {
+        b["rubric_id"]: {
+            "score": int(b["score"]),
+            "max_score": 2,
+            "skill": b["skill"],
+            "note": b["rationale"],
+        }
+        for b in baseline["rubric_breakdown"]
+    }
     judge_decision = {
         "verdict": verdict,
         "confidence": confidence,
@@ -687,6 +771,7 @@ def _deterministic_cases_and_decision(
             f"Weighed Advocate upside against Skeptic diligence across 5 rubrics ({total}/10): "
             f"{advocate_points[0]} Counterweight: {skeptic_points[0]}"
         ),
+        "rubric_scores": jd_rubric_scores,
         "decisive_factors": (pros[:2] + cons[:1]) if verdict == "elevate" else (cons[:2] + pros[:1]),
         "next_action": next_action,
         "policy_id": policy_id,
@@ -859,15 +944,17 @@ def run_screening_for_dossier(
         adv_prompt = (
             "You are Simon's Stage 3 Screen Advocate (`gemini-4-neon`). Build the strongest grounded "
             "A&R case for elevating this artist using ONLY verified dossier facts. Never invent facts.\n"
-            'Return ONLY JSON: {"thesis": "...", "strongest_points": ["..."], '
-            '"cited_evidence": ["..."], "upside_bet": "..."}\n\n'
+            'Return ONLY JSON matching: {"lead_id": "...", "stage_name": "...", "headline": "...", '
+            '"pros": [{"skill": "dossier-...", "title": "...", "evidence": "..."}], '
+            '"standout_hook": "..."}\n\n'
             f"INPUT JSON:\n{shared_context}"
         )
         skp_prompt = (
             "You are Simon's Stage 3 Screen Skeptic (`gemini-4-neon`). Stress-test this artist dossier, "
             "surfacing missing proof, single-clip or attribution risks, and reasons to pass or hold.\n"
-            'Return ONLY JSON: {"counter_thesis": "...", "risk_points": ["..."], '
-            '"missing_proof": ["..."], "verification_needed": "..."}\n\n'
+            'Return ONLY JSON matching: {"lead_id": "...", "stage_name": "...", "headline": "...", '
+            '"cons": [{"skill": "dossier-...", "title": "...", "evidence": "..."}], '
+            '"missing_evidence_flags": ["..."], "dealbreakers_checked": ["..."]}\n\n'
             f"INPUT JSON:\n{shared_context}"
         )
 
@@ -877,20 +964,44 @@ def run_screening_for_dossier(
             live_adv = adv_fut.result()
             live_skp = skp_fut.result()
 
+        adv_headline = str(live_adv.get("headline") or live_adv.get("thesis") or det_adv["thesis"]).strip()
+        adv_standout = str(live_adv.get("standout_hook") or live_adv.get("upside_bet") or det_adv["upside_bet"]).strip()
+        adv_raw_pros = list(live_adv.get("pros") or live_adv.get("strongest_points") or det_adv["pros"])
+        adv_struct_pros = _to_structured_claims(adv_raw_pros, "dossier-media") or det_adv["pros"]
+        adv_flat_pros = _flatten_claim_items(adv_raw_pros) or det_adv["strongest_points"]
+
         advocate_case = {
             "role": "advocate",
             "agent_id": advocate_id,
-            "thesis": str(live_adv.get("thesis") or det_adv["thesis"]).strip(),
-            "strongest_points": _dedupe_strs(list(live_adv.get("strongest_points") or det_adv["strongest_points"])),
+            "headline": adv_headline,
+            "thesis": adv_headline,
+            "pros": adv_struct_pros,
+            "strongest_points": adv_flat_pros,
             "cited_evidence": _dedupe_strs(list(live_adv.get("cited_evidence") or det_adv["cited_evidence"])),
-            "upside_bet": str(live_adv.get("upside_bet") or det_adv["upside_bet"]).strip(),
+            "standout_hook": adv_standout,
+            "upside_bet": adv_standout,
         }
+
+        skp_headline = str(live_skp.get("headline") or live_skp.get("counter_thesis") or det_skp["counter_thesis"]).strip()
+        skp_raw_cons = list(live_skp.get("cons") or live_skp.get("risk_points") or det_skp["cons"])
+        skp_struct_cons = _to_structured_claims(skp_raw_cons, "dossier-track-record")
+        skp_flat_cons = _flatten_claim_items(skp_raw_cons) or det_skp["risk_points"]
+        skp_missing = _dedupe_strs(
+            list(live_skp.get("missing_evidence_flags") or live_skp.get("missing_proof") or det_skp["missing_proof"])
+        )
+
         skeptic_case = {
             "role": "skeptic",
             "agent_id": skeptic_id,
-            "counter_thesis": str(live_skp.get("counter_thesis") or det_skp["counter_thesis"]).strip(),
-            "risk_points": _dedupe_strs(list(live_skp.get("risk_points") or det_skp["risk_points"])),
-            "missing_proof": _dedupe_strs(list(live_skp.get("missing_proof") or det_skp["missing_proof"])),
+            "headline": skp_headline,
+            "counter_thesis": skp_headline,
+            "cons": skp_struct_cons,
+            "risk_points": skp_flat_cons,
+            "missing_evidence_flags": skp_missing,
+            "missing_proof": skp_missing,
+            "dealbreakers_checked": _dedupe_strs(
+                list(live_skp.get("dealbreakers_checked") or det_skp.get("dealbreakers_checked") or ["standard_diligence"])
+            ),
             "verification_needed": str(live_skp.get("verification_needed") or det_skp["verification_needed"]).strip(),
         }
 
@@ -909,29 +1020,28 @@ def run_screening_for_dossier(
         judge_prompt = (
             "You are Simon's Stage 3 Screening Judge (`gemini-4-neon`). Weigh the Stage 2 dossier, "
             "the 5 rubric scores (0..2 each), the Advocate case, and the Skeptic case.\n"
-            "Return ONLY JSON with shape:\n"
-            "{\n"
-            '  "verdict": "elevate" | "watch" | "pass",\n'
-            '  "confidence": 0.0 to 1.0,\n'
-            '  "rubric_scores": {"identity_reachability": 0..2, "live_vocal_proof": 0..2, '
-            '"early_window_depth": 0..2, "listener_pull_cosigns": 0..2, "stage_momentum_whitespace": 0..2},\n'
-            '  "headline": "One concise plain-English verdict headline",\n'
-            '  "rationale": "Grounded synthesis weighing Advocate vs Skeptic",\n'
-            '  "decisive_factors": ["..."],\n'
-            '  "next_action": "Concrete human scout next step",\n'
-            '  "pros": ["..."],\n'
-            '  "cons": ["..."],\n'
-            '  "missing_evidence_flags": ["..."]\n'
-            "}\n\n"
+            "Return ONLY JSON with `verdict` ('elevate' | 'watch' | 'pass'), `confidence` (0..1), "
+            "`rubric_scores` ({identity_reachability, live_vocal_proof, early_window_depth, "
+            "listener_pull_cosigns, stage_momentum_whitespace} each 0..2), `total_score` (0..10), "
+            "`headline`, `rationale`, and `next_action`.\n\n"
             f"INPUT JSON:\n{judge_input}"
         )
         live_judge = _invoke_screening_agent_or_neon(client, judge_id, judge_prompt)
         nested_jd = live_judge.get("judge_decision") if isinstance(live_judge.get("judge_decision"), dict) else live_judge
 
-        raw_verdict = str(nested_jd.get("verdict") or det_judge["verdict"]).strip().lower()
+        raw_verdict = str(nested_jd.get("verdict") or live_judge.get("verdict") or det_judge["verdict"]).strip().lower()
         final_verdict = raw_verdict if raw_verdict in VALID_SCREENING_VERDICTS else det_judge["verdict"]
         try:
-            final_conf = max(0.0, min(1.0, round(float(nested_jd.get("confidence", det_judge["confidence"])), 2)))
+            final_conf = max(
+                0.0,
+                min(
+                    1.0,
+                    round(
+                        float(nested_jd.get("confidence", live_judge.get("confidence", det_judge["confidence"]))),
+                        2,
+                    ),
+                ),
+            )
         except (TypeError, ValueError):
             final_conf = det_judge["confidence"]
 
@@ -939,11 +1049,12 @@ def run_screening_for_dossier(
         if isinstance(raw_rubrics, dict):
             for k in RUBRIC_ORDER:
                 if k in raw_rubrics:
-                    rubric_scores[k] = _clamp_rubric_score(raw_rubrics[k])
+                    val = raw_rubrics[k]
+                    rubric_scores[k] = _clamp_rubric_score(val.get("score") if isinstance(val, dict) else val)
 
         total_live_score = sum(rubric_scores.values())
-        pros = _dedupe_strs(list(live_judge.get("pros") or []) + advocate_case["strongest_points"] + pros)
-        cons = _dedupe_strs(list(live_judge.get("cons") or []) + skeptic_case["risk_points"] + cons)
+        pros = _dedupe_strs(_flatten_claim_items(list(live_judge.get("pros") or [])) + advocate_case["strongest_points"] + pros)
+        cons = _dedupe_strs(_flatten_claim_items(list(live_judge.get("cons") or [])) + skeptic_case["risk_points"] + cons)
         missing_flags = _dedupe_strs(
             list(live_judge.get("missing_evidence_flags") or []) + skeptic_case["missing_proof"] + missing_flags
         )
@@ -953,22 +1064,31 @@ def run_screening_for_dossier(
             "confidence": final_conf,
             "total_score": total_live_score,
             "max_score": 10,
-            "headline": str(nested_jd.get("headline") or det_judge["headline"]).strip(),
-            "rationale": str(nested_jd.get("rationale") or det_judge["rationale"]).strip(),
+            "headline": str(nested_jd.get("headline") or live_judge.get("headline") or det_judge["headline"]).strip(),
+            "rationale": str(nested_jd.get("rationale") or live_judge.get("rationale") or det_judge["rationale"]).strip(),
             "decisive_factors": _dedupe_strs(list(nested_jd.get("decisive_factors") or det_judge["decisive_factors"])),
             "next_action": str(nested_jd.get("next_action") or det_judge["next_action"]).strip(),
             "policy_id": str((active_policy or {}).get("policy_id") or det_judge["policy_id"]),
         }
         mode = "live"
 
-    # Sync rubric_breakdown with final rubric_scores
+    # Sync rubric_breakdown and judge_decision.rubric_scores with final rubric_scores
     breakdown = []
+    jd_rubric_scores = {}
     for item in baseline["rubric_breakdown"]:
+        r_key = item["rubric_id"]
         updated_item = dict(item)
-        updated_item["score"] = rubric_scores[item["rubric_id"]]
+        updated_item["score"] = rubric_scores[r_key]
         breakdown.append(updated_item)
+        jd_rubric_scores[r_key] = {
+            "score": int(rubric_scores[r_key]),
+            "max_score": 2,
+            "skill": item["skill"],
+            "note": item["rationale"],
+        }
     total_final = sum(rubric_scores.values())
     judge_decision["total_score"] = total_final
+    judge_decision["rubric_scores"] = jd_rubric_scores
 
     packet: Dict[str, Any] = {
         "contract_version": "1.0.0",
@@ -976,6 +1096,7 @@ def run_screening_for_dossier(
         "lead_id": lead_id,
         "dossier_id": str(clean_dossier.get("dossier_id") or clean_dossier.get("_doc_id") or lead_id),
         "stage_name": stage_name,
+        "screening_model": "gemini-4-neon",
         "verdict": judge_decision["verdict"],
         "confidence": judge_decision["confidence"],
         "headline": judge_decision["headline"],
@@ -990,13 +1111,14 @@ def run_screening_for_dossier(
         "advocate_case": advocate_case,
         "skeptic_case": skeptic_case,
         "judge_decision": judge_decision,
+        "dossier_snapshot": clean_dossier,
         "artist_snapshot": snapshot,
         "input_skills_used": list(baseline["input_skills_used"]),
         "mode": mode,
         "screened_at": _utc_now_iso(),
     }
 
-    clean_packet = sanitize_agent_report(packet)
+    clean_packet = _normalize_screening_packet(sanitize_agent_report(packet))
     if store is not None:
         save_agent_document(store, "screening_packets", clean_packet, doc_id=packet_id)
         _publish_screening_agent_report(store, clean_packet)
@@ -1006,6 +1128,172 @@ def run_screening_for_dossier(
 # ---------------------------------------------------------------------------
 # 3. Demo Fixtures & Deck Loader (`/screen` & `GET /api/screening/packets`)
 # ---------------------------------------------------------------------------
+
+
+def _normalize_screening_packet(raw_pkt: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize any ScreeningPacket (seeded demo or runtime) so UI, evals, and trainer share exact keys."""
+    clean = sanitize_agent_report(dict(raw_pkt))
+    lead_id = str(clean.get("lead_id") or "").strip()
+    stage_name = str(clean.get("stage_name") or lead_id).strip()
+    pkt_id = str(clean.get("packet_id") or f"scr_{lead_id}")
+
+    dossier = clean.get("dossier_snapshot") if isinstance(clean.get("dossier_snapshot"), dict) else None
+    snapshot = clean.get("artist_snapshot") if isinstance(clean.get("artist_snapshot"), dict) else None
+    if snapshot is None and dossier is not None:
+        snapshot = _build_artist_snapshot(dossier, stage_name)
+    elif dossier is None and snapshot is not None:
+        dossier = {
+            "lead_id": lead_id,
+            "stage_name": stage_name,
+            "identity_and_contact": {
+                "stage_name": stage_name,
+                "aliases": [],
+                "pronouns": snapshot.get("pronouns"),
+                "project_type": snapshot.get("project_type") or "solo_vocalist",
+                "home_city": snapshot.get("home_city"),
+                "home_neighborhood": snapshot.get("home_neighborhood"),
+                "platform_urls": snapshot.get("platform_urls") or {},
+                "musicbrainz_mbid": None,
+                "has_public_business_contact": bool(snapshot.get("has_public_business_contact")),
+                "contact_route_type": snapshot.get("contact_route_type") or "none",
+            },
+            "source_and_media_queue": {
+                "source_channel": snapshot.get("source_channel") or "other",
+                "seed_source_url": snapshot.get("seed_source_url") or "",
+                "attribution_status": snapshot.get("attribution_status") or "uncertain",
+                "bio_text": snapshot.get("bio_text"),
+                "primary_genre": snapshot.get("primary_genre"),
+                "subgenres": snapshot.get("subgenres") or [],
+                "media_links": snapshot.get("media_links") or [],
+            },
+            "public_footprint": {
+                "footprint_regime": snapshot.get("footprint_regime") or "unknown",
+                "public_reach": snapshot.get("public_reach") or {},
+                "top_release_view_share_pct": None,
+            },
+            "comment_forensics": {
+                "comment_intent_counts": snapshot.get("comment_intent_counts") or {},
+                "notable_commenters": snapshot.get("notable_commenters") or [],
+            },
+            "live_history_and_credits": {
+                "show_history": snapshot.get("show_history") or [],
+                "upcoming_shows": snapshot.get("upcoming_shows") or [],
+                "highest_venue_cap_observed": None,
+                "public_team_mentions": snapshot.get("public_team_mentions") or {},
+                "collaborator_credits": snapshot.get("collaborator_credits") or [],
+            },
+            "missing_fields": list(clean.get("missing_evidence_flags") or []),
+        }
+
+    jd = dict(clean.get("judge_decision") or {})
+    top_rubrics = clean.get("rubric_scores") if isinstance(clean.get("rubric_scores"), dict) else {}
+    jd_rubrics = jd.get("rubric_scores") if isinstance(jd.get("rubric_scores"), dict) else {}
+
+    flat_scores: Dict[str, int] = {}
+    nested_scores: Dict[str, Dict[str, Any]] = {}
+    breakdown: List[Dict[str, Any]] = []
+
+    for r_key in RUBRIC_ORDER:
+        meta = RUBRIC_META[r_key]
+        raw_entry = jd_rubrics.get(r_key) if r_key in jd_rubrics else top_rubrics.get(r_key, 0)
+        if isinstance(raw_entry, dict):
+            sc = _clamp_rubric_score(raw_entry.get("score", 0))
+            note = str(raw_entry.get("note") or raw_entry.get("rationale") or "").strip()
+            skill = str(raw_entry.get("skill") or meta["skill"]).strip()
+        else:
+            sc = _clamp_rubric_score(raw_entry)
+            note = ""
+            skill = meta["skill"]
+        flat_scores[r_key] = sc
+        nested_scores[r_key] = {
+            "score": sc,
+            "max_score": 2,
+            "skill": skill,
+            "note": note or f"Rubric {meta['label']} scored {sc}/2.",
+        }
+        breakdown.append(
+            {
+                "rubric_id": r_key,
+                "label": meta["label"],
+                "skill": skill,
+                "block": meta["block"],
+                "score": sc,
+                "max_score": 2,
+                "rationale": nested_scores[r_key]["note"],
+                "evidence": [],
+            }
+        )
+
+    total_score = int(
+        clean.get("total_score")
+        if clean.get("total_score") is not None
+        else (jd.get("total_score") if jd.get("total_score") is not None else sum(flat_scores.values()))
+    )
+    verdict = str(jd.get("verdict") or clean.get("verdict") or "watch").strip().lower()
+    if verdict not in VALID_SCREENING_VERDICTS:
+        verdict = "watch"
+    confidence = jd.get("confidence", clean.get("confidence", 0.75))
+
+    adv = dict(clean.get("advocate_case") or {})
+    adv_headline = str(adv.get("headline") or adv.get("thesis") or f"Advocate case for {stage_name}.").strip()
+    adv_raw_pros = list(adv.get("pros") or adv.get("strongest_points") or clean.get("pros") or [])
+    adv["headline"] = adv_headline
+    adv["thesis"] = str(adv.get("thesis") or adv_headline).strip()
+    adv["pros"] = _to_structured_claims(adv_raw_pros, "dossier-media")
+    adv["strongest_points"] = _flatten_claim_items(adv_raw_pros)
+    adv["standout_hook"] = str(adv.get("standout_hook") or adv.get("upside_bet") or adv_headline).strip()
+    adv["upside_bet"] = str(adv.get("upside_bet") or adv["standout_hook"]).strip()
+
+    skp = dict(clean.get("skeptic_case") or {})
+    skp_headline = str(skp.get("headline") or skp.get("counter_thesis") or f"Diligence audit for {stage_name}.").strip()
+    skp_raw_cons = list(skp.get("cons") or skp.get("risk_points") or clean.get("cons") or [])
+    skp_missing = _dedupe_strs(
+        list(skp.get("missing_evidence_flags") or [])
+        + list(skp.get("missing_proof") or [])
+        + list(clean.get("missing_evidence_flags") or [])
+        + list((dossier or {}).get("missing_fields") or [])
+    )
+    skp["headline"] = skp_headline
+    skp["counter_thesis"] = str(skp.get("counter_thesis") or skp_headline).strip()
+    skp["cons"] = _to_structured_claims(skp_raw_cons, "dossier-track-record")
+    skp["risk_points"] = _flatten_claim_items(skp_raw_cons)
+    skp["missing_evidence_flags"] = skp_missing
+    skp["missing_proof"] = skp_missing
+    skp.setdefault("dealbreakers_checked", ["standard_diligence"])
+
+    jd["verdict"] = verdict
+    jd["confidence"] = confidence
+    jd["total_score"] = total_score
+    jd["max_score"] = 10
+    jd["rubric_scores"] = nested_scores
+    jd.setdefault("rationale", f"{stage_name} scored {total_score}/10 -> {verdict}.")
+    jd.setdefault("headline", f"{verdict.capitalize()} {stage_name} ({total_score}/10).")
+    jd.setdefault("next_action", f"Review {stage_name} on /screen.")
+
+    clean["contract_version"] = "1.0.0"
+    clean["packet_id"] = pkt_id
+    clean["lead_id"] = lead_id
+    clean["stage_name"] = stage_name
+    clean.setdefault("screening_model", "gemini-4-neon")
+    clean["verdict"] = verdict
+    clean["confidence"] = confidence
+    clean["total_score"] = total_score
+    clean["max_score"] = 10
+    clean["rubric_scores"] = flat_scores
+    clean.setdefault("rubric_breakdown", breakdown)
+    clean["pros"] = _dedupe_strs(list(clean.get("pros") or []) + adv["strongest_points"])[:6]
+    clean["cons"] = _dedupe_strs(list(clean.get("cons") or []) + skp["risk_points"])[:6]
+    clean["missing_evidence_flags"] = skp_missing
+    clean["advocate_case"] = adv
+    clean["skeptic_case"] = skp
+    clean["judge_decision"] = jd
+    if dossier is not None:
+        clean["dossier_snapshot"] = dossier
+    if snapshot is not None:
+        clean["artist_snapshot"] = snapshot
+    clean["input_skills_used"] = [RUBRIC_META[k]["skill"] for k in RUBRIC_ORDER]
+    clean.setdefault("screened_at", _utc_now_iso())
+    return clean
 
 
 def build_builtin_demo_dossiers() -> List[Dict[str, Any]]:
@@ -1098,6 +1386,13 @@ def build_builtin_demo_dossiers() -> List[Dict[str, Any]]:
                         "date": "2026-08-03",
                         "billing_slot": "headliner",
                         "source_url": "https://www.bandsintown.com/e/12345",
+                    },
+                    {
+                        "venue": "Union Pool",
+                        "city": "Brooklyn, NY",
+                        "date": "2026-06-19",
+                        "billing_slot": "direct_support",
+                        "source_url": "https://unionpool.com/events/mira-sol",
                     },
                 ],
                 "upcoming_shows": [
@@ -1306,10 +1601,8 @@ def _seed_demo_packets_into_store(store: Any) -> List[Dict[str, Any]]:
                 if not isinstance(item, dict):
                     continue
                 if isinstance(item.get("judge_decision"), dict) and item.get("lead_id") and item.get("stage_name"):
-                    clean = sanitize_agent_report(dict(item))
+                    clean = _normalize_screening_packet(dict(item))
                     pkt_id = str(clean.get("packet_id") or f"scr_{clean['lead_id']}")
-                    clean.setdefault("packet_id", pkt_id)
-                    clean.setdefault("verdict", clean["judge_decision"].get("verdict", "watch"))
                     save_agent_document(store, "screening_packets", clean, doc_id=pkt_id)
                     seeded.append(clean)
                 elif item.get("lead_id"):
@@ -1356,11 +1649,7 @@ def list_screening_deck(
         doc = _unwrap_doc(row)
         if not isinstance(doc, dict) or not doc.get("lead_id"):
             continue
-        clean = sanitize_agent_report(dict(doc))
-        jd = clean.get("judge_decision") or {}
-        clean.setdefault("verdict", jd.get("verdict", "watch"))
-        clean.setdefault("confidence", jd.get("confidence", 0.5))
-        clean.setdefault("packet_id", f"scr_{clean['lead_id']}")
+        clean = _normalize_screening_packet(dict(doc))
         lead_key = str(clean["lead_id"])
         if lead_key not in packets_by_lead:
             packets_by_lead[lead_key] = clean
@@ -1393,10 +1682,18 @@ def list_screening_deck(
                 "labeled_at": lbl.get("labeled_at") or lbl.get("_saved_at"),
             }
 
+    # Join latest calibrated taste_score from taste_scores onto each packet
+    latest_taste_by_lead: Dict[str, Dict[str, Any]] = {}
+    for ts_doc in list_taste_scores(store, limit=100):
+        lid = str(ts_doc.get("lead_id") or "")
+        if lid and lid not in latest_taste_by_lead:
+            latest_taste_by_lead[lid] = ts_doc
+
     all_packets: List[Dict[str, Any]] = []
     for lead_key, pkt in packets_by_lead.items():
         enriched = dict(pkt)
         enriched["human_review"] = latest_label_by_lead.get(lead_key)
+        enriched["latest_taste_score"] = latest_taste_by_lead.get(lead_key)
         all_packets.append(enriched)
 
     all_packets.sort(
@@ -1565,14 +1862,19 @@ def _find_packet_for_label(store: Any, lead_id: str, packet_id: Optional[str] = 
         doc = get_agent_document(store, "screening_packets", cid)
         unwrapped = _unwrap_doc(doc)
         if isinstance(unwrapped, dict) and unwrapped.get("lead_id"):
-            return sanitize_agent_report(unwrapped)
+            return _normalize_screening_packet(unwrapped)
 
     for row in list_agent_documents(store, "screening_packets", limit=100):
         doc = _unwrap_doc(row)
         if not isinstance(doc, dict):
             continue
         if doc.get("lead_id") == lead_id or (packet_id and doc.get("packet_id") == packet_id):
-            return sanitize_agent_report(doc)
+            return _normalize_screening_packet(doc)
+
+    if lead_id:
+        for demo_d in build_builtin_demo_dossiers():
+            if demo_d["lead_id"] == lead_id:
+                return run_screening_for_dossier(store, demo_d, live=False)
     return None
 
 
@@ -1678,6 +1980,22 @@ def _build_decision_questions_config(
 ) -> Dict[str, Any]:
     """Build `google.genai.decisions` (`v1beta` `gemini-decision-1`) `NoulQuestion`, `ScoreQuestion`, & `ChoiceQuestion`."""
     questions: Dict[str, Any] = {
+        "live_signable": {
+            "type": "noul",
+            "instructions": (
+                "Does this candidate demonstrate verified live vocal performance proof, unsigned early-window "
+                "whitespace, and direct outreach readiness suitable for an immediate human callback?"
+            ),
+            "criteria": {
+                "true_description": (
+                    "Verified performer attribution on embeddable live/acoustic clips, unsigned A&R whitespace, "
+                    "and an actionable public contact route."
+                ),
+                "false_description": (
+                    "Unverified attribution, studio-only or zero embeddable clips, major-label lockup, or no contact route."
+                ),
+            },
+        },
         "sufficient_live_evidence": {
             "type": "noul",
             "instructions": (
@@ -1707,6 +2025,20 @@ def _build_decision_questions_config(
                     "No public contact route exists or the act is already locked into an established major deal."
                 ),
             },
+        },
+        "composite_fit": {
+            "type": "score",
+            "instructions": (
+                "Rate overall calibrated Taste Engine A&R & showcase fit from 0 to 4 across vocal proof, "
+                "early-window catalog depth, listener demand, and unsigned stage momentum."
+            ),
+            "criteria": [
+                "0: Hard dealbreaker (major-label lockup, uncertain attribution with zero proof, or spam channel).",
+                "1: Weak early signal (<=3/10 rubric equivalent) with major missing evidence.",
+                "2: Watch-band promise (4..5/10 equivalent) needing a second live take or verified contact route.",
+                "3: Strong callback contender (6..7/10 equivalent) with real vocal proof and audience demand.",
+                "4: Standout ground-floor signing/callback priority (>=8/10 equivalent) with multi-session live proof, peer cosigns, and immediate unsigned reachability.",
+            ],
         },
     }
 
@@ -1759,15 +2091,21 @@ def _build_decision_questions_config(
     if all_override_notes:
         choice_instructions += f" Incorporate human override feedback: {' | '.join(all_override_notes[:4])}"
 
-    # ChoiceQuestion (`criteria: Dict[str, str]`)
+    # ChoiceQuestions (`criteria: Dict[str, str]`)
+    choice_criteria = {
+        "elevate": elevate_desc,
+        "watch": watch_desc,
+        "pass": pass_desc,
+    }
+    questions["taste_verdict"] = {
+        "type": "choice",
+        "instructions": choice_instructions,
+        "criteria": dict(choice_criteria),
+    }
     questions["screening_verdict"] = {
         "type": "choice",
         "instructions": choice_instructions,
-        "criteria": {
-            "elevate": elevate_desc,
-            "watch": watch_desc,
-            "pass": pass_desc,
-        },
+        "criteria": dict(choice_criteria),
     }
     return questions
 
@@ -1987,6 +2325,351 @@ def compile_judging_model(store: Any) -> Dict[str, Any]:
     }
     saved = save_agent_document(store, "judging_models", policy_doc, doc_id=policy_id)
     return saved["document"]
+
+
+# ---------------------------------------------------------------------------
+# 5b. Calibrated Taste Engine Inference (`gemini-decision-1` · 0 Output Tokens)
+# ---------------------------------------------------------------------------
+
+
+def list_taste_scores(
+    store: Any,
+    lead_id: Optional[str] = None,
+    limit: int = 100,
+) -> List[Dict[str, Any]]:
+    """List saved `gemini-decision-1` calibrated taste scores from `taste_scores`."""
+    if store is None:
+        return []
+    rows = list_agent_documents(store, "taste_scores", limit=max(1, min(limit, 100)))
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        doc = _unwrap_doc(row)
+        if not isinstance(doc, dict) or not doc.get("lead_id"):
+            continue
+        if lead_id and doc.get("lead_id") != lead_id and doc.get("taste_score_id") != lead_id:
+            continue
+        items.append(sanitize_agent_report(doc))
+    items.sort(
+        key=lambda item: str(item.get("evaluated_at") or item.get("updated_at") or item.get("_saved_at") or ""),
+        reverse=True,
+    )
+    return items[:limit]
+
+
+def _resolve_dossier_and_packet(
+    store: Any,
+    dossier_or_lead_id: Any,
+) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
+    if isinstance(dossier_or_lead_id, dict):
+        if isinstance(dossier_or_lead_id.get("dossier_snapshot"), dict):
+            pkt = _normalize_screening_packet(dossier_or_lead_id)
+            return dict(pkt["dossier_snapshot"]), pkt
+        if isinstance(dossier_or_lead_id.get("judge_decision"), dict):
+            pkt = _normalize_screening_packet(dossier_or_lead_id)
+            return dict(pkt.get("dossier_snapshot") or {}), pkt
+        return sanitize_agent_report(dict(dossier_or_lead_id)), None
+
+    target_id = str(dossier_or_lead_id or "").strip()
+    if not target_id:
+        raise ValueError("dossier_or_lead_id requires a non-empty lead_id, packet_id, or dossier object.")
+
+    if store is not None:
+        pkt = _find_packet_for_label(store, lead_id=target_id, packet_id=target_id)
+        if pkt is None:
+            deck = list_screening_deck(store, limit=100)
+            for cand in deck.get("packets") or []:
+                if cand.get("lead_id") == target_id or cand.get("packet_id") == target_id:
+                    pkt = cand
+                    break
+        if pkt is not None:
+            norm = _normalize_screening_packet(pkt)
+            return dict(norm.get("dossier_snapshot") or {}), norm
+
+        for row in list_agent_documents(store, "investigator_dossiers", limit=100):
+            doc = _unwrap_doc(row)
+            if isinstance(doc, dict) and (doc.get("lead_id") == target_id or doc.get("dossier_id") == target_id):
+                return sanitize_agent_report(dict(doc)), None
+
+    if DEMO_SCREENING_PATH.is_file():
+        try:
+            raw = json.loads(DEMO_SCREENING_PATH.read_text(encoding="utf-8"))
+            pkts = raw.get("packets") if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+            for item in pkts or []:
+                if isinstance(item, dict) and (item.get("lead_id") == target_id or item.get("packet_id") == target_id):
+                    norm = _normalize_screening_packet(item)
+                    return dict(norm.get("dossier_snapshot") or {}), norm
+        except (OSError, ValueError):
+            pass
+
+    for demo_d in build_builtin_demo_dossiers():
+        if demo_d["lead_id"] == target_id:
+            return dict(demo_d), None
+
+    raise ValueError(f"Could not find dossier or screening packet for '{target_id}'.")
+
+
+def _format_taste_engine_input(
+    dossier: Dict[str, Any],
+    packet: Optional[Dict[str, Any]],
+    baseline: Dict[str, Any],
+    policy: Dict[str, Any],
+) -> str:
+    summary_obj: Dict[str, Any] = {
+        "lead_id": baseline["lead_id"],
+        "stage_name": baseline["stage_name"],
+        "dossier": {
+            "identity_and_contact": dossier.get("identity_and_contact") or {},
+            "source_and_media_queue": dossier.get("source_and_media_queue") or {},
+            "public_footprint": dossier.get("public_footprint") or {},
+            "comment_forensics": dossier.get("comment_forensics") or {},
+            "live_history_and_credits": dossier.get("live_history_and_credits") or {},
+            "missing_fields": dossier.get("missing_fields") or [],
+        },
+        "deterministic_rubric_scores": baseline["rubric_scores"],
+        "deterministic_total_score": baseline["total_score"],
+    }
+    if packet is not None:
+        summary_obj["advocate_headline"] = (packet.get("advocate_case") or {}).get("headline")
+        summary_obj["advocate_pros"] = (packet.get("advocate_case") or {}).get("pros", [])[:4]
+        summary_obj["skeptic_headline"] = (packet.get("skeptic_case") or {}).get("headline")
+        summary_obj["skeptic_cons"] = (packet.get("skeptic_case") or {}).get("cons", [])[:4]
+        summary_obj["neon_judge_verdict"] = (packet.get("judge_decision") or {}).get("verdict")
+    demos = list(policy.get("demos") or [])[:4]
+    if demos:
+        summary_obj["calibrated_human_few_shot_examples"] = [
+            {
+                "stage_name": d.get("stage_name"),
+                "total_score": d.get("total_score"),
+                "target_verdict": d.get("target_verdict") or d.get("verdict"),
+                "reason": d.get("reason"),
+            }
+            for d in demos
+            if isinstance(d, dict)
+        ]
+    return (
+        "Stage 3 Candidate Artist Factual Dossier & Adversarial Screening Context:\n"
+        + json.dumps(summary_obj, indent=2, ensure_ascii=False)
+    )
+
+
+def _post_decisions_v1beta(api_key: str, body: Dict[str, Any]) -> Dict[str, Any]:
+    url = "https://generativelanguage.googleapis.com/v1beta/decisions"
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "x-goog-api-key": api_key,
+            "Api-Revision": "2026-05-20",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=45) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"gemini-decision-1 HTTP {exc.code}: {detail}") from exc
+
+
+def _offline_calibrated_taste_answers(
+    baseline: Dict[str, Any],
+    policy: Dict[str, Any],
+) -> Dict[str, Any]:
+    total = int(baseline["total_score"])
+    scores = baseline["rubric_scores"]
+    thresholds = policy.get("thresholds") or {}
+    elevate_min = int(thresholds.get("elevate_min_score", 7))
+    watch_min = int(thresholds.get("watch_min_score", 4))
+    vocal_ok = int(scores.get("live_vocal_proof", 0)) >= 1
+    reach_ok = int(scores.get("identity_reachability", 0)) >= 1
+    ws_ok = int(scores.get("stage_momentum_whitespace", 0)) >= 1
+
+    if total >= elevate_min and vocal_ok:
+        margin = min(3, total - elevate_min)
+        p_elev = round(min(0.94, 0.72 + 0.07 * margin), 4)
+        p_watch = round(max(0.04, 1.0 - p_elev - 0.02), 4)
+        p_pass = round(max(0.01, 1.0 - p_elev - p_watch), 4)
+        choice = "elevate"
+    elif total >= watch_min:
+        p_watch = 0.68 if total < elevate_min - 1 else 0.60
+        p_elev = 0.24 if vocal_ok else 0.12
+        p_pass = round(max(0.02, 1.0 - p_watch - p_elev), 4)
+        choice = "watch"
+    else:
+        p_pass = round(min(0.95, 0.76 + 0.05 * max(0, watch_min - 1 - total)), 4)
+        p_watch = round(max(0.03, 1.0 - p_pass - 0.02), 4)
+        p_elev = round(max(0.01, 1.0 - p_pass - p_watch), 4)
+        choice = "pass"
+
+    probs = {"elevate": p_elev, "watch": p_watch, "pass": p_pass}
+    conf = round(max(probs.values()), 4)
+    signable_prob = round(
+        min(0.97, max(0.03, (0.45 if vocal_ok else 0.08) + (0.28 if reach_ok else 0.0) + (0.22 if ws_ok else 0.0))),
+        4,
+    )
+    comp_score = round(min(4.0, max(0.0, (total / 10.0) * 4.0)), 3)
+    return {
+        "taste_verdict": {
+            "type": "choice",
+            "choice": choice,
+            "confidence": conf,
+            "probabilities": probs,
+        },
+        "live_signable": {
+            "type": "noul",
+            "noul": signable_prob,
+            "confidence": round(max(signable_prob, 1.0 - signable_prob), 4),
+        },
+        "composite_fit": {
+            "type": "score",
+            "score": comp_score,
+            "confidence": conf,
+            "probabilities": {str(k): (0.6 if k == round(comp_score) else 0.1) for k in range(5)},
+        },
+    }
+
+
+def evaluate_with_taste_engine(
+    store: Any,
+    dossier_or_lead_id: Any,
+    live: bool = True,
+    api_key: Optional[str] = None,
+    http_post: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Run calibrated 0-output-token `gemini-decision-1` Taste Engine over a candidate dossier.
+
+    Auto-compiles `policy_v1` into `judging_models` if no active policy exists yet, calls
+    `POST https://generativelanguage.googleapis.com/v1beta/decisions` (`Api-Revision: 2026-05-20`)
+    when `live=True` and `GEMINI_API_KEY` is configured, persists to `taste_scores`, and returns
+    calibrated probabilities (`P(elevate)`, `P(watch)`, `P(pass)`), `live_signable`, `composite_fit`,
+    and `0` output tokens.
+    """
+    dossier, packet = _resolve_dossier_and_packet(store, dossier_or_lead_id)
+    baseline = score_dossier_inputs(dossier)
+    lead_id = str((packet or {}).get("lead_id") or baseline["lead_id"])
+    stage_name = str((packet or {}).get("stage_name") or baseline["stage_name"])
+
+    policy = _get_active_judging_policy(store)
+    if policy is None and store is not None:
+        policy = compile_judging_model(store)
+    if policy is None:
+        policy = {
+            "policy_id": "policy_v1",
+            "version": 1,
+            "thresholds": {"elevate_min_score": 7, "watch_min_score": 4},
+            "questions_config": _build_decision_questions_config(
+                {"elevate": [], "watch": [], "pass": []}, 7, 4
+            ),
+            "demos": [],
+        }
+
+    policy_id = str(policy.get("policy_id") or "policy_v1")
+    raw_qcfg = dict(policy.get("questions_config") or {})
+    default_qcfg = _build_decision_questions_config(
+        policy.get("override_notes") or {"elevate": [], "watch": [], "pass": []},
+        int((policy.get("thresholds") or {}).get("elevate_min_score", 7)),
+        int((policy.get("thresholds") or {}).get("watch_min_score", 4)),
+    )
+
+    questions_payload: Dict[str, Any] = {
+        "live_signable": raw_qcfg.get("live_signable") or default_qcfg["live_signable"],
+        "composite_fit": raw_qcfg.get("composite_fit") or default_qcfg["composite_fit"],
+        "taste_verdict": (
+            raw_qcfg.get("taste_verdict")
+            or raw_qcfg.get("screening_verdict")
+            or default_qcfg["taste_verdict"]
+        ),
+    }
+    for r_key in RUBRIC_ORDER:
+        questions_payload[r_key] = raw_qcfg.get(r_key) or default_qcfg[r_key]
+
+    input_text = _format_taste_engine_input(dossier, packet, baseline, policy)
+    resolved_key = (api_key or os.environ.get("GEMINI_API_KEY") or "").strip() or None
+
+    mode = "offline_calibrated_fallback"
+    input_tokens = 0
+    output_tokens = 0
+
+    if live and (resolved_key or http_post is not None):
+        req_body = {
+            "model": "gemini-decision-1",
+            "input": input_text,
+            "questions": questions_payload,
+        }
+        poster = http_post or (lambda body: _post_decisions_v1beta(resolved_key or "", body))
+        resp_json = poster(req_body)
+        answers = resp_json.get("answers") or {}
+        usage = resp_json.get("usage") or {}
+        input_tokens = int(usage.get("total_input_tokens") or usage.get("input_tokens") or 0)
+        output_tokens = int(usage.get("total_output_tokens") or usage.get("output_tokens") or 0)
+        mode = "live_gemini_decision_1"
+    else:
+        answers = _offline_calibrated_taste_answers(baseline, policy)
+
+    tv_ans = answers.get("taste_verdict") or answers.get("screening_verdict") or {}
+    raw_choice = str(tv_ans.get("choice") or "watch").strip().lower()
+    taste_verdict = raw_choice if raw_choice in VALID_SCREENING_VERDICTS else "watch"
+    raw_probs = tv_ans.get("probabilities") or {}
+    probabilities = {
+        "elevate": round(float(raw_probs.get("elevate", 0.0)), 4),
+        "watch": round(float(raw_probs.get("watch", 0.0)), 4),
+        "pass": round(float(raw_probs.get("pass", 0.0)), 4),
+    }
+    confidence = round(float(tv_ans.get("confidence", max(probabilities.values() or [0.5]))), 4)
+
+    ls_ans = answers.get("live_signable") or {}
+    live_signable_prob = round(float(ls_ans.get("noul", 0.5)), 4)
+    live_signable_conf = round(float(ls_ans.get("confidence", max(live_signable_prob, 1.0 - live_signable_prob))), 4)
+
+    cf_ans = answers.get("composite_fit") or {}
+    composite_fit_score = round(float(cf_ans.get("score", 2.0)), 3)
+    composite_fit_conf = round(float(cf_ans.get("confidence", confidence)), 4)
+
+    rubric_expected_scores: Dict[str, float] = {}
+    for r_key in RUBRIC_ORDER:
+        r_ans = answers.get(r_key)
+        if isinstance(r_ans, dict) and r_ans.get("score") is not None:
+            rubric_expected_scores[r_key] = round(float(r_ans["score"]), 3)
+
+    taste_score_id = f"taste_{lead_id}"
+    taste_doc: Dict[str, Any] = {
+        "contract_version": "1.0.0",
+        "taste_score_id": taste_score_id,
+        "lead_id": lead_id,
+        "packet_id": str((packet or {}).get("packet_id") or f"scr_{lead_id}"),
+        "stage_name": stage_name,
+        "model": "gemini-decision-1",
+        "api_revision": "2026-05-20",
+        "policy_id": policy_id,
+        "policy_version": policy.get("version", 1),
+        "mode": mode,
+        "taste_verdict": taste_verdict,
+        "confidence": confidence,
+        "probabilities": probabilities,
+        "p_elevate": probabilities["elevate"],
+        "p_watch": probabilities["watch"],
+        "p_pass": probabilities["pass"],
+        "live_signable": {
+            "noul": live_signable_prob,
+            "confidence": live_signable_conf,
+        },
+        "composite_fit": {
+            "score": composite_fit_score,
+            "max_score": 4,
+            "confidence": composite_fit_conf,
+        },
+        "rubric_expected_scores": rubric_expected_scores,
+        "usage": {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+        },
+        "evaluated_at": _utc_now_iso(),
+    }
+    clean_taste = sanitize_agent_report(taste_doc)
+    if store is not None:
+        save_agent_document(store, "taste_scores", clean_taste, doc_id=taste_score_id)
+    return clean_taste
 
 
 # ---------------------------------------------------------------------------

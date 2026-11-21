@@ -23,6 +23,7 @@ ALLOWED_AGENT_COLLECTIONS = frozenset(
         "screening_packets",
         "screening_labels",
         "judging_models",
+        "taste_scores",
         "eval_runs",
     }
 )
@@ -242,6 +243,17 @@ def validate_collection_payload(collection: str, payload: Any) -> Tuple[List[str
         if raw_version is None or isinstance(raw_version, bool) or not str(raw_version).strip():
             errors.append("Missing required field 'version'.")
         doc_id = policy_id or None
+
+    elif collection == "taste_scores":
+        lead_id = str(payload.get("lead_id") or "").strip()
+        if not lead_id:
+            errors.append("Missing required field 'lead_id'.")
+        verdict = str(payload.get("taste_verdict") or "").strip().lower()
+        if verdict not in VALID_SCREENING_VERDICTS:
+            errors.append(
+                f"Invalid taste_verdict '{verdict}'. Must be one of: {sorted(VALID_SCREENING_VERDICTS)}."
+            )
+        doc_id = str(payload.get("taste_score_id") or "").strip() or (f"taste_{lead_id}" if lead_id else None)
 
     elif collection == "eval_runs":
         for field in ("eval_run_id", "status"):

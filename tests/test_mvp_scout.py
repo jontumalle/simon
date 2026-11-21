@@ -1,14 +1,10 @@
-from http.server import ThreadingHTTPServer
 import json
-from pathlib import Path
-import threading
 import unittest
-from urllib.request import Request, urlopen
 
-from simon.models import ClipEvidence, ScoutRun, TasteBrief, TimestampedObservation
+from simon.models import ClipEvidence, ScoutRun, TimestampedObservation
 from simon.scout import run_demo_scout, run_live_scout
 from simon.store import SimonStore
-from simon.web import create_handler, dispatch_http_request
+from simon.web import dispatch_http_request
 from simon.youtube import (
     YouTubeConnector,
     build_play_first_url,

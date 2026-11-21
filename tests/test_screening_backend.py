@@ -25,9 +25,11 @@ from simon.screening import (
     RUBRIC_ORDER,
     build_builtin_demo_dossiers,
     compile_judging_model,
+    evaluate_with_taste_engine,
     list_judging_models,
     list_screening_deck,
     list_screening_evals,
+    list_taste_scores,
     run_screening_evals,
     run_screening_for_dossier,
     save_screening_label,
@@ -46,7 +48,7 @@ class TestScreeningDBCollections(unittest.TestCase):
         self._tmp.cleanup()
 
     def test_allowed_collections_and_payload_validation(self) -> None:
-        for col in ("screening_packets", "screening_labels", "judging_models"):
+        for col in ("screening_packets", "screening_labels", "judging_models", "taste_scores"):
             self.assertIn(col, ALLOWED_AGENT_COLLECTIONS)
 
         # 1. screening_packets validation + default doc_id + telemetry sanitization
@@ -264,18 +266,18 @@ class TestScreeningOrchestratorAndTraining(unittest.TestCase):
         lbl_agree = save_screening_label(
             self.store,
             {
-                "lead_id": "lead_demo_mira_sol",
+                "lead_id": "lead_scr_01",
                 "human_verdict": "elevate",
-                "reason": "Sofar vocal phrasing and Mercury Lounge bill are undeniable.",
+                "reason": "Mahogany + BBC live vocal phrasing and Mercury Lounge bill are undeniable.",
             },
         )
         self.assertTrue(lbl_agree["agreed_with_model"])
-        self.assertEqual(lbl_agree["training_features"]["total_score"], 10)
+        self.assertEqual(lbl_agree["training_features"]["total_score"], 9)
 
         lbl_override = save_screening_label(
             self.store,
             {
-                "lead_id": "lead_demo_soraia_bell",
+                "lead_id": "lead_scr_02",
                 "human_verdict": "elevate",
                 "reason": "Elevate acoustic R&B vocalists early when comment release requests exceed 4.",
             },
@@ -284,9 +286,9 @@ class TestScreeningOrchestratorAndTraining(unittest.TestCase):
 
         refreshed_deck = list_screening_deck(self.store)
         self.assertEqual(refreshed_deck["human_labeled_count"], 2)
-        soraia_card = next(p for p in refreshed_deck["packets"] if p["lead_id"] == "lead_demo_soraia_bell")
-        self.assertEqual(soraia_card["human_review"]["human_verdict"], "elevate")
-        self.assertFalse(soraia_card["human_review"]["agreed_with_model"])
+        kieran_card = next(p for p in refreshed_deck["packets"] if p["lead_id"] == "lead_scr_02")
+        self.assertEqual(kieran_card["human_review"]["human_verdict"], "elevate")
+        self.assertFalse(kieran_card["human_review"]["agreed_with_model"])
 
         # 4. Recompile -> policy_v2 with override reason embedded in questions_config
         p2 = compile_judging_model(self.store)
@@ -307,6 +309,10 @@ class TestScreeningOrchestratorAndTraining(unittest.TestCase):
 
         # Validate questions_config against google.genai.decisions.CreateDecisionRequest if installed
         q_cfg = p2["questions_config"]
+        self.assertEqual(q_cfg["live_signable"]["type"], "noul")
+        self.assertEqual(q_cfg["composite_fit"]["type"], "score")
+        self.assertEqual(len(q_cfg["composite_fit"]["criteria"]), 5)
+        self.assertEqual(q_cfg["taste_verdict"]["type"], "choice")
         self.assertEqual(q_cfg["sufficient_live_evidence"]["type"], "noul")
         self.assertEqual(q_cfg["screening_verdict"]["type"], "choice")
         for r_key in RUBRIC_ORDER:
@@ -321,9 +327,56 @@ class TestScreeningOrchestratorAndTraining(unittest.TestCase):
                 input="Sample artist dossier text",
                 questions=q_cfg,
             )
-            self.assertEqual(len(req_obj.questions), 8)
+            self.assertGreaterEqual(len(req_obj.questions), 8)
         except ImportError:
             pass
+
+        # 5. Taste Engine (`gemini-decision-1` · 0 output tokens) offline + mocked live wire check
+        offline_ts = evaluate_with_taste_engine(self.store, "lead_scr_01", live=False)
+        self.assertEqual(offline_ts["taste_verdict"], "elevate")
+        self.assertEqual(offline_ts["policy_id"], "policy_v2")
+        self.assertEqual(offline_ts["usage"]["output_tokens"], 0)
+        self.assertGreater(offline_ts["probabilities"]["elevate"], 0.6)
+
+        captured_req = {}
+
+        def _fake_decisions_post(body):
+            captured_req.update(body)
+            return {
+                "answers": {
+                    "live_signable": {"type": "noul", "noul": 0.94, "confidence": 0.94},
+                    "composite_fit": {
+                        "type": "score",
+                        "score": 3.76,
+                        "confidence": 0.81,
+                        "probabilities": {"0": 0.0, "1": 0.01, "2": 0.03, "3": 0.15, "4": 0.81},
+                    },
+                    "taste_verdict": {
+                        "type": "choice",
+                        "choice": "elevate",
+                        "confidence": 0.92,
+                        "probabilities": {"elevate": 0.92, "watch": 0.07, "pass": 0.01},
+                    },
+                },
+                "usage": {"total_input_tokens": 842, "total_output_tokens": 0},
+            }
+
+        live_ts = evaluate_with_taste_engine(
+            self.store, "lead_scr_01", live=True, http_post=_fake_decisions_post
+        )
+        self.assertEqual(captured_req["model"], "gemini-decision-1")
+        self.assertIn("live_signable", captured_req["questions"])
+        self.assertIn("composite_fit", captured_req["questions"])
+        self.assertIn("taste_verdict", captured_req["questions"])
+        self.assertEqual(live_ts["mode"], "live_gemini_decision_1")
+        self.assertEqual(live_ts["taste_verdict"], "elevate")
+        self.assertAlmostEqual(live_ts["probabilities"]["elevate"], 0.92)
+        self.assertEqual(live_ts["usage"]["output_tokens"], 0)
+        self.assertEqual(len(list_taste_scores(self.store, lead_id="lead_scr_01")), 1)
+
+        deck_with_ts = list_screening_deck(self.store)
+        nadia_card = next(p for p in deck_with_ts["packets"] if p["lead_id"] == "lead_scr_01")
+        self.assertEqual(nadia_card["latest_taste_score"]["taste_verdict"], "elevate")
 
         # 5. Run 3-layer Stage 3 screening evals
         eval_report = run_screening_evals(self.store, trigger="unittest")
@@ -411,6 +464,23 @@ class TestScreeningHTTPRoutesAndCLI(unittest.TestCase):
         models_res = json.loads(body.decode("utf-8"))
         self.assertEqual(models_res["count"], 1)
         self.assertEqual(models_res["active_model"]["policy_id"], "policy_v1")
+
+        # 5b. POST /api/screening/taste-score & GET /api/screening/taste-scores
+        st_ts, _, body = dispatch_http_request(
+            self.store,
+            "POST",
+            "/api/screening/taste-score",
+            json.dumps({"lead_id": "lead_scr_01", "live": False}).encode("utf-8"),
+        )
+        self.assertEqual(st_ts, HTTPStatus.OK)
+        ts_res = json.loads(body.decode("utf-8"))
+        self.assertTrue(ts_res["ok"])
+        self.assertEqual(ts_res["taste_verdict"], "elevate")
+        self.assertEqual(ts_res["usage"]["output_tokens"], 0)
+
+        st_get_ts, _, body = dispatch_http_request(self.store, "GET", "/api/screening/taste-scores")
+        self.assertEqual(st_get_ts, HTTPStatus.OK)
+        self.assertEqual(json.loads(body.decode("utf-8"))["count"], 1)
 
         # 6. POST /api/screening/evals/run & GET /api/screening/evals
         st_eval, _, body = dispatch_http_request(self.store, "POST", "/api/screening/evals/run", b"{}")

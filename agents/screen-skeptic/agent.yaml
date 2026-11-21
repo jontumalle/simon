@@ -18,3 +18,8 @@ base_environment:
 shared_skills:
   - simon-db
   - field-reporting
+  - dossier-identity
+  - dossier-media
+  - dossier-footprint
+  - dossier-audience
+  - dossier-track-record

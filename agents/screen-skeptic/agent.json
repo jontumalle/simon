@@ -25,6 +25,11 @@
   },
   "shared_skills": [
     "simon-db",
-    "field-reporting"
+    "field-reporting",
+    "dossier-identity",
+    "dossier-media",
+    "dossier-footprint",
+    "dossier-audience",
+    "dossier-track-record"
   ]
 }
