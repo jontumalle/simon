@@ -3,6 +3,12 @@
 *Updated: 2026-11-21*
 
 ## Live Now
+- **Talent Agency Studio Remodel, Phase Runner & Agent Eval Lab (PR #16 merged to `main`, commit `95d3bcf`, 57/57 tests passing)**:
+  - **Zero-Dependency 3-Tab Studio (`/`, `simon/static/index.html`, `simon/static/app.css`, `simon/static/app.js`)**: Remodeled `5. Vocal Studio` (`/`) into a modern 3-tab Talent Agency Studio featuring:
+    1. **Talent Review**: Sticky YouTube Moment Verifier player with quick-jump timestamps, Top-3 Shortlist + All Scouted Artists, Full Profile drawer, New Brief drawer, Trace drawer, and promote-to-Phase-2 candidate selection.
+    2. **Pipeline Runner**: 6-phase clickable stepper (`1 Discovery`, `2A Identity`, `2B Investigators x3`, `2C Profile Join`, `3 Critics & Shortlist`, `4 Producer`), Live Run vs Test/Eval Mode, editable handoff JSON, and saved checkpoints.
+    3. **Agent Lab**: 9-agent roster, single/batch runner via `/api/fleet/run`, Formatted/Raw JSON inspector, deterministic contract checks, and saved Pass/Fail evals.
+  - **Unified Theme & Safe Static Serving**: Editorial Light (default) + Studio Dark theme with synced `localStorage.simon_theme` toggle across all 5 pages (`/discovery`, `/field-news`, `/reports`, `/investigate`, `/`) in `simon/discovery_ui.py` (preserving all features from PRs #13, #14, and #15). Added backend `simon/phases.py`, safe `/static/*` serving, `GET/POST /api/phases` & `/api/phases/run`, `GET/POST /api/evals`, and `tests/test_agency_studio_ui.py`.
 - **Human-First Agent Reporting Layer & Two-Stage Discovery/Investigation UI (PRs #13 & #14 merged to `main`, 53/53 tests passing)**:
   - **Contract & Persistence (`data/agent_report_schema.json`, `simon/db_tools.py`)**: Added human-first `AgentReport` v1.0.0 schema and `agent_reports` collection, strictly forbidding and stripping `interaction_id`, `environment_id`, and raw `metadata`.
   - **Shared Managed Agent Skills (`agents/_shared/skills/`)**: Added `field-reporting/` (live `looking_at` / `finding` / `analysis` checkpoints + final stored `output`) and `source-discovery/` (5-stage Discovery Process), wired into all 5 deployed agents.
