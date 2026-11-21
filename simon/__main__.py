@@ -10,6 +10,12 @@ from .fleet import dispatch_fleet
 from .gemini import Gemini
 from .registry import seed_discovery_sources
 from .scout import DEFAULT_TASTE_BRIEF, load_dotenv_if_present, run_scout
+from .screening import (
+    compile_judging_model,
+    list_screening_deck,
+    run_screening_batch,
+    run_screening_evals,
+)
 from .store import SimonStore, create_store
 from .web import serve_web
 
@@ -296,6 +302,68 @@ def main(argv=None):
             parser.exit(1, f"Simon seed failed: {exc}\n")
         summary["store_backend"] = getattr(store, "backend", "sqlite")
         print(json.dumps(summary, indent=2, ensure_ascii=False))
+        return
+
+    if raw_args and raw_args[0] == "screen":
+        parser = argparse.ArgumentParser(
+            prog="python3 -m simon screen",
+            description="Run Stage 3 adversarial screening, compile judging models, or execute 3-layer screening evals.",
+        )
+        parser.add_argument(
+            "--live",
+            action="store_true",
+            help="Invoke parallel Screen Advocate & Skeptic + Judge Managed Agents (/v1beta/interactions).",
+        )
+        parser.add_argument(
+            "--train",
+            action="store_true",
+            help="Compile a versioned JudgingModelPolicy (DSPy + gemini-decision-1 questions_config).",
+        )
+        parser.add_argument(
+            "--eval",
+            action="store_true",
+            help="Run 3-layer Stage 3 screening rubrics and store results in eval_runs.",
+        )
+        parser.add_argument(
+            "--lead-id",
+            default=None,
+            help="Optional lead_id to screen specifically.",
+        )
+        parser.add_argument(
+            "--prefix",
+            default=None,
+            help="Optional Managed Agent ID prefix (overrides SIMON_AGENT_PREFIX).",
+        )
+        parser.add_argument("--db", type=Path, default=None, help="Optional SQLite database path.")
+        parser.add_argument(
+            "--backend",
+            choices=("sqlite", "firestore"),
+            default=None,
+            help="Store backend override (default: SIMON_STORE_BACKEND env or sqlite).",
+        )
+        args = parser.parse_args(raw_args[1:])
+        load_dotenv_if_present()
+        store = SimonStore(args.db) if args.db is not None else create_store(backend=args.backend)
+        try:
+            screened = run_screening_batch(
+                store=store,
+                lead_id=args.lead_id,
+                live=args.live,
+                prefix=args.prefix,
+            )
+            out: dict = {
+                "ok": True,
+                "mode": "live" if args.live else "deterministic_baseline",
+                "screened_count": len(screened),
+                "deck": list_screening_deck(store),
+            }
+            if args.train:
+                out["policy"] = compile_judging_model(store)
+            if args.eval:
+                out["eval_run"] = run_screening_evals(store, trigger="cli")
+        except (OSError, UnicodeError, ValueError, KeyError, TypeError, RuntimeError) as exc:
+            parser.exit(1, f"Simon screen failed: {exc}\n")
+        print(json.dumps(out, indent=2, ensure_ascii=False))
         return
 
     parser = argparse.ArgumentParser(
