@@ -1395,6 +1395,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
             <a id="followFieldNewsBtn" class="btn" href="/field-news">Follow in Field News →</a>
             <a id="openReportsBtn" class="btn" href="/reports">Open Scouting Reports →</a>
           </div>
+          <a class="btn" href="/?tab=discovery">Open in Agency Studio →</a>
           <button id="dispatchBtn" class="btn primary" type="button">Send Discovery Agents</button>
         </div>
       </div>
@@ -1942,7 +1943,10 @@ REPORTS_HTML = f"""<!DOCTYPE html>
                     ${{f.source_channel ? `<span class="pill">${{esc(f.source_channel)}}</span>` : ''}}
                     ${{f.url ? `<a href="${{esc(f.url)}}" target="_blank" rel="noopener" style="font-size:0.82rem;">Open source ↗</a>` : ''}}
                   </div>
-                  <a class="btn" href="/investigate?subject=${{encodeURIComponent(f.title || '')}}${{f.lead_id ? '&lead=' + encodeURIComponent(f.lead_id) : ''}}" style="font-size:0.78rem; padding:5px 10px; color:var(--teal); border-color:rgba(45,212,191,0.4);">Investigate →</a>
+                  <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                    <a class="btn" href="/?tab=pipeline&amp;phase=2a_identity&amp;subject=${{encodeURIComponent(f.title || '')}}${{f.lead_id ? '&amp;lead=' + encodeURIComponent(f.lead_id) : ''}}" style="font-size:0.78rem; padding:5px 10px;">Send to Studio Pipeline →</a>
+                    <a class="btn" href="/investigate?subject=${{encodeURIComponent(f.title || '')}}${{f.lead_id ? '&lead=' + encodeURIComponent(f.lead_id) : ''}}" style="font-size:0.78rem; padding:5px 10px; color:var(--teal); border-color:rgba(45,212,191,0.4);">Investigate →</a>
+                  </div>
                 </div>
               </div>`).join('')}}
           </div>` : '<div style="color:var(--muted); font-size:0.86rem;">No verified findings recorded in this report yet.</div>';
@@ -2164,8 +2168,9 @@ INVESTIGATE_HTML = f"""<!DOCTYPE html>
             <div style="display:flex; flex-direction:column; gap:4px;">
               ${{seeds.map((ss) => `<a class="mono" href="${{esc(ss.url)}}" target="_blank" rel="noopener">↗ [${{esc(ss.source_channel || 'source')}}] ${{esc(ss.url)}}</a>`).join('')}}
             </div>
-            <div style="margin-top:auto; padding-top:6px; display:flex; justify-content:space-between; align-items:center;">
+            <div style="margin-top:auto; padding-top:6px; display:flex; justify-content:space-between; align-items:center; gap:6px; flex-wrap:wrap;">
               <button class="btn" type="button" data-focus-lead="${{esc(l.lead_id || '')}}" data-focus-name="${{esc(l.stage_name || '')}}" style="font-size:0.78rem; padding:5px 10px;">Focus Lead &amp; Dossier</button>
+              <a class="btn" href="/?tab=pipeline&amp;phase=2a_identity&amp;subject=${{encodeURIComponent(l.stage_name || '')}}${{l.lead_id ? '&amp;lead=' + encodeURIComponent(l.lead_id) : ''}}" style="font-size:0.78rem; padding:5px 10px;">Send to Studio Pipeline →</a>
               <a href="/reports" style="font-size:0.8rem;">View Discovery Report →</a>
             </div>
           </div>`;
@@ -2383,10 +2388,16 @@ EVALS_HTML = f"""<!DOCTYPE html>
             </select>
           </label>
           <label style="font-size:0.86rem;">
+            Trace:
+            <select id="evalTraceSelect" style="margin-left:6px; max-width:340px;">
+              <option value="">All Samples (Batch)</option>
+            </select>
+          </label>
+          <label style="font-size:0.86rem;">
             Samples:
             <select id="evalSampleSelect" style="margin-left:6px;">
-              <option value="mixed">Live Reports + Golden Dataset</option>
               <option value="live_reports">Live Scouting Reports Only</option>
+              <option value="mixed">Live Reports + Golden Dataset</option>
               <option value="golden_dataset">Golden Dataset Only</option>
             </select>
           </label>
@@ -2542,14 +2553,25 @@ EVALS_HTML = f"""<!DOCTYPE html>
 
     async function loadRubricAndRuns() {{
       const agent = el('evalAgentSelect').value || 'discovery-scout';
-      const [rubRes, runsRes] = await Promise.all([
+      const [rubRes, runsRes, tracesRes] = await Promise.all([
         fetch('/api/evals/rubrics?agent=' + encodeURIComponent(agent)),
         fetch('/api/eval-runs'),
+        fetch('/api/evals/traces?agent=' + encodeURIComponent(agent)),
       ]);
       if (rubRes.ok) renderRubrics(await rubRes.json());
       if (runsRes.ok) {{
         const data = await runsRes.json();
         renderEvalRuns(data.eval_runs || []);
+      }}
+      if (tracesRes.ok) {{
+        const tdata = await tracesRes.json();
+        const traces = tdata.traces || [];
+        const sel = el('evalTraceSelect');
+        const prev = sel.value;
+        sel.innerHTML = '<option value="">All Samples (Batch)</option>' + traces.map((t) =>
+          `<option value="${{esc(t.collection + '::' + t.trace_id)}}">${{esc(t.label)}}</option>`
+        ).join('');
+        if (prev && Array.from(sel.options).some((o) => o.value === prev)) sel.value = prev;
       }}
     }}
 
@@ -2559,6 +2581,8 @@ EVALS_HTML = f"""<!DOCTYPE html>
       btn.disabled = true;
       btn.textContent = 'Running...';
       try {{
+        const traceVal = allAgents ? '' : (el('evalTraceSelect').value || '');
+        const [traceCollection, traceId] = traceVal.includes('::') ? traceVal.split('::', 2) : ['', ''];
         const res = await fetch('/api/eval-runs/run', {{
           method: 'POST',
           headers: {{ 'Content-Type': 'application/json' }},
@@ -2567,6 +2591,8 @@ EVALS_HTML = f"""<!DOCTYPE html>
             all_agents: !!allAgents,
             mode: el('evalModeSelect').value,
             sample_source: el('evalSampleSelect').value,
+            trace_id: traceId || null,
+            trace_collection: traceCollection || null,
           }}),
         }});
         const data = await res.json();
