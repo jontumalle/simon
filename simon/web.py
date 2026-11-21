@@ -21,6 +21,14 @@ from .db_tools import (
     verify_agent_db_auth,
 )
 from .deploy import compile_agent_package, list_agent_packages
+from .discovery_ui import (
+    DISCOVERY_HTML,
+    TRACES_HTML,
+    dispatch_discovery_batch,
+    list_discovery_batches,
+    load_source_registry,
+    refresh_discovery_batch,
+)
 from .fleet import dispatch_fleet
 from .scout import DEFAULT_TASTE_BRIEF, load_dotenv_if_present, run_scout
 from .store import SimonStore
@@ -218,6 +226,8 @@ INDEX_HTML = """<!DOCTYPE html>
         <p>Enter a taste brief to scout public YouTube vocal performances, extract timestamped musical choices with <strong>Gemini 4 Hydrogen</strong>, and synthesize a human-verifiable listening shortlist via <strong>Gemini Managed Agents</strong>.</p>
       </div>
       <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <a href="/discovery" class="pill amber" style="text-decoration:none;">1. Discovery &amp; Sources</a>
+        <a href="/traces" class="pill live" style="text-decoration:none;">2. Agent Traces</a>
         <span id="serverKeyBadge" class="pill">Checking API status…</span>
         <select id="historySelect" class="key-input" style="width:auto;" title="Saved SQLite Scout Runs">
           <option value="">Recent saved runs…</option>
@@ -716,6 +726,45 @@ def dispatch_http_request(
         if parsed.path == "/":
             return (HTTPStatus.OK, "text/html; charset=utf-8", INDEX_HTML.encode("utf-8"))
 
+        if parsed.path == "/discovery":
+            return (HTTPStatus.OK, "text/html; charset=utf-8", DISCOVERY_HTML.encode("utf-8"))
+
+        if parsed.path == "/traces":
+            return (HTTPStatus.OK, "text/html; charset=utf-8", TRACES_HTML.encode("utf-8"))
+
+        if parsed.path == "/api/sources":
+            payload = load_source_registry(store)
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            )
+
+        if parsed.path == "/api/discovery/batches":
+            qs = parse_qs(parsed.query)
+            limit = int((qs.get("limit") or ["20"])[0])
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps({"batches": list_discovery_batches(store, limit=limit)}, ensure_ascii=False).encode("utf-8"),
+            )
+
+        if parsed.path.startswith("/api/discovery/batches/"):
+            batch_id = parsed.path[len("/api/discovery/batches/"):].strip("/")
+            load_dotenv_if_present()
+            batch = refresh_discovery_batch(store, batch_id)
+            if batch is None:
+                return (
+                    HTTPStatus.NOT_FOUND,
+                    "application/json; charset=utf-8",
+                    json.dumps({"error": "Discovery batch not found."}).encode("utf-8"),
+                )
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps(batch, ensure_ascii=False).encode("utf-8"),
+            )
+
         if parsed.path == "/api/status":
             load_dotenv_if_present()
             payload = {
@@ -775,6 +824,51 @@ def dispatch_http_request(
             HTTPStatus.NOT_FOUND,
             "application/json; charset=utf-8",
             json.dumps({"error": "Not found."}).encode("utf-8"),
+        )
+
+    if method == "POST" and parsed.path == "/api/discovery/dispatch":
+        try:
+            req = json.loads((raw_body or b"{}").decode("utf-8"))
+        except ValueError:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "Invalid JSON request body."}).encode("utf-8"),
+            )
+        source_ids = req.get("source_ids") or []
+        if not isinstance(source_ids, list) or not source_ids:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "`source_ids` must be a non-empty list."}).encode("utf-8"),
+            )
+        brief = str(req.get("brief") or "").strip()
+        leads_per_agent = int(req.get("leads_per_agent") or 2)
+        agent_count = int(req.get("agent_count") or len(source_ids))
+        live = bool(req.get("live", False))
+        api_key = str(req.get("api_key") or "").strip() or None
+        load_dotenv_if_present()
+        try:
+            batch = dispatch_discovery_batch(
+                store=store,
+                source_ids=[str(s) for s in source_ids],
+                brief=brief,
+                leads_per_agent=leads_per_agent,
+                agent_count=agent_count,
+                live=live,
+                api_key=api_key,
+            )
+        except (ValueError, RuntimeError, OSError) as exc:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": str(exc)}).encode("utf-8"),
+            )
+        http_status = HTTPStatus.ACCEPTED if live else HTTPStatus.OK
+        return (
+            http_status,
+            "application/json; charset=utf-8",
+            json.dumps(batch, ensure_ascii=False).encode("utf-8"),
         )
 
     if method == "POST" and parsed.path == "/api/fleet/run":

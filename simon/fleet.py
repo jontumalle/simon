@@ -11,12 +11,71 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 import uuid
 
-from .gemini import _extract_interaction_text
+from .gemini import _extract_interaction_text, extract_json_object, summarize_interaction_steps
 
 INTERACTIONS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/interactions"
 DEFAULT_API_REVISION = "2026-05-20"
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled", "incomplete", "budget_exceeded"})
 RETRYABLE_HTTP_CODES = frozenset({429, 500, 502, 503, 504})
+
+
+def resolve_discovery_agent_id() -> str:
+    """Resolve the deployed Stage 1 Discovery Managed Agent ID."""
+    explicit = os.environ.get("SIMON_DISCOVERY_AGENT", "").strip()
+    if explicit:
+        return explicit
+    prefix = os.environ.get("SIMON_AGENT_PREFIX", "").strip()
+    return f"{prefix}simon-discovery-scout"
+
+
+def _try_parse_json(text: str) -> Optional[Dict[str, Any]]:
+    if not text or not text.strip():
+        return None
+    try:
+        return extract_json_object(text)
+    except ValueError:
+        return None
+
+
+def poll_interaction(
+    interaction_id: str,
+    api_key: Optional[str] = None,
+    request_fn: Optional[Callable[..., Tuple[int, Dict[str, Any]]]] = None,
+    sleep_fn: Callable[[float], None] = time.sleep,
+) -> Dict[str, Any]:
+    """Fetch live status, summarized trace steps, and parsed JSON output for one interaction."""
+    resolved_key = api_key or os.environ.get("GEMINI_API_KEY")
+    if not resolved_key:
+        raise ValueError("Set GEMINI_API_KEY before polling live interactions.")
+    clean_id = (interaction_id or "").strip()
+    if not clean_id:
+        raise ValueError("Provide a non-empty interaction_id.")
+
+    result_obj = _request_with_backoff(
+        "GET",
+        f"{INTERACTIONS_ENDPOINT}/{clean_id}",
+        resolved_key,
+        request_fn=request_fn or _http_json,
+        sleep_fn=sleep_fn,
+    )
+    status = str(result_obj.get("status") or "in_progress")
+    steps = summarize_interaction_steps(result_obj)
+    out: Dict[str, Any] = {
+        "interaction_id": clean_id,
+        "status": status,
+        "environment_id": result_obj.get("environment_id"),
+        "steps": steps,
+        "output_text": None,
+        "output_json": None,
+        "error": None,
+    }
+    if status == "completed":
+        text = _extract_interaction_text(result_obj)
+        out["output_text"] = text
+        out["output_json"] = _try_parse_json(text)
+    elif status in ("failed", "cancelled", "incomplete", "budget_exceeded"):
+        out["error"] = str(result_obj.get("error") or status)
+    return out
 
 
 def _http_json(
@@ -208,6 +267,7 @@ def dispatch_fleet(
         raise ValueError("Set GEMINI_API_KEY (or pass dry_run=True) before running a live fleet.")
 
     def _run_one(idx: int, item: Any) -> Dict[str, Any]:
+        started_wall = time.monotonic()
         req_body = build_worker_request(
             agent_id=agent_id.strip(),
             target=item,
@@ -246,6 +306,7 @@ def dispatch_fleet(
                     )
                     status = str(result_obj.get("status") or status)
 
+            steps = summarize_interaction_steps(result_obj)
             worker_out: Dict[str, Any] = {
                 "index": idx,
                 "assignment": item,
@@ -253,10 +314,16 @@ def dispatch_fleet(
                 "interaction_id": interaction_id,
                 "environment_id": result_obj.get("environment_id"),
                 "status": status,
+                "duration_ms": int((time.monotonic() - started_wall) * 1000),
+                "steps": steps,
                 "error": None,
             }
             if status == "completed":
-                worker_out["output_text"] = _extract_interaction_text(result_obj)
+                text = _extract_interaction_text(result_obj)
+                worker_out["output_text"] = text
+                parsed_json = _try_parse_json(text)
+                if parsed_json is not None:
+                    worker_out["output_json"] = parsed_json
             elif status in ("failed", "timeout"):
                 worker_out["error"] = str(result_obj.get("error") or status)
             return worker_out
@@ -268,6 +335,8 @@ def dispatch_fleet(
                 "interaction_id": None,
                 "environment_id": None,
                 "status": "error",
+                "duration_ms": int((time.monotonic() - started_wall) * 1000),
+                "steps": [],
                 "error": str(exc),
             }
 
