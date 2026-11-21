@@ -34,6 +34,7 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 ## Recent sessions
 *Working memory (LRU pointer cache, max 12, most recent first). Maintained by the `project-manager` skill/subagent.*
 
+- 2026-11-21 · discovery vertex evals · 3-layer rubrics, canonical eval_runs schema & Vertex AI eval service integration → `pm/log/2026-11-21-discovery-vertex-evals.md`, `data/evals/`
 - 2026-11-21 · label-signing recall eval · added 10-artist Option C recall benchmark (6 in-map, 4 out-of-map) & registered in data/README.md → `pm/log/2026-11-21-label-signing-recall-eval.md`, `data/evals/label_signing_recall_eval.json`
 - 2026-11-21 · staging fleet smoke test · verified 9/9 staging managed agents live via concurrent /api/fleet/run (0 failures) → `pm/log/2026-11-21-staging-fleet-smoke-test.md`
 - 2026-11-21 · cloud run & firestore · merged PR #4 (`b2057e8`), deployed `simon-staging`, seeded 36 sources & live traces → `pm/log/2026-11-21-cloudrun-firestore-platform.md`, `simon/`, `data/`, `.agents/`
@@ -45,4 +46,3 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 - 2026-11-21 · taste-brief youtube mvp · shipped & live-verified 3-unit YouTube vocal scout MVP (`run_881b5370`), SQLite & web studio → `simon/`, `agents/`, `notes/managed-agents/`, `pm/`
 - 2026-11-21 · talent-agency pipeline · designed 4-stage agency data model, JSON schema & dossier research → `data/`, `notes/managed-agents/`, `ideas/`, `pm/`
 - 2026-11-21 · plain-english skill · added on-command STE-100, Zinsser, Mermaid, and dialectic alignment skill → `.agents/skills/plain-english/`, `pm/`
-- 2026-11-21 · managed-agents pipeline · added workforce packaging, deploy pipeline, and cron/webhook trigger blueprint → `notes/managed-agents/`, `pm/`

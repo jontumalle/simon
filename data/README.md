@@ -18,6 +18,9 @@ Simon separates data into three clear locations so private artist info and large
 Versioned, non-sensitive reference datasets used to seed Simon's database tables for agent tools:
 - **[reference/discovery_sources_seed.json](./reference/discovery_sources_seed.json)** — Curated music discovery source registry (36 sources across all 9 `source_channel` values, tagged by `location`, `source_type`, `career_tier`, `access_method`, and `status`). Seed directly into the `source_registry` table once the DB is up.
 
-## Evaluation Benchmarks (`data/evals/`)
+## Evaluation Benchmarks & Rubrics (`data/evals/`)
+- **[evals/README.md](./evals/README.md)** — Guide for running offline baseline and live Vertex AI Gen AI Evaluation Service runs.
+- **[evals/discovery_rubrics.json](./evals/discovery_rubrics.json)** — 3-layer evaluation rubrics for `simon-discovery-scout` (Layer 1 Hard Code Gates, Layer 2 Process & Skill Trajectory covering `simon-db`, `music`, `youtube`, `source-discovery`, and `field-reporting`, Layer 3 Vertex AI Quality & Safety).
+- **[evals/eval_run_schema.json](./eval_run_schema.json)** — Canonical JSON Schema for `eval_runs` stored in Firestore/SQLite and rendered on `/evals`.
 - **[evals/discovery_eval_cases.json](./evals/discovery_eval_cases.json)** — Offline golden eval cases for Stage 1 discovery (`url_hygiene`, `attribution_accuracy`, `dedup_and_grouping`, `contract_validity`, `second_take_coverage`).
 - **[evals/label_signing_recall_eval.json](./evals/label_signing_recall_eval.json)** — Option C two-bucket recall benchmark of 10 real 2025–2026 record-label signings (200–100k YouTube subs & <100k Spotify monthly listeners): 6 in-map NYC/session signings + 4 out-of-map cold-discovery signings.
