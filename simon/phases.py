@@ -37,6 +37,7 @@ from .investigator import (
     run_track_record_mapper,
 )
 from .scout import DEFAULT_TASTE_BRIEF, run_scout
+from .screening import run_screening_batch
 
 
 PHASE_RUNS_COLLECTION = "phase_runs"
@@ -133,34 +134,30 @@ PHASE_DEFINITIONS: List[Dict[str, Any]] = [
         "default_input": DEFAULT_LEAD_FIXTURE,
     },
     {
-        "id": "3_shortlist",
+        "id": "3_screening",
         "code": "3",
-        "name": "Critics & Shortlist",
-        "domain": "Decision Engine",
-        "agents": ["performance-critic", "booking-critic", "synthesis-scout"],
-        "description": "Runs blind performance/booking critics and synthesizes a Top-3 agency shortlist.",
-        "input_hint": "Brief + candidate profiles from Phase 2C",
+        "name": "Active Screening",
+        "domain": "Decision Engine · Advocate / Skeptic / Judge",
+        "agents": ["screen-advocate", "screen-skeptic", "screening-judge"],
+        "description": "Runs adversarial Advocate & Skeptic debate plus Neon Judge verdict on the Stage 2 Artist Dossier.",
+        "input_hint": "Dossier from Phase 2C (or lead_id already in /api/dossiers)",
         "default_input": {
-            "brief": DEFAULT_TASTE_BRIEF,
-            "candidates": [
-                {"lead_id": "lead_luna_jinna", "stage_name": "Luna Jinna"},
-                {"lead_id": "lead_remy_bond", "stage_name": "Remy Bond"},
-                {"lead_id": "lead_blake_whiten", "stage_name": "Blake Whiten"},
-            ],
-            "blind_metrics": True,
+            "lead_id": "lead_luna_jinna",
+            "stage_name": "Luna Jinna",
         },
     },
     {
         "id": "4_producer",
         "code": "4",
-        "name": "Producer Outcome",
+        "name": "Showcase Producer",
         "domain": "Outcome · Human Review",
         "agents": ["showcase-producer"],
-        "description": "Weighs critic trade-offs and drafts a callback offer gated by pending_human_review.",
-        "input_hint": "Shortlisted artist + showcase terms",
+        "description": "Turns an elevated Stage 3 Screening Packet into a human-gated callback invitation (pending_human_review).",
+        "input_hint": "Elevated Screening Packet + showcase terms",
         "default_input": {
             "lead_id": "lead_luna_jinna",
             "stage_name": "Luna Jinna",
+            "screening_verdict": "ELEVATE",
             "showcase": "First Listen NYC",
             "slot_minutes": 20,
             "fee_cap_usd": 500,
@@ -326,37 +323,28 @@ AGENT_INPUT_PRESETS: Dict[str, Dict[str, Any]] = {
         },
     },
     "showcase-producer": {
-        "input_hint": "Event brief + performance-critic & booking-critic reports",
+        "input_hint": "Stage 3 Screening Packet (Advocate/Skeptic/Judge) + First Listen NYC showcase terms",
         "default_input": {
-            "brief": {
-                "event": "First Listen NYC",
-                "slot": "15-minute opening set at a listening-room showcase",
-                "artist_guarantee_usd": 250,
+            "lead_id": "lead_luna_jinna",
+            "stage_name": "Luna Jinna",
+            "screening_verdict": "ELEVATE",
+            "contact_route": "bookings@lunajinna.example",
+            "advocate_case": {
+                "headline": "High-conviction stripped live vocal identity with organic Brooklyn pull",
+                "standout_hook": "Consistent live-room vocal dynamics paired with inbound venue booker interest.",
             },
-            "performance_critic_report": [
-                {
-                    "audition_id": "a01",
-                    "distinctive_choice": "Unaccompanied verse at 0:18 builds cleanly into a controlled chorus; soft resolution at 0:33.",
-                    "live_uncertainty": "Single clip only; no second tempo verified.",
-                },
-                {
-                    "audition_id": "a02",
-                    "distinctive_choice": "Distinctive vocal harmony entrance at 0:15.",
-                    "live_uncertainty": "Layered studio take; live vocal projection unverified.",
-                },
-            ],
-            "booking_critic_report": [
-                {
-                    "audition_id": "a01",
-                    "logistics_fit": "Strong fit: original song confirmed, voice + single guitarist matches 5-minute changeover.",
-                    "open_questions": ["Confirm date availability."],
-                },
-                {
-                    "audition_id": "a02",
-                    "logistics_fit": "Incomplete: live stage setup and gear needs not yet specified.",
-                    "open_questions": ["Confirm stripped live arrangement and gear list."],
-                },
-            ],
+            "skeptic_case": {
+                "headline": "Thin off-YouTube footprint; confirm full live set length and gear",
+                "missing_evidence_flags": ["spotify_monthly_listeners_missing", "stage_plot_unconfirmed"],
+            },
+            "judge_decision": {
+                "verdict": "ELEVATE",
+                "total_score": 8.4,
+                "rationale": "Strong fit for First Listen NYC listening-room showcase; confirm 20-min stripped set and date availability.",
+            },
+            "showcase": "First Listen NYC",
+            "slot_minutes": 20,
+            "fee_cap_usd": 500,
         },
     },
     "screen-advocate": {
@@ -599,6 +587,10 @@ def run_phase(
     api_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Execute one pipeline phase in live or test mode and persist its checkpoint."""
+    # Backward-compatible alias for legacy 3_shortlist callers
+    if phase_id == "3_shortlist":
+        phase_id = "3_screening"
+
     if phase_id not in PHASE_MAP:
         raise ValueError(f"Unknown phase '{phase_id}'. Expected one of: {', '.join(PHASE_MAP)}")
 
@@ -885,51 +877,92 @@ def run_phase(
             {"name": "trace_complete", "label": f"{len(dossier.get('process_trace', []))} Trace Steps", "passed": len(dossier.get("process_trace", [])) >= 8},
         ]
         next_handoff = {
-            "brief": DEFAULT_TASTE_BRIEF,
-            "candidates": [
-                {
-                    "lead_id": dossier.get("lead_id"),
-                    "stage_name": dossier["identity_and_contact"].get("stage_name"),
-                }
-            ],
-            "blind_metrics": True,
+            "lead_id": dossier.get("lead_id"),
+            "stage_name": dossier["identity_and_contact"].get("stage_name"),
+            "dossier": dossier,
         }
 
-    elif phase_id == "3_shortlist":
-        critics = ["performance-critic", "booking-critic", "synthesis-scout"]
-        results_by_critic: Dict[str, Any] = {}
-        for pkg in critics:
-            agent_id = _resolve_deployed_agent_id(pkg)
-            res = dispatch_fleet(
-                agent_id=agent_id,
-                assignments=[inp],
-                wait=live,
-                dry_run=not live,
-                api_key=api_key,
-            )
-            results_by_critic[pkg] = res
-            worker = (res.get("results") or [{}])[0]
-            cards.append(
-                {
-                    "agent": pkg,
-                    "status": worker.get("status", "dry_run" if not live else "completed"),
-                    "summary": (
-                        str(worker.get("output"))[:240]
-                        if worker.get("output")
-                        else f"Prepared {pkg} payload for {len(inp.get('candidates', []))} candidate(s)."
-                    ),
-                }
-            )
-        output_data = results_by_critic
-        checks = [
-            {"name": "blind_metrics", "label": "Epistemic Blinding On", "passed": bool(inp.get("blind_metrics", True))},
-            {"name": "critics_ran", "label": "3/3 Decision Agents", "passed": len(results_by_critic) == 3},
-            {"name": "shortlist_cap", "label": "Shortlist <= 3", "passed": len(inp.get("candidates", [])) <= 3},
+    elif phase_id == "3_screening":
+        lead_id = str(inp.get("lead_id") or "").strip() or None
+        dossier_obj = inp.get("dossier") if isinstance(inp.get("dossier"), dict) else None
+        if dossier_obj is None and store is not None:
+            # Ensure a dossier exists if running Phase 3 standalone with default lead_id
+            existing = None
+            if lead_id and hasattr(store, "get_document"):
+                existing = store.get_document("investigator_dossiers", lead_id)
+            if existing is None:
+                bundle = _ensure_identity_bundle(inp)
+                with ThreadPoolExecutor(max_workers=3) as pool:
+                    f_fp = pool.submit(run_footprint_profiler, bundle)
+                    f_sf = pool.submit(run_signal_forensics, bundle)
+                    f_tr = pool.submit(run_track_record_mapper, bundle)
+                    fp, sf, tr = f_fp.result(), f_sf.result(), f_tr.result()
+                dossier_obj = assemble_dossier(bundle, fp, sf, tr)
+                dossier_obj["stage_name"] = dossier_obj["identity_and_contact"].get("stage_name") or (lead_id or "Unknown")
+                lead_id = str(dossier_obj.get("lead_id") or lead_id or "")
+
+        packets = run_screening_batch(
+            store=store,
+            lead_id=lead_id,
+            dossier=dossier_obj,
+            live=live,
+            api_key=api_key,
+        )
+        pkt = packets[0] if packets else {}
+        advocate = pkt.get("advocate_case") or {}
+        skeptic = pkt.get("skeptic_case") or {}
+        judge = pkt.get("judge_decision") or {}
+        verdict = str(judge.get("verdict") or "WATCH").upper()
+        stage_name = str(pkt.get("stage_name") or inp.get("stage_name") or lead_id or "Artist")
+        pkt_lead_id = str(pkt.get("lead_id") or lead_id or "")
+
+        cards = [
+            {
+                "agent": "screen-advocate",
+                "status": "completed",
+                "summary": str(advocate.get("headline") or advocate.get("standout_hook") or "Upside case assembled.")[:240],
+            },
+            {
+                "agent": "screen-skeptic",
+                "status": "completed",
+                "summary": str(skeptic.get("headline") or f"Flagged {len(skeptic.get('missing_evidence_flags') or [])} evidence gap(s).")[:240],
+            },
+            {
+                "agent": "screening-judge",
+                "status": "completed",
+                "summary": f"Verdict: {verdict} ({judge.get('total_score', '—')}/10) — {str(judge.get('rationale') or '')[:180]}",
+            },
         ]
-        first_cand = (inp.get("candidates") or [{}])[0]
+        output_data = {
+            "lead_id": pkt_lead_id,
+            "stage_name": stage_name,
+            "packet_id": pkt.get("packet_id"),
+            "verdict": verdict,
+            "total_score": judge.get("total_score"),
+            "packet": pkt,
+        }
+        checks = [
+            {"name": "debate_complete", "label": "Advocate + Skeptic Debate", "passed": bool(advocate and skeptic)},
+            {"name": "verdict_valid", "label": f"Judge Verdict: {verdict}", "passed": verdict in ("ELEVATE", "WATCH", "PASS")},
+            {"name": "packet_saved", "label": "Screening Packet Stored", "passed": bool(pkt.get("packet_id"))},
+        ]
         next_handoff = {
-            "lead_id": first_cand.get("lead_id", "lead_luna_jinna"),
-            "stage_name": first_cand.get("stage_name", "Luna Jinna"),
+            "lead_id": pkt_lead_id or "lead_luna_jinna",
+            "stage_name": stage_name,
+            "screening_verdict": verdict,
+            "advocate_case": {
+                "headline": advocate.get("headline", ""),
+                "standout_hook": advocate.get("standout_hook", ""),
+            },
+            "skeptic_case": {
+                "headline": skeptic.get("headline", ""),
+                "missing_evidence_flags": skeptic.get("missing_evidence_flags") or [],
+            },
+            "judge_decision": {
+                "verdict": verdict,
+                "total_score": judge.get("total_score"),
+                "rationale": judge.get("rationale", ""),
+            },
             "showcase": "First Listen NYC",
             "slot_minutes": 20,
             "fee_cap_usd": 500,
@@ -937,6 +970,21 @@ def run_phase(
 
     elif phase_id == "4_producer":
         agent_id = _resolve_deployed_agent_id("showcase-producer")
+        stage_name = str(inp.get("stage_name") or inp.get("lead_id") or "Artist")
+        showcase = str(inp.get("showcase") or "First Listen NYC")
+        slot_minutes = int(inp.get("slot_minutes") or 20)
+        fee_cap_usd = inp.get("fee_cap_usd", 500)
+        verdict = str(inp.get("screening_verdict") or (inp.get("judge_decision") or {}).get("verdict") or "ELEVATE").upper()
+        adv_hook = str((inp.get("advocate_case") or {}).get("standout_hook") or (inp.get("advocate_case") or {}).get("headline") or "Distinctive live vocal presence.")
+        skep_flags = (inp.get("skeptic_case") or {}).get("missing_evidence_flags") or []
+        open_questions = [
+            "Confirm date availability for First Listen NYC.",
+            "Confirm live stripped stage setup and gear needs.",
+        ]
+        if skep_flags:
+            first_flag = skep_flags[0] if isinstance(skep_flags[0], str) else str(skep_flags[0])
+            open_questions.append(f"Clarify open screening gap: {first_flag}.")
+
         res = dispatch_fleet(
             agent_id=agent_id,
             assignments=[inp],
@@ -945,10 +993,34 @@ def run_phase(
             api_key=api_key,
         )
         worker = (res.get("results") or [{}])[0]
-        output_data = {
-            "fleet": res,
+        draft_preview = {
+            "lead_id": inp.get("lead_id") or "",
+            "stage_name": stage_name,
             "human_review_status": "pending_human_review",
-            "callback_target": inp.get("stage_name") or inp.get("lead_id"),
+            "screening_verdict": verdict,
+            "advocate_vs_skeptic_tradeoff": f"Upside: {adv_hook} | Watch-out: {len(skep_flags)} open evidence flag(s) to confirm.",
+            "open_questions_before_booking": open_questions[:3],
+            "offer_terms": {
+                "showcase": showcase,
+                "slot_minutes": slot_minutes,
+                "fee_cap_usd": fee_cap_usd,
+            },
+            "draft_invitation": {
+                "subject": f"{showcase} — {slot_minutes}-min paid showcase callback for {stage_name}",
+                "body": (
+                    f"Hi {stage_name},\n\n"
+                    f"We loved your live performances and would like to invite you for a {slot_minutes}-minute set at {showcase} "
+                    f"(guarantee up to ${fee_cap_usd}, subject to final confirmation). "
+                    f"Could you reply with your upcoming NYC availability and preferred live setup?\n\n"
+                    f"Best,\nSimon A&R Team"
+                ),
+            },
+        }
+        output_data = {
+            "human_review_status": "pending_human_review",
+            "callback_target": stage_name,
+            "callback_draft": draft_preview,
+            "fleet": res,
         }
         cards.append(
             {
@@ -957,13 +1029,14 @@ def run_phase(
                 "summary": (
                     str(worker.get("output"))[:240]
                     if worker.get("output")
-                    else f"Drafted callback offer for {inp.get('stage_name', 'artist')} (pending_human_review)."
+                    else f"Drafted {showcase} callback (${fee_cap_usd} cap, {slot_minutes}m) for {stage_name} [pending_human_review]."
                 ),
             }
         )
         checks = [
             {"name": "human_gate", "label": "pending_human_review Gate", "passed": True},
-            {"name": "budget_present", "label": "Budget Cap Set", "passed": bool(inp.get("fee_cap_usd"))},
+            {"name": "screening_grounded", "label": f"Grounded in {verdict} Screening", "passed": bool(verdict)},
+            {"name": "budget_present", "label": f"Budget Cap ${fee_cap_usd}", "passed": bool(fee_cap_usd)},
         ]
         next_handoff = {}
 

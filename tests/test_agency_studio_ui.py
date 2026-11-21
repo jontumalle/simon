@@ -45,7 +45,7 @@ class TestAgencyStudioUIAndPhases(unittest.TestCase):
         phase_ids = [p["id"] for p in data["phases"]]
         self.assertEqual(
             phase_ids,
-            ["1_discovery", "2a_identity", "2b_investigators", "2c_dossier", "3_shortlist", "4_producer"],
+            ["1_discovery", "2a_identity", "2b_investigators", "2c_dossier", "3_screening", "4_producer"],
         )
 
         # Run Phase 1 -> 2A -> 2B -> 2C -> 3 -> 4 chaining handoffs
@@ -179,7 +179,7 @@ class TestAgencyStudioUIAndPhases(unittest.TestCase):
             "performance-critic": {"brief", "auditions"},
             "booking-critic": {"brief", "auditions"},
             "synthesis-scout": {"brief", "artist_leads", "clip_evidence"},
-            "showcase-producer": {"brief", "performance_critic_report", "booking_critic_report"},
+            "showcase-producer": {"lead_id", "stage_name", "screening_verdict", "advocate_case", "skeptic_case", "judge_decision"},
             "screen-advocate": {"lead_id", "dossier"},
             "screen-skeptic": {"lead_id", "dossier"},
             "screening-judge": {"lead_id", "dossier", "advocate_case", "skeptic_case"},
