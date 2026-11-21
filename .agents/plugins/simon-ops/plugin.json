@@ -1,0 +1,4 @@
+{
+  "name": "simon-ops",
+  "description": "Dedicated Simon workspace subagents derived from empirical session telemetry: Steward, Feature Engineer, Eval Author, Agent Deployer, and System Improver."
+}
