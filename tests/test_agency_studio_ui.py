@@ -297,6 +297,25 @@ class TestAgencyStudioUIAndPhases(unittest.TestCase):
         self.assertNotIn(b"subtabShortlistBtn", home_html)
         self.assertNotIn(b"briefDrawer", home_html)
 
+    def test_even_sticky_topbar_and_5_numbered_tabs_across_all_pages(self) -> None:
+        all_routes = ("/", "/discovery", "/field-news", "/reports", "/investigate", "/screen", "/taste-profile", "/evals")
+        for route in all_routes:
+            code, _, html = dispatch_http_request(self.store, "GET", route)
+            self.assertEqual(code, 200, f"Route {route} failed")
+            for label in (
+                b"1. Discovery",
+                b"2. Investigate",
+                b"3. Screening",
+                b"4. Taste Profile",
+                b"5. Talent Review",
+            ):
+                self.assertIn(label, html, f"Missing numbered primary tab {label!r} on {route}")
+            if route == "/":
+                self.assertIn(b'class="topbar"', html)
+            else:
+                self.assertIn(b'class="simon-topbar"', html, f"Missing unified sticky topbar on {route}")
+                self.assertIn(b'class="page-hero"', html, f"Missing page-hero on {route}")
+
 
 if __name__ == "__main__":
     unittest.main()
