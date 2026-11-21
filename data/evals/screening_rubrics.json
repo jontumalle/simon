@@ -1,0 +1,205 @@
+{
+  "rubric_set_id": "screening-neon-v1",
+  "version": "1.0.0",
+  "agent_id": "simon-screening-judge",
+  "stage": "stage_3_screening",
+  "description": "Three-layer evaluation rubrics for Simon's Stage 3 Adversarial Screening Layer (Advocate, Skeptic, and Judge on gemini-4-neon), derived 1:1 from the 5 shared dossier input skills, strict missing-field abstention, and golden verdict calibration bands.",
+  "skills_covered": [
+    "dossier-identity",
+    "dossier-media",
+    "dossier-footprint",
+    "dossier-audience",
+    "dossier-track-record",
+    "simon-db",
+    "field-reporting"
+  ],
+  "layers": [
+    {
+      "layer_id": "layer_1_code_gates",
+      "name": "Layer 1 · Hard Code Gates",
+      "evaluator": "deterministic",
+      "blocking": true,
+      "pass_threshold": 1.0,
+      "rubrics": [
+        {
+          "id": "gate_contract",
+          "name": "ScreeningPacket v1.0.0 Contract",
+          "skill": "SYSTEM.md",
+          "scale": "pass_fail",
+          "weight": 1.0,
+          "criteria": "Final output is valid JSON matching ScreeningPacket v1.0.0 (contract_version='1.0.0', screening_model='gemini-4-neon', valid embedded dossier_snapshot) with no extra keys."
+        },
+        {
+          "id": "gate_rubric_sum",
+          "name": "Five Rubric Keys Present & Sum to Total Score",
+          "skill": "SYSTEM.md",
+          "scale": "pass_fail",
+          "weight": 1.0,
+          "criteria": "judge_decision.rubric_scores contains exact keys identity_reachability, live_vocal_proof, early_window_depth, listener_pull_cosigns, and stage_momentum_whitespace (each integer 0..2 with max_score=2), and their sum equals judge_decision.total_score (0..10, max_score=10)."
+        },
+        {
+          "id": "gate_no_hallucinated_urls",
+          "name": "Zero Hallucinated URLs Outside Dossier Snapshot",
+          "skill": "SYSTEM.md",
+          "scale": "pass_fail",
+          "weight": 1.0,
+          "criteria": "Every URL cited in advocate_case, skeptic_case, and judge_decision appears verbatim inside dossier_snapshot. Zero fabricated or external ungrounded URLs."
+        },
+        {
+          "id": "gate_no_sys_leak",
+          "name": "Zero System Telemetry Leak",
+          "skill": "field-reporting",
+          "scale": "pass_fail",
+          "weight": 1.0,
+          "criteria": "ScreeningPacket and Field News steps contain zero leaked interaction_id, environment_id, trace_id, or raw tool logs."
+        }
+      ]
+    },
+    {
+      "layer_id": "layer_2_input_skills",
+      "name": "Layer 2 · Shared Dossier Input Skills & Abstention",
+      "evaluator": "vertex_ai_pointwise",
+      "vertex_metric_group": "TOOL_USE_QUALITY",
+      "blocking": false,
+      "pass_threshold": 0.8,
+      "rubrics": [
+        {
+          "id": "skill_identity_reachability",
+          "name": "Identity & Direct Reachability Accuracy",
+          "skill": "dossier-identity",
+          "scale": "0_to_2",
+          "max_score": 2,
+          "criteria": "Accurately evaluates identity_reachability from identity_and_contact (project_type, home_city, platform_urls, has_public_business_contact, and contact_route_type: bio_email/mgmt_email vs open_dm vs none).",
+          "levels": {
+            "0": "Misread contact_route_type or ignored unresolved identity/unreachable contact.",
+            "1": "Captured reachability directionally but missed platform graph or project_type nuance.",
+            "2": "Scored identity_reachability (0..2) accurately with concrete pros/cons grounded in identity_and_contact."
+          },
+          "vertex_prompt_template": "Evaluate whether the screening packet accurately applied the dossier-identity skill to score identity_reachability and extract pros/cons from identity_and_contact.\nDossier:\n{prompt}\nScreeningPacket:\n{response}\nScore 0, 1, or 2."
+        },
+        {
+          "id": "skill_live_vocal_proof",
+          "name": "Live Vocal Proof & Attribution Rigor",
+          "skill": "dossier-media",
+          "scale": "0_to_2",
+          "max_score": 2,
+          "criteria": "Accurately evaluates live_vocal_proof from source_and_media_queue (verified vs uncertain attribution_status, oembed_live_embeddable status, and multi-clip live session proof vs single-clip or studio-only uploads).",
+          "levels": {
+            "0": "Treated uncertain or studio-only clips as verified multi-take live vocal proof.",
+            "1": "Noted clip count or attribution but missed single-clip vs multi-take live distinction.",
+            "2": "Scored live_vocal_proof (0..2) accurately, distinguishing verified multi-clip live sessions from single-clip or uncertain studio uploads."
+          },
+          "vertex_prompt_template": "Evaluate whether the screening packet accurately applied the dossier-media skill to score live_vocal_proof from source_and_media_queue.\nDossier:\n{prompt}\nScreeningPacket:\n{response}\nScore 0, 1, or 2."
+        },
+        {
+          "id": "skill_early_window_depth",
+          "name": "Early Window & Catalog Concentration Check",
+          "skill": "dossier-footprint",
+          "scale": "0_to_2",
+          "max_score": 2,
+          "criteria": "Accurately evaluates early_window_depth from public_footprint (pre_dsp_underground / early_dsp_inflection vs established_streaming, released_tracks_count / Bandcamp depth, and top_release_view_share_pct >=80% single-clip concentration risk).",
+          "levels": {
+            "0": "Ignored footprint_regime or missed extreme single-clip view concentration (>=80%).",
+            "1": "Checked footprint_regime but overlooked catalog depth or top_release_view_share_pct.",
+            "2": "Scored early_window_depth (0..2) accurately, weighing discovery window, release depth, and top_release_view_share_pct."
+          },
+          "vertex_prompt_template": "Evaluate whether the screening packet accurately applied the dossier-footprint skill to score early_window_depth and flag single-clip view share concentration.\nDossier:\n{prompt}\nScreeningPacket:\n{response}\nScore 0, 1, or 2."
+        },
+        {
+          "id": "skill_listener_pull_cosigns",
+          "name": "Listener Pull & Peer Co-Sign Forensics",
+          "skill": "dossier-audience",
+          "scale": "0_to_2",
+          "max_score": 2,
+          "criteria": "Accurately evaluates listener_pull_cosigns from comment_forensics (release_requests + live_show_requests + genuine_praise share vs jokes_or_spam, plus notable_commenters co-signs).",
+          "levels": {
+            "0": "Ignored spam-heavy comments (>=50%) or fabricated audience demand.",
+            "1": "Cited comment counts broadly without separating high-intent requests or notable_commenters.",
+            "2": "Scored listener_pull_cosigns (0..2) accurately using intent ratios, spam share, and notable_commenters."
+          },
+          "vertex_prompt_template": "Evaluate whether the screening packet accurately applied the dossier-audience skill to score listener_pull_cosigns from comment_forensics.\nDossier:\n{prompt}\nScreeningPacket:\n{response}\nScore 0, 1, or 2."
+        },
+        {
+          "id": "skill_stage_momentum_whitespace",
+          "name": "Stage Momentum & Unsigned Whitespace",
+          "skill": "dossier-track-record",
+          "scale": "0_to_2",
+          "max_score": 2,
+          "criteria": "Accurately evaluates stage_momentum_whitespace from live_history_and_credits (show_history, upcoming_shows, highest_venue_cap_observed, collaborator_credits, and unsigned A&R whitespace vs major-label lockup in public_team_mentions.label).",
+          "levels": {
+            "0": "Missed a major-label signing dealbreaker or misread show_history / team mentions.",
+            "1": "Checked show_history or label status partially without integrating venue cap and credits.",
+            "2": "Scored stage_momentum_whitespace (0..2) accurately across live momentum, credits, and unsigned A&R whitespace."
+          },
+          "vertex_prompt_template": "Evaluate whether the screening packet accurately applied the dossier-track-record skill to score stage_momentum_whitespace and verify unsigned A&R whitespace.\nDossier:\n{prompt}\nScreeningPacket:\n{response}\nScore 0, 1, or 2."
+        },
+        {
+          "id": "skill_missing_fields_abstention",
+          "name": "Honest Missing-Fields Abstention",
+          "skill": "dossier-track-record",
+          "scale": "0_to_2",
+          "max_score": 2,
+          "criteria": "Treats entries in dossier_snapshot.missing_fields as unverified unknowns surfaced in skeptic_case.missing_evidence_flags[] rather than inventing negative facts or fabricated failures.",
+          "levels": {
+            "0": "Turned missing_fields (e.g., unindexed show history) into fabricated negative claims (e.g., 'failed tour').",
+            "1": "Abstained from fabrication in rationale but omitted missing items from missing_evidence_flags[].",
+            "2": "Surfaced missing_fields cleanly in missing_evidence_flags[] and treated them strictly as unknowns rather than invented flaws."
+          },
+          "vertex_prompt_template": "Evaluate whether the screening packet respected missing_fields abstention by logging missing fields in skeptic_case.missing_evidence_flags[] and treating them as unknowns rather than invented flaws.\nDossier:\n{prompt}\nScreeningPacket:\n{response}\nScore 0, 1, or 2."
+        }
+      ]
+    },
+    {
+      "layer_id": "layer_3_adversarial_calibration",
+      "name": "Layer 3 · Adversarial Debate & Verdict Calibration",
+      "evaluator": "vertex_ai_pointwise",
+      "vertex_metric_group": "FINAL_RESPONSE_QUALITY",
+      "blocking": false,
+      "pass_threshold": 0.8,
+      "rubrics": [
+        {
+          "id": "adv_steelman_upside",
+          "name": "Advocate Concrete Upside Steelman",
+          "skill": "SYSTEM.md",
+          "scale": "0_to_2",
+          "max_score": 2,
+          "criteria": "advocate_case steelmans the strongest factual upside in dossier_snapshot with skill-tagged pros[] and a concrete standout_hook, without exaggerating or inventing ungrounded claims.",
+          "levels": {
+            "0": "Generic boilerplate praise or fabricated upside claims.",
+            "1": "Valid pros[] listed but vague headline or generic standout_hook.",
+            "2": "Sharp, grounded steelman headline, skill-attributed pros[], and concrete standout_hook anchored in dossier facts."
+          },
+          "vertex_prompt_template": "Evaluate whether advocate_case steelmans concrete, grounded upside from dossier_snapshot with skill-tagged pros[] and a specific standout_hook.\nDossier:\n{prompt}\nScreeningPacket:\n{response}\nScore 0, 1, or 2."
+        },
+        {
+          "id": "skep_real_risks_and_gaps",
+          "name": "Skeptic Real Risk, Concentration & Dealbreaker Audit",
+          "skill": "SYSTEM.md",
+          "scale": "0_to_2",
+          "max_score": 2,
+          "criteria": "skeptic_case surfaces substantive risks (view concentration, single-clip evidence, uncertain attribution, contact friction, major-label lockup), populates missing_evidence_flags[], and logs dealbreakers_checked[].",
+          "levels": {
+            "0": "Missed critical risks/dealbreakers or invented ungrounded criticisms.",
+            "1": "Listed cons[] partially or left dealbreakers_checked[] incomplete.",
+            "2": "Surfaced real dossier risks, concentration/contact gaps, missing_evidence_flags[], and explicit dealbreakers_checked[]."
+          },
+          "vertex_prompt_template": "Evaluate whether skeptic_case surfaces substantive risks, single-clip concentration, evidentiary gaps, and dealbreakers_checked[] without inventing ungrounded flaws.\nDossier:\n{prompt}\nScreeningPacket:\n{response}\nScore 0, 1, or 2."
+        },
+        {
+          "id": "judge_fair_synthesis_and_bands",
+          "name": "Judge Synthesis & Golden Band Calibration",
+          "skill": "SYSTEM.md",
+          "scale": "0_to_2",
+          "max_score": 2,
+          "criteria": "judge_decision weighs both Advocate and Skeptic arguments fairly in rationale, sets calibrated confidence (0..1), and aligns verdict with golden score bands (total_score >= 7 -> 'elevate', 4..6 -> 'watch', <= 3 -> 'pass', unless overridden by an explicit hard dealbreaker).",
+          "levels": {
+            "0": "One-sided rationale ignoring Advocate/Skeptic tension or verdict contradicting golden score bands without a hard dealbreaker.",
+            "1": "Verdict matches score band, but rationale fails to explain how Advocate vs. Skeptic trade-offs were resolved.",
+            "2": "Balanced synthesis resolving Advocate vs. Skeptic tension, calibrated confidence, and strict alignment with golden bands (>=7 elevate, 4..6 watch, <=3 pass unless hard dealbreaker)."
+          },
+          "vertex_prompt_template": "Evaluate whether judge_decision synthesizes Advocate and Skeptic cases fairly and aligns verdict with golden bands (>=7 -> elevate, 4..6 -> watch, <=3 -> pass unless an explicit hard dealbreaker applies).\nDossier:\n{prompt}\nScreeningPacket:\n{response}\nScore 0, 1, or 2."
+        }
+      ]
+    }
+  ]
+}

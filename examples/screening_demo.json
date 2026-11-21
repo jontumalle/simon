@@ -1,0 +1,787 @@
+{
+  "contract_version": "1.0.0",
+  "run_id": "run_stage3_demo_001",
+  "screened_at": "2026-11-21T21:45:00Z",
+  "packets": [
+    {
+      "packet_id": "pkt_scr_01",
+      "contract_version": "1.0.0",
+      "run_id": "run_stage3_demo_001",
+      "lead_id": "lead_scr_01",
+      "stage_name": "Nadia Sol",
+      "screened_at": "2026-11-21T21:44:10Z",
+      "screening_model": "gemini-4-neon",
+      "dossier_snapshot": {
+        "lead_id": "lead_scr_01",
+        "identity_and_contact": {
+          "stage_name": "Nadia Sol",
+          "aliases": ["N. Sol"],
+          "pronouns": "she/her",
+          "project_type": "solo_vocalist",
+          "home_city": "New York, NY",
+          "home_neighborhood": "Bed-Stuy, Brooklyn",
+          "platform_urls": {
+            "youtube": "https://www.youtube.com/@NadiaSolMusic",
+            "instagram": "https://www.instagram.com/nadiasolmusic",
+            "tiktok": null,
+            "spotify": "https://open.spotify.com/artist/4nadiasol01",
+            "apple_music": null,
+            "soundcloud": null,
+            "bandcamp": "https://nadiasol.bandcamp.com",
+            "linktree": "https://linktr.ee/nadiasolmusic"
+          },
+          "musicbrainz_mbid": "a1b2c3d4-5678-4901-9abc-def012345678",
+          "has_public_business_contact": true,
+          "contact_route_type": "bio_email"
+        },
+        "source_and_media_queue": {
+          "source_channel": "youtube_live_session",
+          "seed_source_url": "https://www.youtube.com/watch?v=3-K26i1go0s",
+          "attribution_status": "verified",
+          "bio_text": "Nadia Sol (she/her) — Bed-Stuy, Brooklyn neo-soul solo vocalist and songwriter. Booking & inquiries via direct business email in bio. Self-released via DistroKid.",
+          "primary_genre": "neo-soul",
+          "subgenres": ["contemporary r&b", "acoustic soul"],
+          "media_links": [
+            {
+              "url": "https://www.youtube.com/watch?v=3-K26i1go0s",
+              "title": "Nadia Sol - Amber Light | Mahogany Session",
+              "uploader_channel": "Mahogany",
+              "duration_seconds": 230,
+              "oembed_live_embeddable": true
+            },
+            {
+              "url": "https://www.youtube.com/watch?v=BcQnHzrc24Y",
+              "title": "Nadia Sol - Paper Moon (Live in the Lounge)",
+              "uploader_channel": "BBCRadio1VEVO",
+              "duration_seconds": 198,
+              "oembed_live_embeddable": true
+            }
+          ]
+        },
+        "public_footprint": {
+          "footprint_regime": "early_dsp_inflection",
+          "public_reach": {
+            "youtube_subscribers": 6400,
+            "top_video_views": 28500,
+            "bandcamp_releases_count": 2,
+            "bandcamp_supporters_count": 68,
+            "released_tracks_count": 6
+          },
+          "top_release_view_share_pct": 48.5
+        },
+        "comment_forensics": {
+          "comment_intent_counts": {
+            "sample_size": 40,
+            "release_requests": 11,
+            "live_show_requests": 12,
+            "genuine_praise": 14,
+            "jokes_or_spam": 3
+          },
+          "notable_commenters": [
+            {
+              "handle": "@malikkeys",
+              "channel_url": "https://www.youtube.com/@malikkeys",
+              "role_or_context": "Brooklyn neo-soul keyboardist & musical director",
+              "comment_excerpt": "That chest-to-head phrasing at the bridge is untouched — let's build a live quartet set."
+            },
+            {
+              "handle": "@sofarsoundsnyc",
+              "channel_url": "https://www.youtube.com/@SofarSounds",
+              "role_or_context": "NYC intimate live-room curator",
+              "comment_excerpt": "Still talking about your Bed-Stuy loft room set — bring this arrangement back soon."
+            }
+          ]
+        },
+        "live_history_and_credits": {
+          "show_history": [
+            {
+              "venue": "Baby's All Right",
+              "city": "Brooklyn, NY",
+              "date": "2026-09-18",
+              "billing_slot": "direct_support",
+              "source_url": "https://babysallright.com/events/2026-09-18-nadia-sol"
+            },
+            {
+              "venue": "Pete's Candy Store",
+              "city": "Brooklyn, NY",
+              "date": "2026-08-04",
+              "billing_slot": "showcase",
+              "source_url": "https://petescandystore.com/calendar/2026-08-04"
+            }
+          ],
+          "upcoming_shows": [
+            {
+              "venue": "Mercury Lounge",
+              "city": "New York, NY",
+              "date": "2026-12-05",
+              "billing_slot": "direct_support",
+              "source_url": "https://mercuryeastpresents.com/mercurylounge/2026-12-05"
+            }
+          ],
+          "highest_venue_cap_observed": 280,
+          "public_team_mentions": {
+            "management": null,
+            "booking_agent": null,
+            "label": null,
+            "distributor": "DistroKid"
+          },
+          "collaborator_credits": [
+            {
+              "name": "Devon Brooks",
+              "role": "Acoustic guitar (live session)",
+              "source_url": "https://www.youtube.com/watch?v=3-K26i1go0s"
+            },
+            {
+              "name": "Priya Nair",
+              "role": "Mixing engineer",
+              "source_url": "https://nadiasol.bandcamp.com"
+            }
+          ]
+        },
+        "process_trace": [
+          {
+            "step": "1a_identity_generic",
+            "tool": "web_profile_graph",
+            "status": "ok",
+            "evidence_urls": ["https://linktr.ee/nadiasolmusic"],
+            "notes": "Resolved 5 platform profiles and direct bio_email contact route."
+          },
+          {
+            "step": "1b_identity_domain",
+            "tool": "musicbrainz_artist_lookup",
+            "status": "ok",
+            "evidence_urls": ["https://nadiasol.bandcamp.com"],
+            "notes": "Matched MBID a1b2c3d4-5678-4901-9abc-def012345678."
+          },
+          {
+            "step": "2a_footprint_generic",
+            "tool": "youtube_oembed_and_channel",
+            "status": "ok",
+            "evidence_urls": [
+              "https://www.youtube.com/watch?v=3-K26i1go0s",
+              "https://www.youtube.com/watch?v=BcQnHzrc24Y"
+            ],
+            "notes": "Verified 2 live-embeddable session takes."
+          },
+          {
+            "step": "2b_footprint_domain",
+            "tool": "bandcamp_catalog_stats",
+            "status": "ok",
+            "evidence_urls": ["https://nadiasol.bandcamp.com"],
+            "notes": "Confirmed 2 Bandcamp releases, 68 supporters, and 48.5% top-clip share."
+          },
+          {
+            "step": "3_signal_forensics",
+            "tool": "comment_intent_classifier",
+            "status": "ok",
+            "evidence_urls": ["https://www.youtube.com/watch?v=3-K26i1go0s"],
+            "notes": "Classified 40 comments; 23 release/live requests and 2 notable co-signs."
+          },
+          {
+            "step": "4a_track_record_generic",
+            "tool": "event_listing_scan",
+            "status": "ok",
+            "evidence_urls": ["https://babysallright.com/events/2026-09-18-nadia-sol"],
+            "notes": "Grounded 2 past Brooklyn shows and 1 upcoming Mercury Lounge support bill."
+          },
+          {
+            "step": "4b_track_record_domain",
+            "tool": "credits_and_team_extractor",
+            "status": "ok",
+            "evidence_urls": ["https://nadiasol.bandcamp.com"],
+            "notes": "Confirmed unsigned DistroKid self-release and 2 collaborator credits."
+          },
+          {
+            "step": "5_dossier_assembler",
+            "tool": "deterministic_join",
+            "status": "ok",
+            "evidence_urls": [],
+            "notes": "Assembled contract-valid InvestigatorDossier with zero PII leaks."
+          }
+        ],
+        "newly_discovered_sources": [],
+        "missing_fields": []
+      },
+      "advocate_case": {
+        "headline": "Unsigned Bed-Stuy neo-soul vocalist with two verified live takes, balanced 6-track depth, and direct bio-email reachability.",
+        "pros": [
+          {
+            "skill": "dossier-media",
+            "title": "Two verified live room vocal takes",
+            "evidence": "Verified attribution across both 'Nadia Sol - Amber Light | Mahogany Session' (https://www.youtube.com/watch?v=3-K26i1go0s) and 'Nadia Sol - Paper Moon (Live in the Lounge)' (https://www.youtube.com/watch?v=BcQnHzrc24Y)."
+          },
+          {
+            "skill": "dossier-audience",
+            "title": "58% actionable listener demand plus NYC peer co-signs",
+            "evidence": "23/40 sampled comments ask for live dates (12) or releases (11) alongside co-signs from @malikkeys and @sofarsoundsnyc."
+          },
+          {
+            "skill": "dossier-footprint",
+            "title": "Healthy early-inflection catalog spread",
+            "evidence": "6 released tracks and 68 Bandcamp supporters with top_release_view_share_pct=48.5% (zero one-hit skew)."
+          },
+          {
+            "skill": "dossier-identity",
+            "title": "Frictionless NYC callback outreach",
+            "evidence": "Based in Bed-Stuy, Brooklyn with direct bio_email contact across 5 verified platforms."
+          }
+        ],
+        "standout_hook": "Delivers live-room vocal command verified across two separate curated sessions while remaining completely unsigned and directly reachable in Brooklyn."
+      },
+      "skeptic_case": {
+        "headline": "Pre-headliner live history limited to two Brooklyn support/showcase bills under 280 cap.",
+        "cons": [
+          {
+            "skill": "dossier-track-record",
+            "title": "No ticketed headliner draw proven yet",
+            "evidence": "2 past NYC gigs (Baby's All Right direct_support, Pete's Candy Store showcase; cap <=280) and 1 upcoming Mercury Lounge support slot, with 0 headliner bills or out-of-market dates."
+          }
+        ],
+        "missing_evidence_flags": [
+          "TikTok and Apple Music links absent (not required for vocal evaluation, noted for completeness)."
+        ],
+        "dealbreakers_checked": [
+          "major_label_lockup: clear (unsigned, self-released via DistroKid)",
+          "zero_contact_route: clear (verified bio_email)",
+          "unverified_vocal_attribution: clear (verified across 2 curated sessions)",
+          "bot_or_spam_comments: clear (only 3/40 jokes_or_spam)"
+        ]
+      },
+      "judge_decision": {
+        "verdict": "elevate",
+        "total_score": 9,
+        "max_score": 10,
+        "confidence": 0.91,
+        "rationale": "Nadia Sol clears four of five criteria at 2/2: verified two-session live vocal proof, balanced 6-track early-inflection depth (48.5% top share), 58% release/live comment pull with NYC curator co-signs, and direct bio_email reachability. Skeptic rightly notes she is pre-headliner (2 past Brooklyn support/showcase bills, 1/2 on stage momentum), which makes her an ideal ground-floor paid showcase callback rather than a reason to hold back.",
+        "rubric_scores": {
+          "identity_reachability": {
+            "score": 2,
+            "max_score": 2,
+            "skill": "dossier-identity",
+            "note": "Direct bio_email reachability for solo_vocalist across 5 platforms."
+          },
+          "live_vocal_proof": {
+            "score": 2,
+            "max_score": 2,
+            "skill": "dossier-media",
+            "note": "Verified attribution with 2 embeddable clips (2 live session take(s))."
+          },
+          "early_window_depth": {
+            "score": 2,
+            "max_score": 2,
+            "skill": "dossier-footprint",
+            "note": "Early window (early_dsp_inflection) with 6 releases and balanced top-clip share (48.5%)."
+          },
+          "listener_pull_cosigns": {
+            "score": 2,
+            "max_score": 2,
+            "skill": "dossier-audience",
+            "note": "Strong pull (23/40 release/live requests, 8% spam) plus 2 notable co-sign(s)."
+          },
+          "stage_momentum_whitespace": {
+            "score": 1,
+            "max_score": 2,
+            "skill": "dossier-track-record",
+            "note": "Unsigned whitespace with early live activity (2 past, 1 upcoming; <3 past shows for max score)."
+          }
+        }
+      }
+    },
+    {
+      "packet_id": "pkt_scr_02",
+      "contract_version": "1.0.0",
+      "run_id": "run_stage3_demo_001",
+      "lead_id": "lead_scr_02",
+      "stage_name": "Kieran Vale",
+      "screened_at": "2026-11-21T21:44:35Z",
+      "screening_model": "gemini-4-neon",
+      "dossier_snapshot": {
+        "lead_id": "lead_scr_02",
+        "identity_and_contact": {
+          "stage_name": "Kieran Vale",
+          "aliases": [],
+          "pronouns": "he/they",
+          "project_type": "solo_vocalist",
+          "home_city": "New York, NY",
+          "home_neighborhood": "Astoria, Queens",
+          "platform_urls": {
+            "youtube": "https://www.youtube.com/@KieranValeSongs",
+            "instagram": "https://www.instagram.com/kieranvalesongs",
+            "tiktok": "https://www.tiktok.com/@kieranvalesongs",
+            "spotify": null,
+            "apple_music": null,
+            "soundcloud": null,
+            "bandcamp": "https://kieranvale.bandcamp.com",
+            "linktree": null
+          },
+          "musicbrainz_mbid": null,
+          "has_public_business_contact": false,
+          "contact_route_type": "open_dm"
+        },
+        "source_and_media_queue": {
+          "source_channel": "youtube_live_session",
+          "seed_source_url": "https://www.youtube.com/watch?v=RXwE1G7_U9M",
+          "attribution_status": "verified",
+          "bio_text": "Kieran Vale — Astoria indie singer-songwriter recording stripped live takes at home. DMs open on Instagram.",
+          "primary_genre": "indie folk",
+          "subgenres": ["bedroom pop", "alt-soul"],
+          "media_links": [
+            {
+              "url": "https://www.youtube.com/watch?v=RXwE1G7_U9M",
+              "title": "Kieran Vale - Glass Harbor (Bedroom Live Acoustic)",
+              "uploader_channel": "Kieran Vale",
+              "duration_seconds": 214,
+              "oembed_live_embeddable": true
+            }
+          ]
+        },
+        "public_footprint": {
+          "footprint_regime": "early_dsp_inflection",
+          "public_reach": {
+            "youtube_subscribers": 3100,
+            "top_video_views": 46000,
+            "bandcamp_releases_count": 1,
+            "bandcamp_supporters_count": 12,
+            "released_tracks_count": 3
+          },
+          "top_release_view_share_pct": 91.0
+        },
+        "comment_forensics": {
+          "comment_intent_counts": {
+            "sample_size": 50,
+            "release_requests": 21,
+            "live_show_requests": 11,
+            "genuine_praise": 14,
+            "jokes_or_spam": 4
+          },
+          "notable_commenters": [
+            {
+              "handle": "@eliotgrantprod",
+              "channel_url": "https://www.youtube.com/@eliotgrantprod",
+              "role_or_context": "Brooklyn indie producer & tape engineer",
+              "comment_excerpt": "Put this raw vocal straight to tape — please tell me you're playing a NYC room this winter."
+            }
+          ]
+        },
+        "live_history_and_credits": {
+          "show_history": [],
+          "upcoming_shows": [],
+          "highest_venue_cap_observed": null,
+          "public_team_mentions": {
+            "management": null,
+            "booking_agent": null,
+            "label": null,
+            "distributor": "DistroKid"
+          },
+          "collaborator_credits": [
+            {
+              "name": "Samira Cho",
+              "role": "Cello & room mic capture",
+              "source_url": "https://kieranvale.bandcamp.com"
+            }
+          ]
+        },
+        "process_trace": [
+          {
+            "step": "1a_identity_generic",
+            "tool": "web_profile_graph",
+            "status": "ok",
+            "evidence_urls": ["https://www.instagram.com/kieranvalesongs"],
+            "notes": "Resolved 4 platform links; open_dm outreach only."
+          },
+          {
+            "step": "1b_identity_domain",
+            "tool": "musicbrainz_artist_lookup",
+            "status": "empty",
+            "evidence_urls": [],
+            "notes": "No MusicBrainz entry indexed yet; abstained in missing_fields."
+          },
+          {
+            "step": "2a_footprint_generic",
+            "tool": "youtube_oembed_and_channel",
+            "status": "ok",
+            "evidence_urls": ["https://www.youtube.com/watch?v=RXwE1G7_U9M"],
+            "notes": "Verified single viral bedroom acoustic clip (46k views)."
+          },
+          {
+            "step": "2b_footprint_domain",
+            "tool": "bandcamp_catalog_stats",
+            "status": "ok",
+            "evidence_urls": ["https://kieranvale.bandcamp.com"],
+            "notes": "3 released tracks total; top clip accounts for 91.0% of views."
+          },
+          {
+            "step": "3_signal_forensics",
+            "tool": "comment_intent_classifier",
+            "status": "ok",
+            "evidence_urls": ["https://www.youtube.com/watch?v=RXwE1G7_U9M"],
+            "notes": "32/50 release/live-show requests and 1 Brooklyn producer co-sign."
+          },
+          {
+            "step": "4a_track_record_generic",
+            "tool": "event_listing_scan",
+            "status": "empty",
+            "evidence_urls": [],
+            "notes": "No public show history or upcoming gigs indexed; logged to missing_fields."
+          },
+          {
+            "step": "4b_track_record_domain",
+            "tool": "credits_and_team_extractor",
+            "status": "ok",
+            "evidence_urls": ["https://kieranvale.bandcamp.com"],
+            "notes": "Unsigned DistroKid release with 1 Bandcamp collaborator credit."
+          },
+          {
+            "step": "5_dossier_assembler",
+            "tool": "deterministic_join",
+            "status": "ok",
+            "evidence_urls": [],
+            "notes": "Assembled InvestigatorDossier with strict missing_fields abstention."
+          }
+        ],
+        "newly_discovered_sources": [],
+        "missing_fields": [
+          "identity_and_contact.musicbrainz_mbid",
+          "live_history_and_credits.show_history",
+          "live_history_and_credits.upcoming_shows",
+          "live_history_and_credits.highest_venue_cap_observed"
+        ]
+      },
+      "advocate_case": {
+        "headline": "Breakout 64% listener-intent pull on a raw NYC bedroom vocal take with complete unsigned whitespace.",
+        "pros": [
+          {
+            "skill": "dossier-audience",
+            "title": "Surging organic release & live-show pull (64%)",
+            "evidence": "32/50 sampled comments ask for official releases (21) or NYC shows (11), backed by a co-sign from Brooklyn producer @eliotgrantprod."
+          },
+          {
+            "skill": "dossier-media",
+            "title": "Verified unedited bedroom vocal clip",
+            "evidence": "Verified single-room acoustic take 'Kieran Vale - Glass Harbor (Bedroom Live Acoustic)' (https://www.youtube.com/watch?v=RXwE1G7_U9M)."
+          },
+          {
+            "skill": "dossier-track-record",
+            "title": "Completely unrepresented ground-floor whitespace",
+            "evidence": "Unsigned (label=null, management=null) in Astoria, Queens with collaborator Samira Cho on Bandcamp."
+          }
+        ],
+        "standout_hook": "46,000 organic views and 32 direct release/show requests on a stripped Astoria bedroom vocal take before a single manager or label touch."
+      },
+      "skeptic_case": {
+        "headline": "91% single-clip view concentration, zero indexed live stage history, and DM-only contact friction.",
+        "cons": [
+          {
+            "skill": "dossier-footprint",
+            "title": "Extreme 91.0% single-clip view skew",
+            "evidence": "top_release_view_share_pct=91.0% across 3 tracks — follow-up songs have not yet retained the viral bedroom clip's audience."
+          },
+          {
+            "skill": "dossier-media",
+            "title": "Single-clip live sample without room acoustics",
+            "evidence": "Only 1 embeddable bedroom clip queued (https://www.youtube.com/watch?v=RXwE1G7_U9M); zero stage mic or live-audience recordings."
+          },
+          {
+            "skill": "dossier-identity",
+            "title": "DM-only outreach friction",
+            "evidence": "contact_route_type='open_dm' with has_public_business_contact=false."
+          }
+        ],
+        "missing_evidence_flags": [
+          "live_history_and_credits.show_history: no public gigs indexed (treated as unknown; verify whether artist has played open mics or small rooms).",
+          "live_history_and_credits.upcoming_shows: no upcoming bills found in public calendars.",
+          "identity_and_contact.musicbrainz_mbid: not yet indexed on MusicBrainz."
+        ],
+        "dealbreakers_checked": [
+          "major_label_lockup: clear (unsigned, DistroKid)",
+          "zero_contact_route: clear (open_dm available on Instagram)",
+          "bot_or_spam_comments: clear (only 4/50 jokes_or_spam)"
+        ]
+      },
+      "judge_decision": {
+        "verdict": "watch",
+        "total_score": 6,
+        "max_score": 10,
+        "confidence": 0.74,
+        "rationale": "Textbook Advocate vs. Skeptic split landing squarely in the Watch band (6/10). Advocate's case on listener pull (2/2, 64% release/live requests + producer co-sign) and unsigned NYC whitespace is real, but Skeptic flags 91.0% single-clip view concentration, a single bedroom-only take, DM-only reachability, and unindexed live gig history (properly abstained as unknown rather than a flaw). Hold on Watch until a second live vocal clip or local open-mic check confirms stage readiness.",
+        "rubric_scores": {
+          "identity_reachability": {
+            "score": 1,
+            "max_score": 2,
+            "skill": "dossier-identity",
+            "note": "Partial reachability via open_dm (solo_vocalist, 4 active platform(s))."
+          },
+          "live_vocal_proof": {
+            "score": 1,
+            "max_score": 2,
+            "skill": "dossier-media",
+            "note": "Partial vocal proof: attribution=verified, 1 embeddable clip(s) (1 live)."
+          },
+          "early_window_depth": {
+            "score": 1,
+            "max_score": 2,
+            "skill": "dossier-footprint",
+            "note": "Mixed footprint signal: regime=early_dsp_inflection, catalog_count=3, top_release_view_share_pct=91.0%."
+          },
+          "listener_pull_cosigns": {
+            "score": 2,
+            "max_score": 2,
+            "skill": "dossier-audience",
+            "note": "Strong pull (32/50 release/live requests, 8% spam) plus 1 notable co-sign(s)."
+          },
+          "stage_momentum_whitespace": {
+            "score": 1,
+            "max_score": 2,
+            "skill": "dossier-track-record",
+            "note": "Unsigned whitespace; live show history is unindexed in missing_fields (abstained as unknown rather than 0)."
+          }
+        }
+      }
+    },
+    {
+      "packet_id": "pkt_scr_03",
+      "contract_version": "1.0.0",
+      "run_id": "run_stage3_demo_001",
+      "lead_id": "lead_scr_03",
+      "stage_name": "Velvet Static",
+      "screened_at": "2026-11-21T21:44:55Z",
+      "screening_model": "gemini-4-neon",
+      "dossier_snapshot": {
+        "lead_id": "lead_scr_03",
+        "identity_and_contact": {
+          "stage_name": "Velvet Static",
+          "aliases": ["VLVT STATIC"],
+          "pronouns": null,
+          "project_type": "collective",
+          "home_city": null,
+          "home_neighborhood": null,
+          "platform_urls": {
+            "youtube": "https://www.youtube.com/@MidnightUploadVault",
+            "instagram": null,
+            "tiktok": null,
+            "spotify": null,
+            "apple_music": null,
+            "soundcloud": null,
+            "bandcamp": "https://velvetstatic.bandcamp.com",
+            "linktree": null
+          },
+          "musicbrainz_mbid": null,
+          "has_public_business_contact": false,
+          "contact_route_type": "none"
+        },
+        "source_and_media_queue": {
+          "source_channel": "other",
+          "seed_source_url": "https://www.youtube.com/watch?v=RftqJrM4Aj4",
+          "attribution_status": "uncertain",
+          "bio_text": "Studio synth-soul collective. Phonographic copyright 2026 Columbia Records, a division of Sony Music Entertainment.",
+          "primary_genre": "synth-soul",
+          "subgenres": ["alt-pop", "electronic r&b"],
+          "media_links": [
+            {
+              "url": "https://www.youtube.com/watch?v=RftqJrM4Aj4",
+              "title": "Velvet Static - Neon Static (Official Visualizer)",
+              "uploader_channel": "Midnight Upload Vault",
+              "duration_seconds": 244,
+              "oembed_live_embeddable": true
+            }
+          ]
+        },
+        "public_footprint": {
+          "footprint_regime": "early_dsp_inflection",
+          "public_reach": {
+            "youtube_subscribers": 5200,
+            "top_video_views": 19400,
+            "bandcamp_releases_count": 2,
+            "bandcamp_supporters_count": 24,
+            "released_tracks_count": 5
+          },
+          "top_release_view_share_pct": 42.0
+        },
+        "comment_forensics": {
+          "comment_intent_counts": {
+            "sample_size": 40,
+            "release_requests": 1,
+            "live_show_requests": 0,
+            "genuine_praise": 8,
+            "jokes_or_spam": 31
+          },
+          "notable_commenters": []
+        },
+        "live_history_and_credits": {
+          "show_history": [],
+          "upcoming_shows": [],
+          "highest_venue_cap_observed": null,
+          "public_team_mentions": {
+            "management": "Apex Roster Group",
+            "booking_agent": null,
+            "label": "Columbia Records",
+            "distributor": "Sony Music / The Orchard"
+          },
+          "collaborator_credits": [
+            {
+              "name": "Marcus Vance",
+              "role": "Executive producer",
+              "source_url": "https://velvetstatic.bandcamp.com"
+            }
+          ]
+        },
+        "process_trace": [
+          {
+            "step": "1a_identity_generic",
+            "tool": "web_profile_graph",
+            "status": "ok",
+            "evidence_urls": ["https://velvetstatic.bandcamp.com"],
+            "notes": "Studio collective with contact_route_type='none' and no city listed."
+          },
+          {
+            "step": "1b_identity_domain",
+            "tool": "musicbrainz_artist_lookup",
+            "status": "empty",
+            "evidence_urls": [],
+            "notes": "No MusicBrainz artist MBID matched."
+          },
+          {
+            "step": "2a_footprint_generic",
+            "tool": "youtube_oembed_and_channel",
+            "status": "ok",
+            "evidence_urls": ["https://www.youtube.com/watch?v=RftqJrM4Aj4"],
+            "notes": "Third-party studio visualizer upload with uncertain lead vocalist credit."
+          },
+          {
+            "step": "2b_footprint_domain",
+            "tool": "bandcamp_catalog_stats",
+            "status": "ok",
+            "evidence_urls": ["https://velvetstatic.bandcamp.com"],
+            "notes": "5 studio tracks with 42.0% top-release view share."
+          },
+          {
+            "step": "3_signal_forensics",
+            "tool": "comment_intent_classifier",
+            "status": "ok",
+            "evidence_urls": ["https://www.youtube.com/watch?v=RftqJrM4Aj4"],
+            "notes": "31/40 sampled comments classified as jokes_or_spam; 0 notable co-signs."
+          },
+          {
+            "step": "4a_track_record_generic",
+            "tool": "event_listing_scan",
+            "status": "ok",
+            "evidence_urls": ["https://velvetstatic.bandcamp.com"],
+            "notes": "Confirmed studio-only project with 0 past or upcoming shows."
+          },
+          {
+            "step": "4b_track_record_domain",
+            "tool": "credits_and_team_extractor",
+            "status": "ok",
+            "evidence_urls": ["https://velvetstatic.bandcamp.com"],
+            "notes": "Detected Columbia Records phonographic copyright and Apex Roster Group management."
+          },
+          {
+            "step": "5_dossier_assembler",
+            "tool": "deterministic_join",
+            "status": "ok",
+            "evidence_urls": [],
+            "notes": "Assembled InvestigatorDossier flagging Columbia Records label mention."
+          }
+        ],
+        "newly_discovered_sources": [],
+        "missing_fields": [
+          "identity_and_contact.home_city",
+          "identity_and_contact.home_neighborhood",
+          "identity_and_contact.pronouns",
+          "identity_and_contact.musicbrainz_mbid",
+          "live_history_and_credits.highest_venue_cap_observed"
+        ]
+      },
+      "advocate_case": {
+        "headline": "Cohesive 5-track studio catalog in early inflection metrics with balanced 42% view distribution.",
+        "pros": [
+          {
+            "skill": "dossier-footprint",
+            "title": "Balanced 5-track catalog retention",
+            "evidence": "5 released tracks across 2 Bandcamp EPs with top_release_view_share_pct=42.0% and 19,400 top clip views."
+          },
+          {
+            "skill": "dossier-track-record",
+            "title": "Documented studio production credit",
+            "evidence": "Credits executive producer Marcus Vance on https://velvetstatic.bandcamp.com."
+          }
+        ],
+        "standout_hook": "Polished synth-soul studio production sustaining even listener retention across five tracks."
+      },
+      "skeptic_case": {
+        "headline": "Hard dealbreakers: Columbia Records major-label lockup, zero contact route, uncertain studio-only vocal credit, and 78% spam comments.",
+        "cons": [
+          {
+            "skill": "dossier-track-record",
+            "title": "Major-label lockup under Columbia Records",
+            "evidence": "public_team_mentions.label='Columbia Records' (distributed via Sony Music / The Orchard) eliminates unsigned A&R whitespace."
+          },
+          {
+            "skill": "dossier-identity",
+            "title": "Zero public outreach route",
+            "evidence": "contact_route_type='none' and has_public_business_contact=false."
+          },
+          {
+            "skill": "dossier-media",
+            "title": "Uncertain attribution on studio visualizer only",
+            "evidence": "attribution_status='uncertain' on third-party 'Midnight Upload Vault' visualizer (https://www.youtube.com/watch?v=RftqJrM4Aj4) with 0 live vocal clips."
+          },
+          {
+            "skill": "dossier-audience",
+            "title": "78% spam/bot-skewed comment section",
+            "evidence": "jokes_or_spam=31/40 (78%) with 0 live_show_requests and 0 notable_commenters."
+          }
+        ],
+        "missing_evidence_flags": [
+          "identity_and_contact.home_city: no geographic base disclosed.",
+          "identity_and_contact.musicbrainz_mbid: no public MusicBrainz entry."
+        ],
+        "dealbreakers_checked": [
+          "major_label_lockup: TRIGGERED (Columbia Records phonographic copyright)",
+          "zero_contact_route: TRIGGERED (contact_route_type='none')",
+          "unverified_vocal_attribution: TRIGGERED (studio collective, uncertain lead singer)",
+          "bot_or_spam_comments: TRIGGERED (31/40 jokes_or_spam)"
+        ]
+      },
+      "judge_decision": {
+        "verdict": "pass",
+        "total_score": 2,
+        "max_score": 10,
+        "confidence": 0.93,
+        "rationale": "Immediate Pass (2/10). While Advocate accurately notes balanced view distribution across 5 studio tracks (2/2 on early_window_depth), Velvet Static fails every live-vocal and A&R-whitespace gate: Columbia Records copyright lockup (0/2 stage_momentum_whitespace), contact_route_type='none' (0/2 identity_reachability), uncertain attribution on a studio visualizer with zero live takes (0/2 live_vocal_proof), and 78% spam comments (0/2 listener_pull_cosigns).",
+        "rubric_scores": {
+          "identity_reachability": {
+            "score": 0,
+            "max_score": 2,
+            "skill": "dossier-identity",
+            "note": "Unreachable or unresolved identity: route=none, 2 active platform(s)."
+          },
+          "live_vocal_proof": {
+            "score": 0,
+            "max_score": 2,
+            "skill": "dossier-media",
+            "note": "Insufficient live vocal proof: attribution=uncertain, 0 live clip(s), 1 embeddable clip(s)."
+          },
+          "early_window_depth": {
+            "score": 2,
+            "max_score": 2,
+            "skill": "dossier-footprint",
+            "note": "Early window (early_dsp_inflection) with 5 releases and balanced top-clip share (42.0%)."
+          },
+          "listener_pull_cosigns": {
+            "score": 0,
+            "max_score": 2,
+            "skill": "dossier-audience",
+            "note": "Weak or spam-heavy comment signal (31/40 jokes/spam, 1 intent requests, 0 co-signs)."
+          },
+          "stage_momentum_whitespace": {
+            "score": 0,
+            "max_score": 2,
+            "skill": "dossier-track-record",
+            "note": "Major-label affiliation (Columbia Records) removes unsigned A&R whitespace."
+          }
+        }
+      }
+    }
+  ]
+}
