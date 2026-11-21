@@ -12,6 +12,7 @@ import json
 import os
 from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
+import uuid
 
 from .db_tools import (
     ALLOWED_AGENT_COLLECTIONS,
@@ -30,8 +31,19 @@ from .discovery_ui import (
     refresh_discovery_batch,
 )
 from .fleet import dispatch_fleet
+from .registry import (
+    AGENT_RUNS_COLLECTION,
+    append_agent_trace,
+    list_agent_runs,
+    new_run_id,
+    query_discovery_sources,
+    record_agent_run,
+    record_fleet_agent_runs,
+    seed_discovery_sources,
+    upsert_discovery_source,
+)
 from .scout import DEFAULT_TASTE_BRIEF, load_dotenv_if_present, run_scout
-from .store import SimonStore
+from .store import SimonStore, create_store
 
 
 INDEX_HTML = """<!DOCTYPE html>
@@ -236,6 +248,94 @@ INDEX_HTML = """<!DOCTYPE html>
     </header>
 
     <div id="statusBanner" class="status-banner"></div>
+
+    <section class="brief-box" style="margin-bottom:22px;">
+      <div class="section-title" style="margin-bottom:12px;">
+        <span>Platform Control Plane · Agent Runs, Traces &amp; Source Registry</span>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <span id="storeBackendBadge" class="pill">store: —</span>
+          <button id="refreshRunsBtn" class="preset-btn" type="button">Refresh Runs</button>
+          <button id="seedSourcesBtn" class="preset-btn" type="button">Seed Reference Sources</button>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns: 1.25fr 1fr; gap:16px; margin-bottom:16px;">
+        <div>
+          <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+            <select id="fleetAgentSelect" class="key-input" style="flex:1; min-width:180px;"></select>
+            <input id="fleetTargetInput" class="key-input" style="flex:1.4; min-width:180px;" placeholder="Target / assignment (e.g. NYC indie soul vocalists)" />
+            <label style="display:inline-flex; align-items:center; gap:5px; font-size:0.82rem; color:var(--muted);">
+              <input type="checkbox" id="fleetDryRunToggle" checked /> Dry run
+            </label>
+            <button id="dispatchFleetBtn" class="run-btn" type="button" style="padding:8px 14px; font-size:0.84rem;">Run Agent</button>
+          </div>
+          <div style="overflow:auto; max-height:260px; border:1px solid var(--border); border-radius:10px;">
+            <table style="width:100%; border-collapse:collapse; font-size:0.82rem;">
+              <thead>
+                <tr style="background:var(--panel-2); color:var(--muted); text-align:left;">
+                  <th style="padding:8px;">Run ID</th>
+                  <th style="padding:8px;">Agent</th>
+                  <th style="padding:8px;">Target</th>
+                  <th style="padding:8px;">Status</th>
+                  <th style="padding:8px;">Traces</th>
+                </tr>
+              </thead>
+              <tbody id="agentRunsBody">
+                <tr><td colspan="5" style="padding:10px; color:var(--muted);">Loading agent runs…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div style="border:1px solid var(--border); border-radius:10px; padding:12px; background:var(--panel-2); max-height:315px; overflow:auto;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <strong style="font-size:0.88rem;">Selected Agent Run Trace</strong>
+            <span id="selectedRunMeta" class="pill">Select a run</span>
+          </div>
+          <div id="agentTraceInspector" style="font-size:0.82rem; color:var(--muted);">
+            Click any row on the left to inspect its <code>run_id</code>, <code>interaction_id</code>, step-by-step trace spans, and output payload.
+          </div>
+        </div>
+      </div>
+
+      <details style="border-top:1px solid var(--border); padding-top:12px;">
+        <summary style="cursor:pointer; font-weight:600; font-size:0.9rem; display:flex; align-items:center; justify-content:space-between;">
+          <span>Discovery Source Registry (Reference Data) · <span id="sourcesCountBadge" class="pill">0 sources</span></span>
+        </summary>
+        <div style="display:flex; gap:8px; margin:10px 0; flex-wrap:wrap;">
+          <input id="sourceCityFilter" class="key-input" style="width:180px;" placeholder="Filter city (e.g. New York)" />
+          <select id="sourceChannelFilter" class="key-input" style="width:200px;">
+            <option value="">All channels</option>
+            <option value="diy_venue_calendar">diy_venue_calendar</option>
+            <option value="youtube_live_session">youtube_live_session</option>
+            <option value="open_mic_lineup">open_mic_lineup</option>
+            <option value="event_listing">event_listing</option>
+            <option value="bandcamp_local_arrival">bandcamp_local_arrival</option>
+            <option value="diy_venue_flyer_ocr">diy_venue_flyer_ocr</option>
+            <option value="bgv_or_session_credit_graph">bgv_or_session_credit_graph</option>
+            <option value="musicbrainz">musicbrainz</option>
+            <option value="other">other</option>
+          </select>
+          <button id="filterSourcesBtn" class="preset-btn" type="button">Filter</button>
+        </div>
+        <div style="overflow:auto; max-height:240px; border:1px solid var(--border); border-radius:10px;">
+          <table style="width:100%; border-collapse:collapse; font-size:0.8rem;">
+            <thead>
+              <tr style="background:var(--panel-2); color:var(--muted); text-align:left;">
+                <th style="padding:7px;">Source</th>
+                <th style="padding:7px;">Channel</th>
+                <th style="padding:7px;">Location</th>
+                <th style="padding:7px;">Tier</th>
+                <th style="padding:7px;">Status</th>
+              </tr>
+            </thead>
+            <tbody id="sourcesBody">
+              <tr><td colspan="5" style="padding:10px; color:var(--muted);">Loading sources…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </section>
 
     <section class="brief-box">
       <label for="briefInput">1. Taste Brief — Describe the sound and musical choices to scout for</label>
@@ -622,7 +722,137 @@ INDEX_HTML = """<!DOCTYPE html>
       }
     });
 
+    async function loadPlatformControlPlane() {
+      try {
+        const [stRes, agRes] = await Promise.all([fetch('/api/status'), fetch('/api/agents')]);
+        const st = await stRes.json();
+        const ag = await agRes.json();
+        const backendEl = document.getElementById('storeBackendBadge');
+        if (backendEl) backendEl.textContent = 'store: ' + (st.store_backend || 'sqlite');
+        const sel = document.getElementById('fleetAgentSelect');
+        if (sel && Array.isArray(ag.agents)) {
+          sel.innerHTML = ag.agents.map(a =>
+            `<option value="${a.deployed_id}">${a.deployed_id} (${a.model || 'default'})</option>`
+          ).join('');
+        }
+      } catch (e) {}
+      await Promise.all([refreshAgentRuns(), refreshSources()]);
+    }
+
+    async function refreshAgentRuns() {
+      const tbody = document.getElementById('agentRunsBody');
+      if (!tbody) return;
+      try {
+        const res = await fetch('/api/agent-runs');
+        const data = await res.json();
+        const runs = data.agent_runs || [];
+        if (!runs.length) {
+          tbody.innerHTML = '<tr><td colspan="5" style="padding:10px; color:var(--muted);">No agent runs recorded yet. Dispatch an agent above.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = runs.map(r => `
+          <tr data-arun="${r.agent_run_id}" style="cursor:pointer; border-top:1px solid var(--border);">
+            <td style="padding:7px;"><code>${r.run_id || '—'}</code><div style="font-size:0.72rem; color:var(--muted);">${r.agent_run_id}</div></td>
+            <td style="padding:7px;">${r.agent_id || '—'}</td>
+            <td style="padding:7px;">${(r.target || '—').slice(0, 42)}</td>
+            <td style="padding:7px;"><span class="pill">${r.status || '—'}</span></td>
+            <td style="padding:7px;">${(r.traces || []).length} steps</td>
+          </tr>
+        `).join('');
+        tbody.querySelectorAll('tr[data-arun]').forEach(tr => {
+          tr.addEventListener('click', () => inspectAgentRun(tr.getAttribute('data-arun')));
+        });
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="5" style="padding:10px; color:var(--warn);">Failed to load agent runs.</td></tr>';
+      }
+    }
+
+    async function inspectAgentRun(agentRunId) {
+      const box = document.getElementById('agentTraceInspector');
+      const meta = document.getElementById('selectedRunMeta');
+      if (!box) return;
+      const res = await fetch('/api/agent-runs/' + encodeURIComponent(agentRunId));
+      const r = await res.json();
+      if (meta) meta.textContent = `${r.run_id || ''} · ${r.status || ''}`;
+      const tracesHtml = (r.traces || []).map(t => `
+        <div style="border-left:2px solid var(--accent); padding:4px 8px; margin:6px 0; background:rgba(255,255,255,0.02);">
+          <div><strong>${t.step_id}</strong> <span class="pill">${t.kind}</span> <span style="color:var(--muted); font-size:0.74rem;">${t.timestamp || ''}</span></div>
+          <div>${t.summary || ''}</div>
+        </div>
+      `).join('') || '<div style="color:var(--muted);">No trace spans recorded.</div>';
+      box.innerHTML = `
+        <div style="margin-bottom:8px;">
+          <div><strong>run_id:</strong> <code>${r.run_id || '—'}</code></div>
+          <div><strong>agent_run_id:</strong> <code>${r.agent_run_id || '—'}</code></div>
+          <div><strong>interaction_id:</strong> <code>${r.interaction_id || 'none (dry-run)'}</code></div>
+          <div><strong>agent:</strong> ${r.agent_id || '—'} · <strong>stage:</strong> ${r.stage || '—'}</div>
+        </div>
+        ${tracesHtml}
+        ${r.output ? `<pre style="margin-top:8px; padding:8px; background:#0b0d12; border-radius:8px; overflow:auto; max-height:140px;">${JSON.stringify(r.output, null, 2)}</pre>` : ''}
+      `;
+    }
+
+    async function refreshSources() {
+      const tbody = document.getElementById('sourcesBody');
+      const badge = document.getElementById('sourcesCountBadge');
+      if (!tbody) return;
+      const city = (document.getElementById('sourceCityFilter')?.value || '').trim();
+      const channel = (document.getElementById('sourceChannelFilter')?.value || '').trim();
+      const params = new URLSearchParams();
+      if (city) params.set('city', city);
+      if (channel) params.set('channel', channel);
+      const res = await fetch('/api/sources' + (params.toString() ? '?' + params.toString() : ''));
+      const data = await res.json();
+      const sources = data.sources || [];
+      if (badge) badge.textContent = `${sources.length} sources`;
+      if (!sources.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="padding:10px; color:var(--muted);">No sources seeded yet. Click "Seed Reference Sources" above.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = sources.map(s => {
+        const loc = s.location || {};
+        const locLabel = [loc.city, loc.area, loc.scope].filter(Boolean).join(' · ') || '—';
+        return `<tr style="border-top:1px solid var(--border);">
+          <td style="padding:6px;"><a href="${s.url}" target="_blank" rel="noopener noreferrer" style="color:var(--teal);">${s.name}</a><div style="font-size:0.72rem; color:var(--muted);">${s.source_id}</div></td>
+          <td style="padding:6px;"><code>${s.source_channel}</code></td>
+          <td style="padding:6px;">${locLabel}</td>
+          <td style="padding:6px;">${s.career_tier || '—'}</td>
+          <td style="padding:6px;"><span class="pill">${s.status || 'active'}</span></td>
+        </tr>`;
+      }).join('');
+    }
+
+    document.getElementById('refreshRunsBtn')?.addEventListener('click', refreshAgentRuns);
+    document.getElementById('filterSourcesBtn')?.addEventListener('click', refreshSources);
+    document.getElementById('seedSourcesBtn')?.addEventListener('click', async () => {
+      const res = await fetch('/api/sources/seed', { method: 'POST' });
+      const data = await res.json();
+      setBanner(`Seeded ${data.seeded_count || 0} curated sources into ${data.collection || 'source_registry'}.`, 'info');
+      await refreshSources();
+    });
+    document.getElementById('dispatchFleetBtn')?.addEventListener('click', async () => {
+      const agent = document.getElementById('fleetAgentSelect')?.value || '';
+      const target = (document.getElementById('fleetTargetInput')?.value || '').trim() || 'NYC indie soul vocalists';
+      const dryRun = Boolean(document.getElementById('fleetDryRunToggle')?.checked);
+      setBanner(`Dispatching ${agent} (${dryRun ? 'dry-run' : 'live'})…`, 'info');
+      const res = await fetch('/api/fleet/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent, assignments: [target], dry_run: dryRun })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setBanner(data.error || 'Agent dispatch failed.', 'error');
+        return;
+      }
+      setBanner(`Dispatched run ${data.run_id} (${data.dispatched}/${data.total} workers).`, 'info');
+      await refreshAgentRuns();
+      const firstId = (data.agent_run_ids || [])[0];
+      if (firstId) await inspectAgentRun(firstId);
+    });
+
     init();
+    loadPlatformControlPlane();
   </script>
 </body>
 </html>
@@ -726,14 +956,17 @@ def dispatch_http_request(
         if parsed.path == "/":
             return (HTTPStatus.OK, "text/html; charset=utf-8", INDEX_HTML.encode("utf-8"))
 
-        if parsed.path == "/discovery":
+        if parsed.path in ("/discovery", "/scouting"):
             return (HTTPStatus.OK, "text/html; charset=utf-8", DISCOVERY_HTML.encode("utf-8"))
 
         if parsed.path == "/traces":
             return (HTTPStatus.OK, "text/html; charset=utf-8", TRACES_HTML.encode("utf-8"))
 
-        if parsed.path == "/api/sources":
-            payload = load_source_registry(store)
+        if parsed.path in ("/healthz", "/api/health"):
+            payload = {
+                "ok": True,
+                "store_backend": getattr(store, "backend", "sqlite"),
+            }
             return (
                 HTTPStatus.OK,
                 "application/json; charset=utf-8",
@@ -751,8 +984,18 @@ def dispatch_http_request(
 
         if parsed.path.startswith("/api/discovery/batches/"):
             batch_id = parsed.path[len("/api/discovery/batches/"):].strip("/")
+            qs = parse_qs(parsed.query)
+            wait_flag = (qs.get("wait") or ["0"])[0].lower() in ("1", "true", "yes")
+            since_steps = int((qs.get("since_steps") or ["-1"])[0])
+            timeout_s = min(25.0, max(1.0, float((qs.get("timeout") or ["15"])[0])))
             load_dotenv_if_present()
-            batch = refresh_discovery_batch(store, batch_id)
+            batch = refresh_discovery_batch(
+                store,
+                batch_id,
+                wait=wait_flag,
+                since_steps=since_steps,
+                timeout_s=timeout_s,
+            )
             if batch is None:
                 return (
                     HTTPStatus.NOT_FOUND,
@@ -764,18 +1007,89 @@ def dispatch_http_request(
                 "application/json; charset=utf-8",
                 json.dumps(batch, ensure_ascii=False).encode("utf-8"),
             )
-
         if parsed.path == "/api/status":
             load_dotenv_if_present()
             payload = {
                 "ok": True,
                 "has_api_key": bool(os.environ.get("GEMINI_API_KEY")),
                 "default_brief": DEFAULT_TASTE_BRIEF,
+                "store_backend": getattr(store, "backend", "sqlite"),
             }
             return (
                 HTTPStatus.OK,
                 "application/json; charset=utf-8",
                 json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            )
+
+        if parsed.path == "/api/fleet/runs":
+            runs = store.list_documents("fleet_runs", limit=20) if hasattr(store, "list_documents") else []
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps({"fleet_runs": runs}, ensure_ascii=False).encode("utf-8"),
+            )
+
+        if parsed.path == "/api/sources":
+            qs = parse_qs(parsed.query)
+            ch = (qs.get("channel") or [None])[0]
+            city = (qs.get("city") or [None])[0]
+            tier = (qs.get("tier") or [None])[0]
+            status_f = (qs.get("status") or [None])[0]
+            limit = int((qs.get("limit") or ["100"])[0])
+            registry = load_source_registry(store)
+            sources = registry["sources"]
+            if ch:
+                sources = [s for s in sources if s.get("source_channel") == ch]
+            if city:
+                sources = [s for s in sources if ((s.get("location") or {}).get("city") or "Global").lower() == city.lower()]
+            if tier:
+                sources = [s for s in sources if s.get("career_tier") == tier]
+            if status_f:
+                sources = [s for s in sources if s.get("status") == status_f]
+            sources = sources[:limit]
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps(
+                    {
+                        "count": len(sources),
+                        "channels": registry["channels"],
+                        "cities": registry["cities"],
+                        "tiers": registry["tiers"],
+                        "sources": sources,
+                    },
+                    ensure_ascii=False,
+                ).encode("utf-8"),
+            )
+
+        if parsed.path == "/api/agent-runs":
+            qs = parse_qs(parsed.query)
+            runs = list_agent_runs(
+                store,
+                run_id=(qs.get("run_id") or [None])[0],
+                agent_id=(qs.get("agent_id") or [None])[0],
+                status=(qs.get("status") or [None])[0],
+                limit=int((qs.get("limit") or ["50"])[0]),
+            )
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps({"count": len(runs), "agent_runs": runs}, ensure_ascii=False).encode("utf-8"),
+            )
+
+        if parsed.path.startswith("/api/agent-runs/"):
+            arun_id = parsed.path[len("/api/agent-runs/"):].strip("/")
+            doc = store.get_document(AGENT_RUNS_COLLECTION, arun_id) if hasattr(store, "get_document") else None
+            if not doc:
+                return (
+                    HTTPStatus.NOT_FOUND,
+                    "application/json; charset=utf-8",
+                    json.dumps({"error": f"Agent run '{arun_id}' not found."}).encode("utf-8"),
+                )
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps(doc, ensure_ascii=False).encode("utf-8"),
             )
 
         if parsed.path == "/api/agents":
@@ -915,11 +1229,112 @@ def dispatch_http_request(
                 "application/json; charset=utf-8",
                 json.dumps({"error": str(exc)}).encode("utf-8"),
             )
+        fleet_run_id = f"fleet_{uuid.uuid4().hex[:10]}"
+        parent_run_id = str(req.get("run_id") or "").strip() or new_run_id("run")
+        stage = str(req.get("stage") or "fleet").strip() or "fleet"
+        summary["fleet_run_id"] = fleet_run_id
+        summary["run_id"] = parent_run_id
+        if hasattr(store, "save_document"):
+            created_runs = record_fleet_agent_runs(store, summary, run_id=parent_run_id, stage=stage)
+            summary["agent_run_ids"] = [r["agent_run_id"] for r in created_runs]
+            store.save_document("fleet_runs", fleet_run_id, summary)
         http_status = HTTPStatus.OK if (wait or dry_run) else HTTPStatus.ACCEPTED
         return (
             http_status,
             "application/json; charset=utf-8",
             json.dumps(summary, ensure_ascii=False).encode("utf-8"),
+        )
+
+    if method == "POST" and parsed.path == "/api/sources/seed":
+        try:
+            summary = seed_discovery_sources(store)
+        except (OSError, ValueError) as exc:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": str(exc)}).encode("utf-8"),
+            )
+        summary["store_backend"] = getattr(store, "backend", "sqlite")
+        return (
+            HTTPStatus.OK,
+            "application/json; charset=utf-8",
+            json.dumps(summary, ensure_ascii=False).encode("utf-8"),
+        )
+
+    if method == "POST" and parsed.path == "/api/sources":
+        try:
+            req = json.loads((raw_body or b"{}").decode("utf-8"))
+            saved = upsert_discovery_source(store, req)
+        except ValueError as exc:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": str(exc)}).encode("utf-8"),
+            )
+        return (
+            HTTPStatus.CREATED,
+            "application/json; charset=utf-8",
+            json.dumps(saved, ensure_ascii=False).encode("utf-8"),
+        )
+
+    if method == "POST" and parsed.path == "/api/agent-runs":
+        try:
+            req = json.loads((raw_body or b"{}").decode("utf-8"))
+        except ValueError:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "Invalid JSON request body."}).encode("utf-8"),
+            )
+        if req.get("agent_run_id") and isinstance(req.get("trace"), dict):
+            trace = req["trace"]
+            updated = append_agent_trace(
+                store,
+                str(req["agent_run_id"]),
+                kind=str(trace.get("kind") or "tool_call"),
+                summary=str(trace.get("summary") or ""),
+                metadata=trace.get("metadata") if isinstance(trace.get("metadata"), dict) else None,
+                status=req.get("status"),
+                output_payload=req.get("output"),
+                error=req.get("error"),
+            )
+            if not updated:
+                return (
+                    HTTPStatus.NOT_FOUND,
+                    "application/json; charset=utf-8",
+                    json.dumps({"error": "Agent run not found."}).encode("utf-8"),
+                )
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps(updated, ensure_ascii=False).encode("utf-8"),
+            )
+        agent_id = str(req.get("agent_id") or "").strip()
+        if not agent_id:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "`agent_id` is required."}).encode("utf-8"),
+            )
+        saved = record_agent_run(
+            store,
+            run_id=str(req.get("run_id") or "").strip() or new_run_id("run"),
+            agent_id=agent_id,
+            stage=str(req.get("stage") or "custom"),
+            status=str(req.get("status") or "running"),
+            agent_run_id=req.get("agent_run_id"),
+            parent_agent_run_id=req.get("parent_agent_run_id"),
+            interaction_id=req.get("interaction_id"),
+            target=req.get("target"),
+            input_payload=req.get("input"),
+            output_payload=req.get("output"),
+            error=req.get("error"),
+            traces=req.get("traces") if isinstance(req.get("traces"), list) else None,
+        )
+        return (
+            HTTPStatus.CREATED,
+            "application/json; charset=utf-8",
+            json.dumps(saved, ensure_ascii=False).encode("utf-8"),
         )
 
     if method == "POST" and parsed.path == "/api/scout":
@@ -985,11 +1400,11 @@ def create_handler(store: SimonStore):
     return SimonHTTPHandler
 
 
-def serve_web(host: str = "127.0.0.1", port: int = 8765, store: Optional[SimonStore] = None) -> None:
+def serve_web(host: str = "127.0.0.1", port: int = 8765, store: Optional[Any] = None) -> None:
     load_dotenv_if_present()
-    active_store = store or SimonStore()
+    active_store = store or create_store()
     server = ThreadingHTTPServer((host, port), create_handler(active_store))
-    print(f"Simon Taste-Brief Vocal Scout running at http://{host}:{port}")
+    print(f"Simon platform running at http://{host}:{port} (store={getattr(active_store, 'backend', 'sqlite')})")
     print("Press Ctrl+C to stop.")
     try:
         server.serve_forever()

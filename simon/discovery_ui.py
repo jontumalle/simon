@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import sys
+import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 import uuid
 
@@ -416,20 +417,25 @@ def list_discovery_batches(store: SimonStore, limit: int = 20) -> List[Dict[str,
     return out
 
 
-def refresh_discovery_batch(
+def _count_batch_steps(batch: Dict[str, Any]) -> int:
+    return sum(len(w.get("steps") or []) for w in (batch.get("workers") or []))
+
+
+def _batch_has_active_workers(batch: Dict[str, Any]) -> bool:
+    for w in batch.get("workers") or []:
+        st = str(w.get("status") or "")
+        if w.get("interaction_id") and st not in TERMINAL_STATUSES and st != "error":
+            return True
+    return False
+
+
+def _poll_batch_once(
     store: SimonStore,
+    batch: Dict[str, Any],
     batch_id: str,
     api_key: Optional[str] = None,
     request_fn: Callable[..., Tuple[int, Dict[str, Any]]] = _http_json,
-) -> Optional[Dict[str, Any]]:
-    """Fetch a batch from fleet_runs and poll Gemini for any in-progress live workers."""
-    found = get_agent_document(store, "fleet_runs", batch_id)
-    if not isinstance(found, dict):
-        return None
-    batch = found.get("data") if isinstance(found.get("data"), dict) else found
-    if batch.get("mode") != "live":
-        return batch
-
+) -> bool:
     changed = False
     for worker in batch.get("workers") or []:
         status = str(worker.get("status") or "")
@@ -442,11 +448,16 @@ def refresh_discovery_batch(
             worker["error"] = str(exc)
             continue
 
+        prev_steps = len(worker.get("steps") or [])
+        new_steps = polled.get("steps") or []
+        if polled["status"] != status or len(new_steps) != prev_steps:
+            changed = True
+
         worker["status"] = polled["status"]
         if polled.get("environment_id"):
             worker["environment_id"] = polled["environment_id"]
-        if polled.get("steps"):
-            worker["steps"] = polled["steps"]
+        if new_steps:
+            worker["steps"] = new_steps
         if polled.get("error"):
             worker["error"] = polled["error"]
 
@@ -457,16 +468,54 @@ def refresh_discovery_batch(
             worker["contract_valid"] = validation["valid"]
             worker["contract_errors"] = validation["errors"]
             worker["lead_count"] = validation["lead_count"]
+            changed = True
             if validation["valid"] and isinstance(worker["output_json"], dict):
                 try:
                     save_agent_document(store, "discovery_handoffs", worker["output_json"])
                 except ValueError:
                     pass
-        changed = True
 
     if changed:
         batch["updated_at"] = _utc_now_iso()
         save_agent_document(store, "fleet_runs", batch, doc_id=batch_id)
+    return changed
+
+
+def refresh_discovery_batch(
+    store: SimonStore,
+    batch_id: str,
+    api_key: Optional[str] = None,
+    request_fn: Callable[..., Tuple[int, Dict[str, Any]]] = _http_json,
+    wait: bool = False,
+    since_steps: int = -1,
+    timeout_s: float = 15.0,
+    poll_interval_s: float = 1.5,
+    sleep_fn: Callable[[float], None] = time.sleep,
+) -> Optional[Dict[str, Any]]:
+    """Fetch a batch from fleet_runs and poll/long-poll Gemini for any in-progress live workers."""
+    found = get_agent_document(store, "fleet_runs", batch_id)
+    if not isinstance(found, dict):
+        return None
+    batch = found.get("data") if isinstance(found.get("data"), dict) else found
+    if batch.get("mode") != "live":
+        batch["total_steps"] = _count_batch_steps(batch)
+        return batch
+
+    deadline = time.monotonic() + max(0.0, float(timeout_s))
+    while True:
+        changed = _poll_batch_once(store, batch, batch_id, api_key=api_key, request_fn=request_fn)
+        total_steps = _count_batch_steps(batch)
+        batch["total_steps"] = total_steps
+        if not wait:
+            break
+        if changed or (since_steps >= 0 and total_steps > since_steps):
+            break
+        if not _batch_has_active_workers(batch):
+            break
+        if time.monotonic() >= deadline:
+            break
+        sleep_fn(poll_interval_s)
+
     return batch
 
 
@@ -758,15 +807,24 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
 
       const anyRunning = workers.some((w) => !['completed', 'failed', 'error', 'cancelled', 'timeout'].includes(w.status));
       if (anyRunning && !pollTimer) {{
-        pollTimer = setInterval(async () => {{
-          const res = await fetch(`/api/discovery/batches/${{encodeURIComponent(activeBatchId)}}`);
-          if (res.ok) {{
-            const updated = await res.json();
-            renderBatch(updated);
+        pollTimer = true;
+        (async () => {{
+          let lastSteps = batch.total_steps || workers.reduce((acc, w) => acc + ((w.steps || []).length), 0);
+          while (pollTimer && activeBatchId === batch.batch_id) {{
+            try {{
+              const res = await fetch(`/api/discovery/batches/${{encodeURIComponent(activeBatchId)}}?wait=1&since_steps=${{lastSteps}}&timeout=15`);
+              if (!res.ok) break;
+              const updated = await res.json();
+              lastSteps = updated.total_steps || (updated.workers || []).reduce((acc, w) => acc + ((w.steps || []).length), 0);
+              renderBatch(updated);
+              const stillRunning = (updated.workers || []).some((w) => !['completed', 'failed', 'error', 'cancelled', 'timeout'].includes(w.status));
+              if (!stillRunning) {{ pollTimer = null; break; }}
+            }} catch (_e) {{
+              await new Promise((r) => setTimeout(r, 2000));
+            }}
           }}
-        }}, 3500);
-      }} else if (!anyRunning && pollTimer) {{
-        clearInterval(pollTimer);
+        }})();
+      }} else if (!anyRunning) {{
         pollTimer = null;
       }}
     }}
@@ -870,8 +928,9 @@ TRACES_HTML = f"""<!DOCTYPE html>
           <button id="refreshBtn" class="btn" type="button">Refresh Now</button>
           <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.84rem; cursor:pointer;">
             <input type="checkbox" id="autoPollToggle" checked />
-            <span>Auto-poll (3s)</span>
+            <span>Continuous Long-Poll</span>
           </label>
+          <span id="livePollBadge" class="pill blue">Idle</span>
         </div>
       </div>
       <div id="batchMeta" class="mono">Loading batches…</div>
@@ -884,7 +943,8 @@ TRACES_HTML = f"""<!DOCTYPE html>
     const el = (id) => document.getElementById(id);
     function esc(s) {{ const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }}
     let currentBatchId = new URLSearchParams(window.location.search).get('batch') || '';
-    let pollHandle = null;
+    let longPollGen = 0;
+    let lastKnownSteps = -1;
 
     function statusPill(status) {{
       if (status === 'completed') return '<span class="pill ok">completed</span>';
@@ -922,13 +982,13 @@ TRACES_HTML = f"""<!DOCTYPE html>
               <strong>${{esc(w.worker_id)}}</strong>
               ${{statusPill(w.status)}}
             </div>
-            <div class="mono">interaction_id: ${{esc(w.interaction_id || '—')}} · duration: ${{w.duration_ms || 0}}ms · leads: ${{w.lead_count || 0}}</div>
+            <div class="mono">interaction_id: ${{esc(w.interaction_id || '—')}} · duration: ${{w.duration_ms || 0}}ms · leads: ${{w.lead_count || 0}} · steps: ${{steps.length}}</div>
             <div style="display:flex; gap:5px; flex-wrap:wrap;">
               ${{(w.assigned_sources || []).map((s) => `<span class="pill blue">${{esc(s.name)}}</span>`).join('')}}
             </div>
             ${{errHtml}}
             <div>
-              <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; color:var(--muted); margin-bottom:6px;">Execution Trace</div>
+              <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; color:var(--muted); margin-bottom:6px;">Execution Steps (${{steps.length}})</div>
               ${{stepsHtml}}
             </div>
             <details>
@@ -939,11 +999,36 @@ TRACES_HTML = f"""<!DOCTYPE html>
       }}).join('');
     }}
 
-    async function loadBatch(batchId) {{
-      if (!batchId) return;
+    async function loadBatch(batchId, useLongPoll) {{
+      if (!batchId) return null;
       currentBatchId = batchId;
-      const res = await fetch(`/api/discovery/batches/${{encodeURIComponent(batchId)}}`);
-      if (res.ok) renderTraceBatch(await res.json());
+      const qs = useLongPoll ? `?wait=1&since_steps=${{lastKnownSteps}}&timeout=15` : '';
+      const res = await fetch(`/api/discovery/batches/${{encodeURIComponent(batchId)}}${{qs}}`);
+      if (!res.ok) return null;
+      const batch = await res.json();
+      lastKnownSteps = batch.total_steps != null
+        ? batch.total_steps
+        : (batch.workers || []).reduce((acc, w) => acc + ((w.steps || []).length), 0);
+      renderTraceBatch(batch);
+      return batch;
+    }}
+
+    async function runLongPollLoop(gen) {{
+      while (gen === longPollGen && el('autoPollToggle').checked && currentBatchId) {{
+        el('livePollBadge').textContent = `Long-polling (${{Math.max(0, lastKnownSteps)}} steps)…`;
+        try {{
+          const batch = await loadBatch(currentBatchId, true);
+          if (!batch || gen !== longPollGen) break;
+          const active = (batch.workers || []).some((w) => !['completed', 'failed', 'error', 'cancelled', 'timeout'].includes(w.status));
+          if (!active) {{
+            el('livePollBadge').textContent = `All done (${{lastKnownSteps}} steps)`;
+            break;
+          }}
+        }} catch (_err) {{
+          el('livePollBadge').textContent = 'Reconnecting…';
+          await new Promise((r) => setTimeout(r, 2000));
+        }}
+      }}
     }}
 
     async function loadBatches() {{
@@ -959,21 +1044,24 @@ TRACES_HTML = f"""<!DOCTYPE html>
       if (!batches.length) {{ renderTraceBatch(null); return; }}
       const chosen = batches.some((b) => b.batch_id === currentBatchId) ? currentBatchId : batches[0].batch_id;
       sel.value = chosen;
-      await loadBatch(chosen);
+      lastKnownSteps = -1;
+      await loadBatch(chosen, false);
     }}
 
-    el('batchSelect').onchange = () => loadBatch(el('batchSelect').value);
-    el('refreshBtn').onclick = () => loadBatch(currentBatchId);
-
-    function resetPolling() {{
-      if (pollHandle) clearInterval(pollHandle);
-      if (el('autoPollToggle').checked) {{
-        pollHandle = setInterval(() => {{ if (currentBatchId) loadBatch(currentBatchId); }}, 3000);
+    function restartLongPoll() {{
+      longPollGen += 1;
+      if (el('autoPollToggle').checked && currentBatchId) {{
+        runLongPollLoop(longPollGen);
+      }} else {{
+        el('livePollBadge').textContent = 'Paused';
       }}
     }}
-    el('autoPollToggle').onchange = resetPolling;
 
-    loadBatches().then(resetPolling);
+    el('batchSelect').onchange = async () => {{ lastKnownSteps = -1; await loadBatch(el('batchSelect').value, false); restartLongPoll(); }};
+    el('refreshBtn').onclick = () => loadBatch(currentBatchId, false);
+    el('autoPollToggle').onchange = restartLongPoll;
+
+    loadBatches().then(restartLongPoll);
   </script>
 </body>
 </html>
