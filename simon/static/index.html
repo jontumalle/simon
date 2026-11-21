@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Simon · 5. Vocal Studio · Talent Review (Taste-Brief Vocal Scout MVP)</title>
+  <link rel="stylesheet" href="/static/app.css" />
+  <style>/*__NAV_CSS__*/</style>
+</head>
+<body>
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand-group">
+        <div class="brand">
+          <div class="brand-mark">S</div>
+          <div>
+            <div class="brand-title">Simon</div>
+            <div class="brand-sub">5. Vocal Studio · Talent Review</div>
+          </div>
+        </div>
+
+        <nav class="nav-tabs" aria-label="Studio Views">
+          <button class="nav-tab active" data-tab="review" type="button">1. Talent Review</button>
+          <button class="nav-tab" data-tab="pipeline" type="button">2. Pipeline Runner</button>
+          <button class="nav-tab" data-tab="lab" type="button">3. Agent Lab</button>
+        </nav>
+      </div>
+
+      <div class="topbar-actions">
+        <select id="historySelect" class="select-compact" title="Saved Scouting Runs">
+          <option value="">Saved runs…</option>
+        </select>
+
+        <button id="openBriefBtn" class="btn btn-primary" type="button">+ New Brief</button>
+        <button id="openTraceBtn" class="btn" type="button">Trace</button>
+
+        <span id="serverKeyBadge" class="status-dot-pill">
+          <span class="dot"></span>
+          <span>Checking…</span>
+        </span>
+
+        <button id="themeToggleBtn" class="btn" type="button" title="Toggle Editorial Light / Studio Dark">☀ Light</button>
+      </div>
+    </div>
+    <div class="platform-nav-bar">
+      <!--__TOP_NAV__-->
+    </div>
+  </header>
+
+  <div id="statusBanner" class="banner" role="status"></div>
+
+  <!-- ========================================================= -->
+  <!-- TAB 1: TALENT REVIEW (AGENCY-FIRST VIEW)                  -->
+  <!-- ========================================================= -->
+  <main id="tab-review" class="container tab-panel">
+    <div class="brief-header">
+      <div>
+        <div class="eyebrow">Active Brief</div>
+        <h1 id="activeBriefHeading" class="brief-headline">Loading latest scouting run…</h1>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <span id="recordCountBadge" class="pill ok">0 leads · 0 clips</span>
+        <span id="runModeBadge" class="pill">—</span>
+      </div>
+    </div>
+
+    <div class="review-grid">
+      <!-- LEFT: STICKY MOMENT VERIFIER PLAYER -->
+      <section class="card sticky-player">
+        <div class="video-wrap">
+          <iframe
+            id="ytPlayer"
+            title="YouTube Moment Verifier"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowfullscreen
+          ></iframe>
+        </div>
+        <div class="player-body">
+          <div class="player-head">
+            <div>
+              <div id="playerTimestampBadge" class="pill accent">Click any moment to play</div>
+              <div id="playerClipTitle" class="player-title" style="margin-top:6px;">Select an artist to start listening</div>
+              <div id="nowPlayingCaption" class="player-caption">Every claim links straight to the exact second in a public YouTube performance.</div>
+            </div>
+            <a id="openOnYoutubeLink" class="btn" href="https://www.youtube.com" target="_blank" rel="noopener noreferrer">YouTube ↗</a>
+          </div>
+
+          <div>
+            <div class="eyebrow" style="margin-bottom:6px;">Quick-Jump Moments</div>
+            <div id="playerMomentsRow" class="moments-row">
+              <span class="muted" style="font-size:12px;">Cue an artist to see their timestamped moments.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- RIGHT: SHORTLIST QUEUE + ALL SCOUTED LEADS -->
+      <section>
+        <div class="queue-toolbar">
+          <div class="subtabs">
+            <button id="subtabShortlistBtn" class="nav-tab active" data-subtab="shortlist" type="button">Top-3 Shortlist (0)</button>
+            <button id="subtabAllBtn" class="nav-tab" data-subtab="all" type="button">All Scouted Artists (0)</button>
+          </div>
+
+          <div id="promoteBar" class="promote-bar hidden">
+            <span id="selectedCountLabel">0 selected</span>
+            <button id="promoteToPhase2Btn" class="btn btn-primary" type="button">Run Phase 2 Investigation →</button>
+          </div>
+        </div>
+
+        <div id="shortlistContainer" class="artist-list"></div>
+        <div id="allLeadsContainer" class="artist-list hidden"></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ========================================================= -->
+  <!-- TAB 2: PIPELINE RUNNER (RUN & TEST EACH PHASE)            -->
+  <!-- ========================================================= -->
+  <main id="tab-pipeline" class="container tab-panel hidden">
+    <div class="pipeline-head">
+      <div>
+        <div class="eyebrow">Step-by-Step Orchestration</div>
+        <h1 style="margin:4px 0 0; font-size:20px; font-weight:800;">Pipeline Runner — Run or Test Each Phase</h1>
+        <div class="muted" style="font-size:13px;">Run any phase live against real agents (saved to SQLite/Firestore) or switch to Test Mode to edit handoffs and check process evals.</div>
+      </div>
+
+      <div class="nav-tabs" role="group" aria-label="Pipeline Mode">
+        <button id="pmodeTestBtn" class="nav-tab active" data-pmode="test" type="button">Test / Eval Mode</button>
+        <button id="pmodeLiveBtn" class="nav-tab" data-pmode="live" type="button">● Live Run (Deployed Agents)</button>
+      </div>
+    </div>
+
+    <div id="phaseStepper" class="phase-stepper"></div>
+
+    <section class="card phase-workspace">
+      <div class="phase-ws-head">
+        <div>
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <h2 id="phaseTitle" style="margin:0; font-size:16px; font-weight:800;">Phase 1 — Discovery</h2>
+            <span id="phaseDomainBadge" class="pill accent">Intake</span>
+          </div>
+          <div id="phaseDesc" class="muted" style="font-size:12.5px; margin-top:4px;"></div>
+        </div>
+
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button id="loadPhaseFixtureBtn" class="btn" type="button">Load Fixture</button>
+          <button id="runThisPhaseBtn" class="btn btn-primary" type="button">▶ Run This Phase</button>
+          <button id="runNextPhaseBtn" class="btn" type="button">Run Next →</button>
+        </div>
+      </div>
+
+      <div class="phase-split">
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px;">
+            <strong>Phase Input (Editable Handoff JSON)</strong>
+            <span id="phaseInputHint" class="muted"></span>
+          </div>
+          <textarea id="phaseInputJson" class="code-area"></textarea>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px;">
+            <strong>Phase Output &amp; Process Evals</strong>
+            <span id="phaseRunMeta" class="mono muted">Not run yet</span>
+          </div>
+          <div id="phaseChecks" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+          <div id="phaseOutputCards" class="output-grid"></div>
+          <details>
+            <summary class="muted" style="font-size:12px; cursor:pointer;">Inspect Raw Phase Output JSON</summary>
+            <pre id="phaseRawJson" class="raw-pre" style="margin-top:8px;">{}</pre>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:18px; padding:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <strong style="font-size:13px;">Saved Phase Checkpoints</strong>
+        <span id="checkpointCountBadge" class="pill">0 saved</span>
+      </div>
+      <div id="checkpointList" style="display:flex; flex-direction:column; gap:6px;"></div>
+    </section>
+  </main>
+
+  <!-- ========================================================= -->
+  <!-- TAB 3: AGENT LAB (SINGLE-AGENT TEST & EVALS)              -->
+  <!-- ========================================================= -->
+  <main id="tab-lab" class="container tab-panel hidden">
+    <div style="margin-bottom:16px;">
+      <div class="eyebrow">Per-Agent Testing &amp; Scoring</div>
+      <h1 style="margin:4px 0 0; font-size:20px; font-weight:800;">Agent Lab</h1>
+      <div class="muted" style="font-size:13px;">Test any curated agent in isolation (Dry Run or Live), check contract rules, and save Pass/Fail evals.</div>
+    </div>
+
+    <div class="lab-grid">
+      <aside class="card roster-card">
+        <div class="eyebrow" style="padding:4px 8px 8px; border-bottom:1px solid var(--border); margin-bottom:4px;">Curated Agents</div>
+        <div id="agentRoster"></div>
+      </aside>
+
+      <section class="card lab-panel">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+          <div>
+            <h2 id="labAgentName" style="margin:0; font-size:16px; font-weight:800;">Select an agent</h2>
+            <div id="labAgentDeployedId" class="mono muted" style="font-size:11.5px; margin-top:2px;">—</div>
+          </div>
+          <span id="labAgentModel" class="pill accent mono">—</span>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label for="labInput" style="font-size:12px; font-weight:700;">Assignment Payload (JSON object or array for batch fan-out)</label>
+          <textarea id="labInput" class="code-area" style="min-height:170px;"></textarea>
+        </div>
+
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+          <label style="display:inline-flex; align-items:center; gap:6px; font-size:12.5px; cursor:pointer;">
+            <input id="labDryRunToggle" type="checkbox" checked />
+            <span>Dry Run (no API cost)</span>
+          </label>
+          <button id="labRunBtn" class="btn btn-primary" type="button">▶ Run Agent</button>
+        </div>
+      </section>
+
+      <section class="card lab-panel">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+          <strong style="font-size:14px;">Eval Inspector</strong>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button id="toggleLabRawBtn" class="btn" type="button">Raw JSON</button>
+            <span id="labLatency" class="mono muted" style="font-size:11.5px;">—</span>
+          </div>
+        </div>
+
+        <div id="labChecksRow" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+
+        <div id="labOutputFormatted" class="output-card">
+          <div class="muted">Run an agent to inspect its response and contract checks.</div>
+        </div>
+        <pre id="labOutputRaw" class="raw-pre hidden">{}</pre>
+
+        <div style="border-top:1px solid var(--border); padding-top:12px; display:flex; flex-direction:column; gap:10px;">
+          <strong style="font-size:12.5px;">Save Human Eval</strong>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-ok" data-eval-score="pass" type="button">✓ Pass</button>
+            <button class="btn btn-warn" data-eval-score="fail" type="button">✕ Fail</button>
+            <input id="evalNoteInput" class="field-input" style="flex:1; min-width:160px;" type="text" placeholder="Short note on output quality…" />
+          </div>
+          <div id="evalHistoryList" style="display:flex; flex-direction:column; gap:6px;"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ========================================================= -->
+  <!-- DRAWER: FULL ARTIST PROFILE                               -->
+  <!-- ========================================================= -->
+  <div id="profileDrawer" class="drawer-backdrop hidden">
+    <div class="drawer-panel">
+      <div class="drawer-head">
+        <div>
+          <div class="eyebrow">Artist Profile</div>
+          <h2 id="profileDrawerName" style="margin:4px 0 0; font-size:20px; font-weight:800;">Artist</h2>
+        </div>
+        <button class="btn" data-close-drawer type="button">✕ Close</button>
+      </div>
+      <div id="profileDrawerBody" style="display:flex; flex-direction:column; gap:14px;"></div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- DRAWER: NEW BRIEF & SETTINGS                              -->
+  <!-- ========================================================= -->
+  <div id="briefDrawer" class="drawer-backdrop hidden">
+    <div class="drawer-panel">
+      <div class="drawer-head">
+        <div>
+          <div class="eyebrow">New Scouting Run</div>
+          <h2 style="margin:4px 0 0; font-size:18px; font-weight:800;">Write or Pick a Taste Brief</h2>
+        </div>
+        <button class="btn" data-close-drawer type="button">✕ Close</button>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <label for="briefInput" style="font-size:12.5px; font-weight:700;">Describe the sound and vocal choices to scout for</label>
+        <textarea id="briefInput" class="field-input" rows="4"></textarea>
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+          <button class="btn preset-btn" type="button" data-brief="Find singers who reinterpret familiar songs through distinctive phrasing, micro-dynamics, or stripped-back live arrangements.">Preset: Phrasing &amp; Reinterpretation</button>
+          <button class="btn preset-btn" type="button" data-brief="Stripped-back soul vocalists in live rooms who shift effortlessly from whispered intimacy to chest-voice power without heavy studio polish.">Preset: Live Room Soul</button>
+          <button class="btn preset-btn" type="button" data-brief="Acoustic session or open-mic singers with elastic behind-the-beat pocket and sparse guitar or piano accompaniment.">Preset: Acoustic Pocket</button>
+        </div>
+      </div>
+
+      <div class="output-card" style="display:flex; flex-direction:column; gap:10px;">
+        <label style="display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:600; cursor:pointer;">
+          <input type="checkbox" id="liveToggle" />
+          <span>Run Live (Gemini Managed Agents + YouTube)</span>
+        </label>
+        <input type="password" id="apiKeyInput" class="field-input mono" placeholder="Optional GEMINI_API_KEY override…" />
+      </div>
+
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button id="scoutBtn" class="btn btn-primary" style="flex:1; padding:10px 14px;" type="button">Scout Singers &amp; Build Shortlist</button>
+        <button id="demoBtn" class="btn" style="padding:10px 14px;" type="button">Load Instant Demo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- DRAWER: MANAGED AGENT TRACE                               -->
+  <!-- ========================================================= -->
+  <div id="traceDrawer" class="drawer-backdrop hidden">
+    <div class="drawer-panel">
+      <div class="drawer-head">
+        <div>
+          <div class="eyebrow">System Transparency</div>
+          <h2 style="margin:4px 0 0; font-size:18px; font-weight:800;">Managed Agent &amp; Evaluator Trace</h2>
+        </div>
+        <button class="btn" data-close-drawer type="button">✕ Close</button>
+      </div>
+      <div id="traceContainer" style="display:flex; flex-direction:column; gap:10px;"></div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

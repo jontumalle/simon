@@ -1,0 +1,119 @@
+"""Tests for the remodeled Agency Studio UI, static serving, Phase Runner, and Agent Evals."""
+
+from __future__ import annotations
+
+import json
+import unittest
+
+from simon.store import SimonStore
+from simon.web import dispatch_http_request
+
+
+class TestAgencyStudioUIAndPhases(unittest.TestCase):
+    def setUp(self) -> None:
+        self.store = SimonStore(":memory:")
+
+    def test_static_frontend_assets_and_traversal_block(self) -> None:
+        code, ctype, html = dispatch_http_request(self.store, "GET", "/")
+        self.assertEqual(code, 200)
+        self.assertIn("text/html", ctype)
+        self.assertIn(b"Talent Review", html)
+        self.assertIn(b"Pipeline Runner", html)
+        self.assertIn(b"Agent Lab", html)
+
+        code, ctype, css = dispatch_http_request(self.store, "GET", "/static/app.css")
+        self.assertEqual(code, 200)
+        self.assertIn("text/css", ctype)
+        self.assertIn(b"--accent", css)
+
+        code, ctype, js = dispatch_http_request(self.store, "GET", "/static/app.js")
+        self.assertEqual(code, 200)
+        self.assertIn("javascript", ctype)
+        self.assertIn(b"/api/phases/run", js)
+
+        # Directory traversal must be rejected
+        code, _, _ = dispatch_http_request(self.store, "GET", "/static/../web.py")
+        self.assertEqual(code, 404)
+
+    def test_phases_list_and_step_by_step_execution(self) -> None:
+        code, _, body = dispatch_http_request(self.store, "GET", "/api/phases")
+        self.assertEqual(code, 200)
+        data = json.loads(body)
+        phase_ids = [p["id"] for p in data["phases"]]
+        self.assertEqual(
+            phase_ids,
+            ["1_discovery", "2a_identity", "2b_investigators", "2c_dossier", "3_shortlist", "4_producer"],
+        )
+
+        # Run Phase 1 -> 2A -> 2B -> 2C -> 3 -> 4 chaining handoffs
+        handoff = {}
+        for pid in phase_ids:
+            code, _, resp = dispatch_http_request(
+                self.store,
+                "POST",
+                "/api/phases/run",
+                json.dumps({"phase_id": pid, "payload": handoff, "live": False}).encode("utf-8"),
+            )
+            self.assertEqual(code, 200, f"Phase {pid} failed: {resp}")
+            rec = json.loads(resp)
+            self.assertEqual(rec["phase_id"], pid)
+            self.assertTrue(rec["passed"], f"Phase {pid} checks failed: {rec['checks']}")
+            self.assertGreaterEqual(len(rec["cards"]), 1)
+            if pid == "2b_investigators":
+                self.assertEqual(len(rec["cards"]), 3)
+            handoff = rec.get("next_handoff") or {}
+
+        # Verify checkpoints persisted
+        code, _, body = dispatch_http_request(self.store, "GET", "/api/phases")
+        self.assertEqual(code, 200)
+        saved_runs = json.loads(body)["phase_runs"]
+        self.assertEqual(len(saved_runs), 6)
+
+    def test_agent_evals_auto_checks_and_persistence(self) -> None:
+        # Auto-check without saving catches forbidden ranking key on investigator
+        code, _, body = dispatch_http_request(
+            self.store,
+            "POST",
+            "/api/evals",
+            json.dumps(
+                {
+                    "agent_id": "signal-forensics",
+                    "output": {"comments_sampled": 10, "score": 9.5},
+                    "save": False,
+                }
+            ).encode("utf-8"),
+        )
+        self.assertEqual(code, 200)
+        res = json.loads(body)
+        self.assertFalse(res["auto_passed"])
+
+        # Save a passing human eval
+        code, _, body = dispatch_http_request(
+            self.store,
+            "POST",
+            "/api/evals",
+            json.dumps(
+                {
+                    "agent_id": "signal-forensics",
+                    "verdict": "pass",
+                    "note": "Clean intent buckets and zero ranking drift",
+                    "output": {"comments_sampled": 10},
+                    "save": True,
+                }
+            ).encode("utf-8"),
+        )
+        self.assertEqual(code, 201)
+        saved = json.loads(body)
+        self.assertTrue(saved["auto_passed"])
+        self.assertEqual(saved["verdict"], "pass")
+
+        # List saved evals filtered by agent_id
+        code, _, body = dispatch_http_request(self.store, "GET", "/api/evals?agent_id=signal-forensics")
+        self.assertEqual(code, 200)
+        evals = json.loads(body)["evals"]
+        self.assertEqual(len(evals), 1)
+        self.assertEqual(evals[0]["note"], "Clean intent buckets and zero ranking drift")
+
+
+if __name__ == "__main__":
+    unittest.main()
