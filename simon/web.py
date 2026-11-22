@@ -482,6 +482,30 @@ def dispatch_http_request(
 
         if parsed.path == "/api/discovery/batches":
             qs = parse_qs(parsed.query)
+            single_batch_id = (qs.get("batch_id") or [""])[0].strip()
+            if single_batch_id:
+                refresh_flag = (qs.get("refresh") or ["1"])[0].lower() in ("1", "true", "yes")
+                load_dotenv_if_present()
+                if refresh_flag:
+                    batch = refresh_discovery_batch(store, single_batch_id, wait=False)
+                else:
+                    found = get_agent_document(store, "fleet_runs", single_batch_id)
+                    batch = (
+                        found.get("data")
+                        if isinstance(found, dict) and isinstance(found.get("data"), dict)
+                        else found
+                    )
+                if batch is None:
+                    return (
+                        HTTPStatus.NOT_FOUND,
+                        "application/json; charset=utf-8",
+                        json.dumps({"error": "Discovery batch not found."}).encode("utf-8"),
+                    )
+                return (
+                    HTTPStatus.OK,
+                    "application/json; charset=utf-8",
+                    json.dumps(batch, ensure_ascii=False).encode("utf-8"),
+                )
             limit = int((qs.get("limit") or ["20"])[0])
             return (
                 HTTPStatus.OK,
