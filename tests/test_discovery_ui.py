@@ -553,8 +553,12 @@ class TestDiscoveryUIAndTraces(unittest.TestCase):
         code, ctype, html = dispatch_http_request(store, "GET", "/discovery")
         self.assertEqual(code, 200)
         self.assertIn("text/html", ctype)
-        self.assertIn(b"1. Select Discovery Sources", html)
-        self.assertIn(b"2. Orchestrate Discovery Fleet", html)
+        self.assertIn(b"1. Orchestrate Discovery Fleet", html)
+        self.assertIn(b"2. Select Discovery Sources", html)
+        self.assertLess(
+            html.index(b"1. Orchestrate Discovery Fleet"),
+            html.index(b"2. Select Discovery Sources"),
+        )
 
         self.assertNotIn(b"3. Per-Agent Contract Outputs", html)
         self.assertNotIn(b"outputsContainer", html)
@@ -563,14 +567,22 @@ class TestDiscoveryUIAndTraces(unittest.TestCase):
         for expected in (
             b"wrap-wide",
             b"selector-toolbar",
+            b"searchFilter",
             b"sourceSearchInput",
             b"genreFilter",
             b"channelChips",
+            b"regionPills",
             b"selectedTray",
             b"selectFilteredBtn",
             b"toggleExpandBtn",
+            b"showMoreSourcesBtn",
+            b"presetIdolBtn",
+            b"fleetScaleBanner",
+            b"cascadeBtn",
+            b"huntFocusInput",
+            b"huntSourcesBtn",
+            b"toastContainer",
             b"minmax(340px, 1fr)",
-            b"min-height: 520px",
         ):
             self.assertIn(expected, html)
 
@@ -578,6 +590,115 @@ class TestDiscoveryUIAndTraces(unittest.TestCase):
         self.assertIn("genres", reg)
         self.assertIn("soul", reg["genres"])
         self.assertIn("indie", reg["genres"])
+
+    def test_nationwide_8_region_pipeline_and_source_hunter_api(self) -> None:
+        import re
+        import shutil
+        import subprocess
+
+        store = self.store
+        _, _, raw_html = dispatch_http_request(store, "GET", "/discovery")
+        html_str = raw_html.decode("utf-8")
+
+        # Validate inline <script> JS syntax
+        scripts = re.findall(r"<script>(.*?)</script>", html_str, flags=re.DOTALL)
+        self.assertGreaterEqual(len(scripts), 1)
+        node_bin = shutil.which("node")
+        if node_bin:
+            js_path = Path(self._tmpdir.name) / "discovery_check.js"
+            js_path.write_text("\n;\n".join(scripts), encoding="utf-8")
+            proc = subprocess.run([node_bin, "--check", str(js_path)], capture_output=True, text=True)
+            self.assertEqual(proc.returncode, 0, f"Discovery JS syntax error:\n{proc.stderr}")
+
+        # Verify 42 seeded sources including all 6 new US regional hubs
+        reg = load_source_registry(store)
+        self.assertEqual(reg["count"], 42)
+        source_ids = {s["source_id"] for s in reg["sources"]}
+        nationwide_sources = [
+            "nyc_rockwood_music_hall",
+            "src_nashville_bluebird",
+            "src_atlanta_eddies",
+            "src_austin_kutx",
+            "yt_audiotree",
+            "src_nola_wwoz",
+            "src_la_hotelcafe",
+            "yt_kexp_live",
+        ]
+        for sid in nationwide_sources:
+            self.assertIn(sid, source_ids)
+
+        # Verify POST /api/sources/hunt + GET /api/sources/schedule + pinned is_new sources
+        code_sched, _, body_sched = dispatch_http_request(store, "GET", "/api/sources/schedule")
+        self.assertEqual(code_sched, 200)
+        self.assertEqual(json.loads(body_sched)["schedule"]["cron"], "0 9 * * *")
+
+        code_hunt, _, body_hunt = dispatch_http_request(
+            store,
+            "POST",
+            "/api/sources/hunt",
+            json.dumps({"focus": "Detroit soul", "count": 3, "live": False}).encode("utf-8"),
+        )
+        self.assertEqual(code_hunt, 200)
+        hunt_payload = json.loads(body_hunt)
+        self.assertEqual(hunt_payload["added_count"], 3)
+        self.assertEqual(len(hunt_payload["added_sources"]), 3)
+
+        code_srcs, _, body_srcs = dispatch_http_request(store, "GET", "/api/sources?limit=100")
+        self.assertEqual(code_srcs, 200)
+        srcs_payload = json.loads(body_srcs)
+        self.assertEqual(srcs_payload["count"], 45)
+        self.assertTrue(srcs_payload["sources"][0].get("is_new"))
+
+        # Verify 8-agent x 2-lead = 16 unique US finalists across all 8 US cities
+        code_disp, _, body_disp = dispatch_http_request(
+            store,
+            "POST",
+            "/api/discovery/dispatch",
+            json.dumps(
+                {
+                    "source_ids": nationwide_sources,
+                    "brief": "American Idol Nationwide Search across 8 US music regions",
+                    "agent_count": 8,
+                    "leads_per_agent": 2,
+                    "live": False,
+                    "reset_previous": True,
+                }
+            ).encode("utf-8"),
+        )
+        self.assertEqual(code_disp, 200)
+        disp = json.loads(body_disp)
+        self.assertEqual(disp["agent_count"], 8)
+        all_stage_names = [
+            lead["stage_name"]
+            for w in disp["workers"]
+            for lead in w["output_json"]["leads"]
+        ]
+        self.assertEqual(len(all_stage_names), 16)
+        self.assertEqual(len(set(all_stage_names)), 16)
+        for w in disp["workers"]:
+            self.assertTrue(w["contract_valid"], w["contract_errors"])
+
+        code_inv, _, body_inv = dispatch_http_request(store, "POST", "/api/investigate/run", b"{}")
+        self.assertEqual(code_inv, 200)
+        inv = json.loads(body_inv)
+        self.assertEqual(inv["count"], 16)
+        home_cities = {d["identity_and_contact"]["home_city"] for d in inv["dossiers"]}
+        self.assertEqual(
+            home_cities,
+            {
+                "New York, NY",
+                "Nashville, TN",
+                "Atlanta, GA",
+                "Austin, TX",
+                "Chicago, IL",
+                "New Orleans, LA",
+                "Los Angeles, CA",
+                "Seattle, WA",
+            },
+        )
+        for d in inv["dossiers"]:
+            media_url = d["source_and_media_queue"]["media_links"][0]["url"]
+            self.assertRegex(media_url, r"^https://www\.youtube\.com/watch\?v=[A-Za-z0-9_-]{11}$")
 
 
 if __name__ == "__main__":

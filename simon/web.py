@@ -65,6 +65,11 @@ from .registry import (
     seed_discovery_sources,
     upsert_discovery_source,
 )
+from .source_hunter import (
+    DAILY_SCHEDULE_META,
+    hunt_new_sources,
+    sync_daily_source_hunter_trigger,
+)
 from .scout import DEFAULT_TASTE_BRIEF, load_dotenv_if_present, run_scout
 from .screening import (
     compile_judging_model,
@@ -531,6 +536,20 @@ def dispatch_http_request(
                 json.dumps({"fleet_runs": runs}, ensure_ascii=False).encode("utf-8"),
             )
 
+        if parsed.path == "/api/sources/schedule":
+            return (
+                HTTPStatus.OK,
+                "application/json; charset=utf-8",
+                json.dumps(
+                    {
+                        "ok": True,
+                        "agent": "simon-source-hunter",
+                        "schedule": dict(DAILY_SCHEDULE_META),
+                    },
+                    ensure_ascii=False,
+                ).encode("utf-8"),
+            )
+
         if parsed.path == "/api/sources":
             qs = parse_qs(parsed.query)
             ch = (qs.get("channel") or [None])[0]
@@ -558,6 +577,8 @@ def dispatch_http_request(
                         "channels": registry["channels"],
                         "cities": registry["cities"],
                         "tiers": registry["tiers"],
+                        "genres": registry["genres"],
+                        "schedule": dict(DAILY_SCHEDULE_META),
                         "sources": sources,
                     },
                     ensure_ascii=False,
@@ -1173,6 +1194,55 @@ def dispatch_http_request(
             http_status,
             "application/json; charset=utf-8",
             json.dumps(summary, ensure_ascii=False).encode("utf-8"),
+        )
+
+    if method == "POST" and parsed.path == "/api/sources/hunt":
+        try:
+            req = json.loads((raw_body or b"{}").decode("utf-8"))
+        except ValueError:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "Invalid JSON request body."}).encode("utf-8"),
+            )
+        focus = str(req.get("focus") or "").strip()
+        count = int(req.get("count") or 3)
+        live = bool(req.get("live", False))
+        api_key = str(req.get("api_key") or "").strip() or None
+        load_dotenv_if_present()
+        try:
+            hunt_result = hunt_new_sources(
+                store=store,
+                focus=focus,
+                count=count,
+                live=live,
+                api_key=api_key,
+            )
+        except (ValueError, RuntimeError, OSError) as exc:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": str(exc)}).encode("utf-8"),
+            )
+        return (
+            HTTPStatus.OK,
+            "application/json; charset=utf-8",
+            json.dumps(hunt_result, ensure_ascii=False).encode("utf-8"),
+        )
+
+    if method == "POST" and parsed.path in ("/api/sources/schedule", "/api/sources/schedule/sync"):
+        try:
+            req = json.loads((raw_body or b"{}").decode("utf-8"))
+        except ValueError:
+            req = {}
+        api_key = str(req.get("api_key") or "").strip() or None
+        prefix = str(req.get("prefix") or os.environ.get("SIMON_AGENT_PREFIX", "staging-"))
+        load_dotenv_if_present()
+        sync_res = sync_daily_source_hunter_trigger(api_key=api_key, prefix=prefix)
+        return (
+            HTTPStatus.OK,
+            "application/json; charset=utf-8",
+            json.dumps(sync_res, ensure_ascii=False).encode("utf-8"),
         )
 
     if method == "POST" and parsed.path == "/api/sources/seed":
