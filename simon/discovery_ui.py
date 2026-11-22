@@ -7,6 +7,7 @@ and strict `DiscoveryHandoff v1.0.0` contract validation.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -20,6 +21,7 @@ from .db_tools import (
     list_agent_documents,
     sanitize_agent_report,
     save_agent_document,
+    save_agent_documents_batch,
 )
 from .fleet import (
     TERMINAL_STATUSES,
@@ -64,7 +66,7 @@ def load_source_registry(store: SimonStore) -> Dict[str, Any]:
             seed_sources.append(src)
 
     # Merge any live discovered_sources saved via simon-db or Source Hunter (pinned first as NEW)
-    db_docs = list_agent_documents(store, "discovered_sources", limit=100)
+    db_docs = list_agent_documents(store, "discovered_sources", limit=200)
     for row in db_docs:
         doc = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else row
         if not isinstance(doc, dict):
@@ -118,8 +120,8 @@ def load_source_registry(store: SimonStore) -> Dict[str, Any]:
 
 
 def _partition_sources(sources: List[Dict[str, Any]], agent_count: int) -> List[List[Dict[str, Any]]]:
-    """Distribute selected sources evenly across N discovery agents."""
-    n = max(1, min(int(agent_count), 12))
+    """Distribute selected sources evenly across N discovery agents (up to 100)."""
+    n = max(1, min(int(agent_count), 100))
     buckets: List[List[Dict[str, Any]]] = [[] for _ in range(n)]
     for idx, src in enumerate(sources):
         buckets[idx % n].append(src)
@@ -480,10 +482,10 @@ def get_agent_report(store: SimonStore, report_id: str) -> Optional[Dict[str, An
 def list_investigator_dossiers(
     store: SimonStore,
     lead_id: Optional[str] = None,
-    limit: int = 50,
+    limit: int = 500,
 ) -> List[Dict[str, Any]]:
     """List stored Stage 2 investigator dossiers with all telemetry keys stripped."""
-    docs = list_agent_documents(store, "investigator_dossiers", limit=max(limit, 100))
+    docs = list_agent_documents(store, "investigator_dossiers", limit=max(limit, 500))
     dossiers: List[Dict[str, Any]] = []
     for row in docs:
         doc = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else row
@@ -502,7 +504,7 @@ def list_investigator_dossiers(
 
 def list_discovery_leads(
     store: SimonStore,
-    limit: int = 100,
+    limit: int = 500,
 ) -> List[Dict[str, Any]]:
     """List verified/discovered leads from `leads` and `discovery_handoffs`, deduplicated and sanitized."""
     leads_out: List[Dict[str, Any]] = []
@@ -515,7 +517,7 @@ def list_discovery_leads(
         stage_name = str(raw.get("stage_name") or "").strip()
         if not lead_id and not stage_name:
             return
-        dedupe_key = (lead_id or stage_name).lower()
+        dedupe_key = (stage_name or lead_id).lower()
         if dedupe_key in seen_keys:
             return
         seen_keys.add(dedupe_key)
@@ -526,12 +528,12 @@ def list_discovery_leads(
             item.setdefault("discovered_at", handoff_meta.get("generated_at"))
         leads_out.append(sanitize_agent_report(item))
 
-    for row in list_agent_documents(store, "leads", limit=max(limit, 100)):
+    for row in list_agent_documents(store, "leads", limit=max(limit, 500)):
         doc = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else row
         if isinstance(doc, dict) and not bool(doc.get("archived", False)):
             _add_lead(doc)
 
-    for row in list_agent_documents(store, "discovery_handoffs", limit=50):
+    for row in list_agent_documents(store, "discovery_handoffs", limit=200):
         doc = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else row
         if not isinstance(doc, dict) or bool(doc.get("archived", False)):
             continue
@@ -559,6 +561,28 @@ def _validate_handoff_payload(output_json: Optional[Dict[str, Any]]) -> Dict[str
     }
 
 
+def _normalize_handoff_for_validation(
+    output_json: Optional[Dict[str, Any]],
+    run_id_fallback: str,
+    brief_fallback: str,
+    unconstrained: bool = False,
+) -> Optional[Dict[str, Any]]:
+    if not isinstance(output_json, dict):
+        return output_json
+    norm = dict(output_json)
+    norm.setdefault("contract_version", "1.0.0")
+    if not str(norm.get("run_id") or "").strip():
+        norm["run_id"] = run_id_fallback
+    if not str(norm.get("search_brief") or "").strip():
+        norm["search_brief"] = brief_fallback
+    norm.setdefault("discovered_sources", [])
+    leads_list = norm.get("leads") if isinstance(norm.get("leads"), list) else []
+    req_c = norm.get("requested_count")
+    if unconstrained or isinstance(req_c, bool) or not isinstance(req_c, int) or req_c < 1:
+        norm["requested_count"] = max(1, len(leads_list))
+    return norm
+
+
 def _build_simulated_worker(
     worker_index: int,
     run_id: str,
@@ -566,14 +590,16 @@ def _build_simulated_worker(
     leads_per_agent: int,
     assigned_sources: List[Dict[str, Any]],
     used_names: Optional[Set[str]] = None,
+    unconstrained: bool = False,
 ) -> Dict[str, Any]:
-    """Produce a realistic, contract-valid DiscoveryHandoff v1.0.0 worker result across 20 US regional artists."""
+    """Produce a realistic, contract-valid DiscoveryHandoff v1.0.0 worker result across US & global artists."""
     from .demo_flow import select_regional_vocalists_for_sources
 
     primary_src = assigned_sources[0]
+    target_lead_count = ((worker_index % 3) + 3) if unconstrained else max(1, int(leads_per_agent))
     chosen_profiles = select_regional_vocalists_for_sources(
         assigned_sources=assigned_sources,
-        count=leads_per_agent,
+        count=target_lead_count,
         used_names=used_names,
         worker_index=worker_index,
     )
@@ -608,7 +634,7 @@ def _build_simulated_worker(
         "contract_version": "1.0.0",
         "run_id": f"{run_id}_w{worker_index + 1}",
         "search_brief": brief,
-        "requested_count": leads_per_agent,
+        "requested_count": max(1, len(leads)) if unconstrained else max(1, int(leads_per_agent)),
         "generated_at": _utc_now_iso(),
         "leads": leads,
         "discovered_sources": [
@@ -672,6 +698,33 @@ def _build_simulated_worker(
     }
 
 
+_simulate_discovery_worker = _build_simulated_worker
+
+
+def _build_discovery_worker_prompt(unconstrained: bool = False) -> str:
+    count_rule = (
+        "UNCONSTRAINED MODE (`unconstrained: true` — ALL FOUND · NO ARTIFICIAL CAP): "
+        "Search the live web across your `assigned_sources` (`google_search` + `url_context`) and extract "
+        "**every distinct performer/vocalist found** on those lineups, sessions, or arrivals with **zero artificial count cap**. "
+        "Set `\"requested_count\"` in `/workspace/out/handoff.json` to `max(1, len(leads))` (an integer >= 1 matching "
+        "the exact number of verified leads you found) so `DiscoveryHandoff` v1.0.0 validates!\n"
+        if unconstrained
+        else "Harvest `requested_count` distinct performers/vocalists with verified public URLs.\n"
+    )
+    return (
+        "Run Stage 1 Discovery for this JSON assignment:\n{target}\n\n"
+        "Focus specifically on the `assigned_sources` list provided above. "
+        f"{count_rule}"
+        "Follow your Layer 1 SYSTEM.md, `source-discovery`, `field-reporting`, and Layer 2 `music` SKILL.md steps:\n"
+        "1. While working, post live human-first Field News updates (`looking_at`, `finding`, `analysis`) "
+        "using `.agents/skills/field-reporting/scripts/field_report.py step` with your `report_id` and `batch_id` "
+        "(never include interaction_id or raw metadata).\n"
+        "2. Run `verify_handoff.py`, save `discovery_handoffs`, `leads`, and any newly discovered `discovered_sources` to `simon-db`.\n"
+        "3. Call `field_report.py finish --report-id <report_id> --headline \"...\" --output @/workspace/out/handoff_verified.json`.\n"
+        "4. Return ONLY the verified DiscoveryHandoff v1.0.0 JSON object."
+    )
+
+
 def dispatch_discovery_batch(
     store: SimonStore,
     source_ids: List[str],
@@ -682,6 +735,7 @@ def dispatch_discovery_batch(
     api_key: Optional[str] = None,
     request_fn: Callable[..., Tuple[int, Dict[str, Any]]] = _http_json,
     reset_previous: bool = False,
+    unconstrained: bool = False,
 ) -> Dict[str, Any]:
     """Dispatch N Stage 1 Discovery agents across selected sources and persist batch state."""
     registry = load_source_registry(store)
@@ -696,8 +750,8 @@ def dispatch_discovery_batch(
         archive_pipeline_workspace(store)
 
     clean_brief = (brief or DEFAULT_DISCOVERY_BRIEF).strip()
-    n_leads = max(1, min(int(leads_per_agent or 2), 10))
-    n_agents = max(1, min(int(agent_count or len(selected)), 12))
+    n_leads = max(1, min(int(leads_per_agent or 2), 25))
+    n_agents = max(1, min(int(agent_count or len(selected)), 100))
     partitions = _partition_sources(selected, n_agents)
 
     batch_id = f"disc_{uuid.uuid4().hex[:10]}"
@@ -708,18 +762,69 @@ def dispatch_discovery_batch(
 
     if not live:
         used_names: Set[str] = set()
+        batch_writes: List[Tuple[str, Dict[str, Any], Optional[str]]] = []
         for idx, assigned in enumerate(partitions):
             worker = _build_simulated_worker(
-                idx, batch_id, clean_brief, n_leads, assigned, used_names=used_names
+                idx,
+                batch_id,
+                clean_brief,
+                n_leads,
+                assigned,
+                used_names=used_names,
+                unconstrained=unconstrained,
             )
             worker["report_id"] = f"rep_{batch_id}_w{idx + 1}"
             workers.append(worker)
-            if worker["contract_valid"] and isinstance(worker.get("output_json"), dict):
-                try:
-                    save_agent_document(store, "discovery_handoffs", worker["output_json"])
-                except ValueError:
-                    pass
-            _sync_worker_agent_report(store, batch_id, clean_brief, worker, mode="simulated")
+            out_handoff = worker.get("output_json")
+            if worker["contract_valid"] and isinstance(out_handoff, dict):
+                batch_writes.append(("discovery_handoffs", out_handoff, str(out_handoff.get("run_id") or f"{batch_id}_w{idx + 1}")))
+                for lead_item in out_handoff.get("leads") or []:
+                    if isinstance(lead_item, dict) and lead_item.get("lead_id"):
+                        lead_copy = dict(lead_item)
+                        lead_copy.setdefault("run_id", out_handoff.get("run_id"))
+                        lead_copy.setdefault("search_brief", clean_brief)
+                        lead_copy.setdefault("discovered_at", created_at)
+                        batch_writes.append(("leads", lead_copy, str(lead_item["lead_id"])))
+
+            # Build human-first AgentReport for batch write
+            assigned_clean = [
+                {
+                    "source_id": str(s.get("source_id") or ""),
+                    "name": str(s.get("name") or ""),
+                    "url": str(s.get("url") or ""),
+                    "source_channel": str(s.get("source_channel") or ""),
+                    "city": str(s.get("city") or ""),
+                }
+                for s in (worker.get("assigned_sources") or [])
+            ]
+            assigned_clean = [{k: v for k, v in item.items() if v} for item in assigned_clean]
+            findings = _extract_findings_from_handoff(out_handoff)
+            src_names = ", ".join(s.get("name", "source") for s in assigned_clean[:2]) or "assigned sources"
+            rep_doc = sanitize_agent_report(
+                {
+                    "contract_version": "1.0.0",
+                    "report_id": worker["report_id"],
+                    "batch_id": batch_id,
+                    "agent_name": f"Discovery Scout {idx + 1:02d}",
+                    "stage": "discovery",
+                    "brief": clean_brief,
+                    "assigned_sources": assigned_clean,
+                    "status": "completed",
+                    "headline": f"Found {len(findings)} verified lead(s) across {src_names}.",
+                    "current_focus": "Report completed",
+                    "steps": _human_steps_for_worker(worker, clean_brief, "simulated"),
+                    "findings": findings,
+                    "output": out_handoff,
+                    "archived": False,
+                    "archived_at": None,
+                    "created_at": created_at,
+                    "updated_at": created_at,
+                }
+            )
+            batch_writes.append(("agent_reports", rep_doc, worker["report_id"]))
+
+        if batch_writes:
+            save_agent_documents_batch(store, batch_writes)
         mode = "simulated"
     else:
         assignments = [
@@ -729,7 +834,8 @@ def dispatch_discovery_batch(
                 "batch_id": batch_id,
                 "agent_name": f"Discovery Scout {idx + 1:02d}",
                 "search_brief": clean_brief,
-                "requested_count": n_leads,
+                "unconstrained": bool(unconstrained),
+                "requested_count": 20 if unconstrained else n_leads,
                 "assigned_sources": [
                     {
                         "source_id": s["source_id"],
@@ -744,22 +850,12 @@ def dispatch_discovery_batch(
             }
             for idx, assigned in enumerate(partitions)
         ]
-        prompt_template = (
-            "Run Stage 1 Discovery for this JSON assignment:\n{target}\n\n"
-            "Focus specifically on the `assigned_sources` list provided above. "
-            "Follow your Layer 1 SYSTEM.md, `source-discovery`, `field-reporting`, and Layer 2 `music` SKILL.md steps:\n"
-            "1. While working, post live human-first Field News updates (`looking_at`, `finding`, `analysis`) "
-            "using `.agents/skills/field-reporting/scripts/field_report.py step` with your `report_id` and `batch_id` "
-            "(never include interaction_id or raw metadata).\n"
-            "2. Run `verify_handoff.py`, save `discovery_handoffs`, `leads`, and any newly discovered `discovered_sources` to `simon-db`.\n"
-            "3. Call `field_report.py finish --report-id <report_id> --headline \"...\" --output @/workspace/out/handoff_verified.json`.\n"
-            "4. Return ONLY the verified DiscoveryHandoff v1.0.0 JSON object."
-        )
+        prompt_template = _build_discovery_worker_prompt(unconstrained=unconstrained)
         fleet_res = dispatch_fleet(
             agent_id=agent_id,
             assignments=assignments,
             prompt_template=prompt_template,
-            max_concurrency=min(n_agents, 5),
+            max_concurrency=min(n_agents, 8),
             wait=False,
             dry_run=False,
             api_key=api_key,
@@ -767,7 +863,12 @@ def dispatch_discovery_batch(
         )
         for idx, fw in enumerate(fleet_res["workers"]):
             assigned = partitions[idx]
-            out_json = fw.get("output_json")
+            out_json = _normalize_handoff_for_validation(
+                fw.get("output_json"),
+                run_id_fallback=f"{batch_id}_w{idx + 1}",
+                brief_fallback=clean_brief,
+                unconstrained=unconstrained,
+            )
             validation = _validate_handoff_payload(out_json) if fw.get("status") == "completed" else None
             worker = {
                 "index": idx,
@@ -805,6 +906,7 @@ def dispatch_discovery_batch(
         "mode": mode,
         "agent_id": agent_id,
         "search_brief": clean_brief,
+        "unconstrained": bool(unconstrained),
         "leads_per_agent": n_leads,
         "agent_count": n_agents,
         "selected_source_ids": [s["source_id"] for s in selected],
@@ -866,17 +968,40 @@ def _poll_batch_once(
     request_fn: Callable[..., Tuple[int, Dict[str, Any]]] = _http_json,
 ) -> bool:
     changed = False
-    for worker in batch.get("workers") or []:
+    is_unconstrained = bool(batch.get("unconstrained", False))
+    brief_str = str(batch.get("search_brief") or DEFAULT_DISCOVERY_BRIEF)
+
+    active_targets: List[Tuple[int, Dict[str, Any], str]] = []
+    for idx, worker in enumerate(batch.get("workers") or []):
         status = str(worker.get("status") or "")
-        interaction_id = worker.get("interaction_id")
-        if not interaction_id or status in TERMINAL_STATUSES or status == "error":
+        iid = worker.get("interaction_id")
+        if not iid or status in TERMINAL_STATUSES or status == "error":
             continue
+        active_targets.append((idx, worker, str(iid)))
+
+    if not active_targets:
+        return False
+
+    def _poll_one(target: Tuple[int, Dict[str, Any], str]) -> Tuple[int, Dict[str, Any], Optional[Dict[str, Any]], Optional[str]]:
+        w_idx, w_obj, iid = target
         try:
-            polled = poll_interaction(interaction_id, api_key=api_key, request_fn=request_fn)
+            res = poll_interaction(iid, api_key=api_key, request_fn=request_fn)
+            return w_idx, w_obj, res, None
         except Exception as exc:  # noqa: BLE001
-            worker["error"] = str(exc)
+            return w_idx, w_obj, None, str(exc)
+
+    with ThreadPoolExecutor(max_workers=min(8, len(active_targets))) as pool:
+        polled_results = list(pool.map(_poll_one, active_targets))
+
+    leads_to_save: List[Tuple[str, Dict[str, Any], Optional[str]]] = []
+    now_iso = _utc_now_iso()
+
+    for idx, worker, polled, err_str in polled_results:
+        if err_str is not None or polled is None:
+            worker["error"] = err_str
             continue
 
+        status = str(worker.get("status") or "")
         prev_steps = len(worker.get("steps") or [])
         new_steps = polled.get("steps") or []
         if polled["status"] != status or len(new_steps) != prev_steps:
@@ -892,28 +1017,54 @@ def _poll_batch_once(
 
         if polled["status"] == "completed":
             worker["output_text"] = polled.get("output_text")
-            validation = _validate_handoff_payload(polled.get("output_json"))
-            worker["output_json"] = validation.get("cleaned", polled.get("output_json"))
+            norm_out = _normalize_handoff_for_validation(
+                polled.get("output_json"),
+                run_id_fallback=f"{batch_id}_w{idx + 1}",
+                brief_fallback=brief_str,
+                unconstrained=is_unconstrained,
+            )
+            validation = _validate_handoff_payload(norm_out)
+            cleaned_payload = validation.get("cleaned", norm_out)
+            worker["output_json"] = cleaned_payload
             worker["contract_valid"] = validation["valid"]
             worker["contract_errors"] = validation["errors"]
             worker["lead_count"] = validation["lead_count"]
             changed = True
-            if validation["valid"] and isinstance(worker["output_json"], dict):
-                try:
-                    save_agent_document(store, "discovery_handoffs", worker["output_json"])
-                except ValueError:
-                    pass
+            if isinstance(cleaned_payload, dict):
+                if validation["valid"]:
+                    try:
+                        save_agent_document(store, "discovery_handoffs", cleaned_payload)
+                    except ValueError:
+                        pass
+                # Stream every discovered lead immediately into `leads` so UI & Stage 2 see them live!
+                for lead_idx, lead_item in enumerate(cleaned_payload.get("leads") or []):
+                    if not isinstance(lead_item, dict) or not lead_item.get("stage_name"):
+                        continue
+                    lead_copy = dict(lead_item)
+                    lid = str(lead_copy.get("lead_id") or f"lead_{batch_id}_w{idx + 1}_{lead_idx + 1:02d}").strip()
+                    lead_copy["lead_id"] = lid
+                    lead_copy.setdefault("run_id", cleaned_payload.get("run_id") or f"{batch_id}_w{idx + 1}")
+                    lead_copy.setdefault("search_brief", brief_str)
+                    lead_copy.setdefault("discovered_at", now_iso)
+                    leads_to_save.append(("leads", lead_copy, lid))
 
         _sync_worker_agent_report(
             store,
             batch_id=batch_id,
-            brief=str(batch.get("search_brief") or DEFAULT_DISCOVERY_BRIEF),
+            brief=brief_str,
             worker=worker,
             mode=str(batch.get("mode") or "live"),
         )
 
+    if leads_to_save:
+        for col, lead_doc, lid in leads_to_save:
+            try:
+                save_agent_document(store, col, lead_doc, doc_id=lid)
+            except ValueError:
+                pass
+
     if changed:
-        batch["updated_at"] = _utc_now_iso()
+        batch["updated_at"] = now_iso
         save_agent_document(store, "fleet_runs", batch, doc_id=batch_id)
     return changed
 
@@ -1753,10 +1904,10 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       </div>
 
       <div class="preset-row">
-        <span style="font-size:0.78rem; font-weight:700; text-transform:uppercase; color:var(--muted);">Quick Campaign Presets:</span>
-        <button type="button" class="preset-btn flagship" id="presetIdolBtn">★ American Idol · Nationwide Search (Max Fleet · 8 Regions)</button>
-        <button type="button" class="preset-btn" id="presetNycBtn">First Listen NYC (3 Scouts · Local Soul/R&amp;B)</button>
-        <button type="button" class="preset-btn" id="presetRadioBtn">Tiny Desk &amp; Radio Live Rooms (4 Scouts · National Acoustic)</button>
+        <span style="font-size:0.78rem; font-weight:700; text-transform:uppercase; color:var(--muted);">Campaign Presets:</span>
+        <button type="button" class="preset-btn flagship" id="presetIdolBtn">★ American Idol · Uncapped Nationwide Search (All Sources · No Cap)</button>
+        <button type="button" class="preset-btn" id="presetNycBtn" style="border-color:rgba(96,165,250,0.55); color:var(--blue);">🗽 NYC Light Mode (Uncapped · 3 Live NYC Scouts · No Cap)</button>
+        <button type="button" class="preset-btn" id="presetRadioBtn">Tiny Desk &amp; Radio Live Rooms (4 Scouts)</button>
       </div>
 
       <div id="fleetScaleBanner" class="fleet-scale-banner"></div>
@@ -1801,15 +1952,19 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
         <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:center;">
           <label style="font-size:0.86rem;">
             Discovery Scouts:
-            <input type="number" id="agentCountInput" min="1" max="12" value="3" style="width:68px; margin-left:6px;" />
+            <input type="number" id="agentCountInput" min="1" max="100" value="3" style="width:72px; margin-left:6px;" />
           </label>
-          <label style="font-size:0.86rem;">
+          <label style="font-size:0.86rem;" id="leadsPerAgentWrap">
             Leads / Scout:
-            <input type="number" id="leadsPerAgentInput" min="1" max="10" value="2" style="width:68px; margin-left:6px;" />
+            <input type="number" id="leadsPerAgentInput" min="1" max="25" value="2" disabled style="width:68px; margin-left:6px; opacity:0.5;" />
           </label>
-          <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.86rem; cursor:pointer;">
-            <input type="checkbox" id="liveToggle" />
-            <span>Run Live Scouts</span>
+          <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.86rem; cursor:pointer; font-weight:700; color:var(--accent);">
+            <input type="checkbox" id="unconstrainedToggle" checked />
+            <span>All Found (No Cap)</span>
+          </label>
+          <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.86rem; cursor:pointer; font-weight:700; color:var(--teal);">
+            <input type="checkbox" id="liveToggle" checked />
+            <span>🌐 Live Web Search Agents (staging-simon-discovery-scout)</span>
           </label>
           <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.86rem; cursor:pointer;">
             <input type="checkbox" id="resetPrevToggle" checked />
@@ -1818,7 +1973,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
         </div>
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
           <div id="postDispatchLinks" style="display:none; gap:8px; flex-wrap:wrap; align-items:center;">
-            <a id="reviewFinalistsBtn" class="btn primary" href="/screen" style="display:none;">Review 16 Nationwide Finalists →</a>
+            <a id="reviewFinalistsBtn" class="btn primary" href="/screen" style="display:none;">Review Discovered Artists →</a>
             <a id="nextInvestigateBtn" class="btn primary" href="/investigate?autorun=1">Next: Investigate Discovered Leads →</a>
             <a id="followFieldNewsBtn" class="btn" href="/field-news">Follow in Field News →</a>
             <a id="openReportsBtn" class="btn" href="/reports">Open Scouting Reports →</a>
@@ -1828,6 +1983,27 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
           <button id="dispatchBtn" class="btn primary" type="button">Send Discovery Scouts</button>
         </div>
       </div>
+    </section>
+
+    <section id="liveStreamPanel" class="card" style="display:none; border-color:var(--teal);">
+      <div class="section-head">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <h2>🌐 Live Web Search Stream</h2>
+          <span id="liveStreamStatusPill" class="pill amber">Searching Web…</span>
+          <span id="liveStreamCounter" class="mono" style="font-weight:700; color:var(--text);">0 / 0 Scouts Finished · 0 Leads Streamed</span>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <button type="button" id="proceedPartialCascadeBtn" class="btn primary" style="display:none;">Proceed Now with Leads Found So Far →</button>
+          <a id="streamFieldNewsLink" class="btn" href="/field-news">Full Field News →</a>
+        </div>
+      </div>
+      <div id="liveLeadsStreamSection" style="display:none; margin-bottom:14px;">
+        <div style="font-size:0.8rem; font-weight:800; text-transform:uppercase; letter-spacing:0.05em; color:var(--teal); margin-bottom:8px;">
+          Streamed Artists Found on the Live Web (<span id="streamedLeadCountNum">0</span>)
+        </div>
+        <div id="liveLeadsStreamGrid" class="kv-grid"></div>
+      </div>
+      <div id="liveWorkersStreamGrid" class="worker-grid"></div>
     </section>
 
     <section class="card">
@@ -1919,17 +2095,38 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       return true;
     }}
 
+    function syncUnconstrainedUiState() {{
+      const unc = el('unconstrainedToggle') && el('unconstrainedToggle').checked;
+      const lInput = el('leadsPerAgentInput');
+      if (lInput) {{
+        lInput.disabled = Boolean(unc);
+        lInput.style.opacity = unc ? '0.45' : '1';
+      }}
+    }}
+
     function updateFleetScaleBanner(forceShow) {{
+      syncUnconstrainedUiState();
       const box = el('fleetScaleBanner');
       if (!box) return;
-      const scouts = Math.max(1, Math.min(Number(el('agentCountInput').value || 1), 12));
-      const perScout = Math.max(1, Math.min(Number(el('leadsPerAgentInput').value || 2), 10));
-      const candidates = scouts * perScout;
-      const stage2Tasks = candidates * 4;
-      const stage3Tasks = candidates * 3;
-      const totalInvocations = scouts + stage2Tasks + stage3Tasks;
-      const scoutLabel = scouts >= 8 ? `${{scouts}} Regional Discovery Scouts` : `${{scouts}} Discovery Scout${{scouts === 1 ? '' : 's'}}`;
-      box.innerHTML = `<strong>Fleet Scale Math:</strong> ${{scoutLabel}} → <strong>${{candidates}} Candidates</strong> × 4 Stage-2 Investigators (${{stage2Tasks}} tasks) → ${{candidates}} × 3 Stage-3 Critics/Judges (${{stage3Tasks}} tasks) + 1 Zero-Token <code>gemini-decision-1</code> Taste Engine pass = <strong>${{totalInvocations}} Total Agent Invocations</strong>`;
+      const scouts = Math.max(1, Math.min(Number(el('agentCountInput').value || 1), 100));
+      const perScout = Math.max(1, Math.min(Number(el('leadsPerAgentInput').value || 2), 25));
+      const unc = el('unconstrainedToggle') && el('unconstrainedToggle').checked;
+      const isLiveWeb = el('liveToggle') && el('liveToggle').checked;
+      const modeTag = isLiveWeb ? '🌐 Live Web Search' : '⚡ Instant Offline Simulation';
+
+      if (unc) {{
+        const srcCount = Math.max(1, selectedIds.size || scouts);
+        const estArtists = srcCount * 4;
+        const topDebates = Math.min(30, estArtists);
+        const totalRuns = scouts + estArtists + topDebates * 3;
+        box.innerHTML = `<strong>Option A Smart Funnel (${{modeTag}}):</strong> <strong>${{scouts}}</strong> Discovery Scout${{scouts === 1 ? '' : 's'}} across <strong>${{srcCount}}</strong> source(s) (No Cap) → <strong>~${{estArtists}}</strong> Artists Investigated (100% kept) → All <strong>~${{estArtists}}</strong> Scored by <code>gemini-decision-1</code> (0 output tokens) → <strong>Top ${{topDebates}}</strong> Full Neon Pros/Cons Debates (tail cards debate on 1 click) = <strong>~${{totalRuns}} Agent Runs!</strong>`;
+      }} else {{
+        const candidates = scouts * perScout;
+        const stage2Tasks = candidates * 4;
+        const stage3Tasks = candidates * 3;
+        const totalInvocations = scouts + stage2Tasks + stage3Tasks;
+        box.innerHTML = `<strong>Fleet Scale Math (${{modeTag}}):</strong> <strong>${{scouts}}</strong> Discovery Scout${{scouts === 1 ? '' : 's'}} × ${{perScout}} = <strong>${{candidates}} Candidates</strong> → ${{stage2Tasks}} Investigator Tasks → ${{stage3Tasks}} Critic/Judge Tasks + Zero-Token <code>gemini-decision-1</code> = <strong>${{totalInvocations}} Total Agent Runs</strong>`;
+      }}
       if (forceShow) box.style.display = 'block';
     }}
 
@@ -2007,7 +2204,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       if (selBtn) {{
         selBtn.onclick = () => {{
           added.forEach((s) => {{ if (s.source_id) selectedIds.add(s.source_id); }});
-          el('agentCountInput').value = Math.min(Math.max(1, selectedIds.size), 12);
+          el('agentCountInput').value = Math.min(Math.max(1, selectedIds.size), 100);
           updateFleetScaleBanner(false);
           renderSources();
           clearTimeout(timer);
@@ -2196,7 +2393,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
           const id = node.dataset.id;
           if (selectedIds.has(id)) selectedIds.delete(id);
           else selectedIds.add(id);
-          if (selectedIds.size > 0) el('agentCountInput').value = Math.min(selectedIds.size, 12);
+          if (selectedIds.size > 0) el('agentCountInput').value = Math.min(selectedIds.size, 100);
           updateFleetScaleBanner(false);
           renderSources();
         }};
@@ -2241,58 +2438,236 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       populateDropdownOptions();
     }}
 
+    let activeStreamTimer = null;
+    let activeStreamStartMs = 0;
+    let forceProceedCascade = false;
+
+    function stopLiveStreamPolling() {{
+      if (activeStreamTimer) {{
+        clearInterval(activeStreamTimer);
+        activeStreamTimer = null;
+      }}
+    }}
+
+    function renderLiveStreamState(batchData, reportsList, allowProceedBtn) {{
+      const panel = el('liveStreamPanel');
+      if (!panel || !batchData) return;
+      panel.style.display = 'block';
+      if (el('streamFieldNewsLink') && batchData.batch_id) {{
+        el('streamFieldNewsLink').href = `/field-news?batch=${{encodeURIComponent(batchData.batch_id)}}`;
+      }}
+
+      const workers = Array.isArray(batchData.workers) ? batchData.workers : [];
+      const repByReportId = new Map((reportsList || []).map((r) => [r.report_id, r]));
+      const terminalSet = new Set(['completed', 'failed', 'cancelled', 'incomplete', 'budget_exceeded', 'error']);
+      const doneCount = workers.filter((w) => terminalSet.has(String(w.status || ''))).length;
+      const elapsedSec = Math.max(1, Math.round((Date.now() - (activeStreamStartMs || Date.now())) / 1000));
+
+      // Collect all streamed leads so far across workers + reports
+      const streamedLeads = [];
+      const seenLeadKeys = new Set();
+      workers.forEach((w, idx) => {{
+        const outLeads = (w.output_json && Array.isArray(w.output_json.leads)) ? w.output_json.leads : [];
+        outLeads.forEach((ld) => {{
+          if (!ld || !ld.stage_name) return;
+          const k = ld.stage_name.toLowerCase();
+          if (seenLeadKeys.has(k)) return;
+          seenLeadKeys.add(k);
+          const seed0 = (Array.isArray(ld.seed_sources) && ld.seed_sources[0]) || {{}};
+          streamedLeads.push({{
+            stage_name: ld.stage_name,
+            url: seed0.url || '',
+            source_name: seed0.seed_query_or_venue_node || seed0.source_channel || `Scout ${{idx + 1}}`,
+            snippet: ld.context_snippet || '',
+            attribution: ld.attribution_status || 'uncertain',
+          }});
+        }});
+        const rep = repByReportId.get(w.report_id);
+        if (rep && Array.isArray(rep.findings)) {{
+          rep.findings.forEach((f) => {{
+            if (!f || !f.title) return;
+            const k = f.title.toLowerCase();
+            if (seenLeadKeys.has(k)) return;
+            seenLeadKeys.add(k);
+            streamedLeads.push({{
+              stage_name: f.title,
+              url: f.url || '',
+              source_name: f.source_name || f.source_channel || `Scout ${{idx + 1}}`,
+              snippet: f.summary || '',
+              attribution: f.attribution_status || 'uncertain',
+            }});
+          }});
+        }}
+      }});
+
+      const allFinished = workers.length > 0 && doneCount >= workers.length;
+      const statusPill = el('liveStreamStatusPill');
+      if (statusPill) {{
+        statusPill.className = 'pill ' + (allFinished ? 'ok' : 'amber');
+        statusPill.textContent = allFinished
+          ? (batchData.mode === 'live' ? '✓ Live Web Search Complete' : '✓ Preview Complete')
+          : (batchData.mode === 'live' ? '🔄 Searching Live Web…' : 'Running…');
+      }}
+      if (el('liveStreamCounter')) {{
+        el('liveStreamCounter').textContent =
+          `${{doneCount}} / ${{workers.length}} Scouts Finished · ${{streamedLeads.length}} Lead(s) Streamed So Far · Elapsed ${{elapsedSec}}s`;
+      }}
+
+      const proceedBtn = el('proceedPartialCascadeBtn');
+      if (proceedBtn) {{
+        if (allowProceedBtn && !allFinished && streamedLeads.length > 0) {{
+          proceedBtn.style.display = 'inline-flex';
+          proceedBtn.textContent = `Proceed Now with ${{streamedLeads.length}} Leads Found So Far →`;
+        }} else {{
+          proceedBtn.style.display = 'none';
+        }}
+      }}
+
+      const leadsSec = el('liveLeadsStreamSection');
+      const leadsGrid = el('liveLeadsStreamGrid');
+      if (leadsSec && leadsGrid) {{
+        if (streamedLeads.length > 0) {{
+          leadsSec.style.display = 'block';
+          if (el('streamedLeadCountNum')) el('streamedLeadCountNum').textContent = String(streamedLeads.length);
+          leadsGrid.innerHTML = streamedLeads.slice(0, 48).map((item) => `
+            <div class="kv-cell" style="border-color:rgba(45,212,191,0.35);">
+              <div style="display:flex; justify-content:space-between; gap:6px; align-items:center;">
+                <strong style="font-size:0.86rem;">${{esc(item.stage_name)}}</strong>
+                <span class="pill ${{item.attribution === 'verified' ? 'ok' : 'amber'}}">${{esc(item.attribution)}}</span>
+              </div>
+              <div class="mono" style="margin-top:3px;">${{esc(item.source_name)}}</div>
+              ${{item.url ? `<div style="margin-top:4px;"><a href="${{esc(item.url)}}" target="_blank" rel="noopener" style="font-size:0.76rem; font-weight:700;">Verify Web Link ↗</a></div>` : ''}}
+            </div>`).join('');
+        }} else {{
+          leadsSec.style.display = 'none';
+        }}
+      }}
+
+      const wGrid = el('liveWorkersStreamGrid');
+      if (wGrid) {{
+        wGrid.innerHTML = workers.map((w, idx) => {{
+          const st = String(w.status || 'in_progress');
+          const rep = repByReportId.get(w.report_id);
+          const assignedNames = (w.assigned_sources || []).map((s) => s.name).join(', ') || 'Assigned sources';
+          const steps = Array.isArray(w.steps) ? w.steps : [];
+          const lastStep = steps.length ? steps[steps.length - 1] : null;
+          const repSteps = (rep && Array.isArray(rep.steps)) ? rep.steps : [];
+          const lastRepStep = repSteps.length ? repSteps[repSteps.length - 1] : null;
+
+          let badgeCls = 'amber';
+          let statusLabel = '🔄 Searching Google & YouTube…';
+          if (st === 'completed') {{
+            badgeCls = 'ok';
+            statusLabel = `✅ Completed · ${{w.lead_count || 0}} artist(s)`;
+          }} else if (terminalSet.has(st)) {{
+            badgeCls = 'warn';
+            statusLabel = `⚠️ ${{formatLabel(st)}}`;
+          }} else if (steps.length > 0) {{
+            statusLabel = `🔄 Step ${{steps.length}} · Active Web Research`;
+          }}
+
+          const liveDetail = (lastRepStep && (lastRepStep.finding || lastRepStep.looking_at))
+            || (lastStep && lastStep.preview)
+            || 'Opening assigned venue/session pages and searching public web…';
+
+          return `
+            <div class="worker-card" style="padding:12px 14px; gap:7px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+                <strong>Discovery Scout ${{String(idx + 1).padStart(2, '0')}}</strong>
+                <span class="pill ${{badgeCls}}">${{esc(statusLabel)}}</span>
+              </div>
+              <div class="mono" style="font-size:0.75rem;">Sources: ${{esc(assignedNames)}}</div>
+              <div class="step-row" style="margin:0; font-size:0.8rem;">${{esc(String(liveDetail).slice(0, 220))}}</div>
+            </div>`;
+        }}).join('');
+      }}
+      return {{ allFinished, doneCount, totalCount: workers.length, streamedCount: streamedLeads.length }};
+    }}
+
+    async function pollBatchStreamOnce(batchId, allowProceedBtn) {{
+      const [bRes, fRes] = await Promise.all([
+        fetch(`/api/discovery/batches?batch_id=${{encodeURIComponent(batchId)}}&refresh=1`).catch(() => null),
+        fetch(`/api/field-news?batch_id=${{encodeURIComponent(batchId)}}&limit=100`).catch(() => null),
+      ]);
+      if (!bRes || !bRes.ok) return null;
+      const bData = await bRes.json();
+      const fData = (fRes && fRes.ok) ? await fRes.json() : {{ reports: [] }};
+      return renderLiveStreamState(bData, fData.reports || [], allowProceedBtn);
+    }}
+
+    function startBackgroundStreamPolling(batchId) {{
+      stopLiveStreamPolling();
+      activeStreamStartMs = Date.now();
+      pollBatchStreamOnce(batchId, false);
+      activeStreamTimer = setInterval(async () => {{
+        const state = await pollBatchStreamOnce(batchId, false);
+        if (state && state.allFinished) {{
+          stopLiveStreamPolling();
+          showBanner(`Live Web Search finished! ${{state.streamedCount}} artist(s) discovered across ${{state.totalCount}} scouts. Click "Next: Investigate Discovered Leads →" or run Cascade.`, 'info');
+        }}
+      }}, 2500);
+    }}
+
+    if (el('proceedPartialCascadeBtn')) {{
+      el('proceedPartialCascadeBtn').onclick = () => {{
+        forceProceedCascade = true;
+      }};
+    }}
+
     function applyAmericanIdolPreset() {{
       resetFilters();
       selectedIds.clear();
-      const regionSpecs = [
-        {{ city: 'New York', preferred: ['nyc_rockwood_music_hall', 'yt_sofar_sounds', 'nyc_babys_all_right'] }},
-        {{ city: 'Nashville', preferred: ['src_nashville_bluebird', 'src_nashville_wmot'] }},
-        {{ city: 'Atlanta', preferred: ['src_atlanta_eddies'] }},
-        {{ city: 'Austin', preferred: ['src_austin_kutx'] }},
-        {{ city: 'Chicago', preferred: ['yt_audiotree'] }},
-        {{ city: 'New Orleans', preferred: ['src_nola_wwoz'] }},
-        {{ city: 'Los Angeles', preferred: ['src_la_hotelcafe'] }},
-        {{ city: 'Seattle', preferred: ['yt_kexp_live', 'yt_tiny_desk_contest'] }},
-      ];
-      const byId = new Map(allSources.map((s) => [s.source_id, s]));
-      regionSpecs.forEach((spec) => {{
-        let picked = null;
-        for (const id of spec.preferred) {{
-          if (byId.has(id)) {{ picked = byId.get(id); break; }}
-        }}
-        if (!picked) {{
-          picked = allSources.find((s) => s.status === 'active' && s.location && s.location.city === spec.city && !selectedIds.has(s.source_id));
-        }}
-        if (picked) selectedIds.add(picked.source_id);
-      }});
+      allSources.filter((s) => s.status !== 'inactive').forEach((s) => selectedIds.add(s.source_id));
       baseBriefText = NATIONWIDE_BRIEF;
       el('briefInput').value = buildEnrichedBrief();
-      el('agentCountInput').value = 8;
-      el('leadsPerAgentInput').value = 2;
+      if (el('liveToggle')) el('liveToggle').checked = true;
+      if (el('unconstrainedToggle')) el('unconstrainedToggle').checked = true;
       if (el('resetPrevToggle')) el('resetPrevToggle').checked = true;
+      const isLive = el('liveToggle') && el('liveToggle').checked;
+      const targetScouts = isLive
+        ? Math.min(16, Math.max(12, Math.ceil(selectedIds.size / 3)))
+        : selectedIds.size;
+      el('agentCountInput').value = Math.max(1, targetScouts);
       updateFleetScaleBanner(true);
       renderSources();
-      showBanner('Loaded ★ American Idol · Nationwide Search across 8 US music regions (8 scouts × 2 leads = 16 regional finalists).', 'info');
+      showBanner(
+        `Loaded ★ American Idol · Uncapped Nationwide Search: ALL ${{selectedIds.size}} active sources selected · No Lead Cap · ${{el('agentCountInput').value}} parallel live web scouts ready!`,
+        'info'
+      );
     }}
 
     function applyFirstListenNycPreset() {{
       resetFilters();
       selectedIds.clear();
-      ['yt_sofar_sounds', 'nyc_babys_all_right', 'bc_brooklyn_soul_rnb'].forEach((id) => {{
+      const preferredNyc = [
+        'yt_sofar_sounds',
+        'nyc_babys_all_right',
+        'nyc_rockwood_music_hall',
+        'bc_brooklyn_soul_rnb',
+        'nyc_pianos_showroom',
+        'nyc_petes_candy_store',
+      ];
+      preferredNyc.forEach((id) => {{
         if (allSources.some((s) => s.source_id === id)) selectedIds.add(id);
       }});
-      if (selectedIds.size < 3) {{
-        allSources.filter((s) => s.status === 'active' && s.location && s.location.city === 'New York').slice(0, 3)
+      if (selectedIds.size < 6) {{
+        allSources
+          .filter((s) => s.status !== 'inactive' && matchesRegionBucket(s, 'nyc'))
+          .slice(0, 6)
           .forEach((s) => selectedIds.add(s.source_id));
       }}
-      baseBriefText = 'First Listen NYC: find unsigned Brooklyn and Lower Manhattan solo vocalists performing stripped-back live soul, R&B, or acoustic sets.';
+      baseBriefText = 'NYC Light Mode (Uncapped): search grassroots Brooklyn and Manhattan live rooms, Sofar sessions, and Bandcamp arrivals for every distinct unsigned solo vocalist performing live soul, R&B, indie, or acoustic sets.';
       el('briefInput').value = buildEnrichedBrief();
-      el('agentCountInput').value = 3;
-      el('leadsPerAgentInput').value = 2;
+      if (el('liveToggle')) el('liveToggle').checked = true;
+      if (el('unconstrainedToggle')) el('unconstrainedToggle').checked = true;
       if (el('resetPrevToggle')) el('resetPrevToggle').checked = true;
+      el('agentCountInput').value = 3;
       updateFleetScaleBanner(true);
       renderSources();
-      showBanner('Loaded First Listen NYC preset (3 local scouts × 2 leads = 6 NYC finalists).', 'info');
+      showBanner(
+        `Loaded 🗽 NYC Light Mode (Uncapped): ${{selectedIds.size}} NYC sources across 3 live web scouts · All Found (No Cap) · Start fresh enabled.`,
+        'info'
+      );
     }}
 
     function applyRadioLiveRoomsPreset() {{
@@ -2308,19 +2683,23 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       baseBriefText = 'Tiny Desk & Radio Live Rooms: find unsigned vocalists across public radio live sessions and Tiny Desk Contest entries with unedited single-mic phrasing.';
       el('briefInput').value = buildEnrichedBrief();
       el('agentCountInput').value = 4;
-      el('leadsPerAgentInput').value = 2;
+      if (el('liveToggle')) el('liveToggle').checked = true;
+      if (el('unconstrainedToggle')) el('unconstrainedToggle').checked = true;
       if (el('resetPrevToggle')) el('resetPrevToggle').checked = true;
       updateFleetScaleBanner(true);
       renderSources();
-      showBanner('Loaded Tiny Desk & Radio Live Rooms preset (4 national session scouts × 2 leads = 8 finalists).', 'info');
+      showBanner('Loaded Tiny Desk & Radio Live Rooms preset (4 live web scouts · Uncapped).', 'info');
     }}
 
     async function init() {{
       await reloadSourcesFromApi();
-      ['yt_sofar_sounds', 'nyc_babys_all_right', 'bc_brooklyn_soul_rnb'].forEach((id) => {{
+      ['yt_sofar_sounds', 'nyc_babys_all_right', 'nyc_rockwood_music_hall', 'bc_brooklyn_soul_rnb', 'nyc_pianos_showroom', 'nyc_petes_candy_store'].forEach((id) => {{
         if (allSources.some((s) => s.source_id === id)) selectedIds.add(id);
       }});
-      el('agentCountInput').value = Math.max(1, selectedIds.size);
+      if (selectedIds.size === 0) {{
+        allSources.slice(0, 3).forEach((s) => selectedIds.add(s.source_id));
+      }}
+      el('agentCountInput').value = Math.min(3, Math.max(1, selectedIds.size));
       updateFleetScaleBanner(false);
       renderSources();
 
@@ -2339,6 +2718,8 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
 
     el('agentCountInput').oninput = () => updateFleetScaleBanner(true);
     el('leadsPerAgentInput').oninput = () => updateFleetScaleBanner(true);
+    if (el('unconstrainedToggle')) el('unconstrainedToggle').onchange = () => updateFleetScaleBanner(true);
+    if (el('liveToggle')) el('liveToggle').onchange = () => updateFleetScaleBanner(true);
     el('briefInput').oninput = () => {{ baseBriefText = el('briefInput').value.replace(/\\s*\\[Focus:.*\\]$/, '').trim(); }};
 
     // Discovery Option chip handlers
@@ -2414,7 +2795,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
     }};
     el('selectFilteredBtn').onclick = () => {{
       currentFiltered.slice(0, visibleLimit).forEach((s) => selectedIds.add(s.source_id));
-      if (selectedIds.size > 0) el('agentCountInput').value = Math.min(selectedIds.size, 12);
+      if (selectedIds.size > 0) el('agentCountInput').value = Math.min(selectedIds.size, 100);
       updateFleetScaleBanner(false);
       renderSources();
     }};
@@ -2466,6 +2847,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
     }};
 
     el('clearOldRunsBtn').onclick = async () => {{
+      stopLiveStreamPolling();
       el('clearOldRunsBtn').disabled = true;
       showBanner('Archiving previous pipeline runs…', 'info');
       try {{
@@ -2478,6 +2860,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
         if (!res.ok) throw new Error(payload.error || 'Reset failed');
         if (el('postDispatchLinks')) el('postDispatchLinks').style.display = 'none';
         if (el('reviewFinalistsBtn')) el('reviewFinalistsBtn').style.display = 'none';
+        if (el('liveStreamPanel')) el('liveStreamPanel').style.display = 'none';
         showBanner(`Workspace cleared (${{payload.total_archived || 0}} old run(s) archived). Ready for a new Discovery run.`, 'info');
       }} catch (err) {{
         showBanner(err.message, 'err');
@@ -2488,7 +2871,10 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
 
     el('dispatchBtn').onclick = async () => {{
       if (selectedIds.size === 0) {{ showBanner('Select at least one source first.', 'err'); return; }}
-      showBanner('Sending discovery scouts…', 'info');
+      stopLiveStreamPolling();
+      const isLive = Boolean(el('liveToggle') && el('liveToggle').checked);
+      const isUnc = Boolean(el('unconstrainedToggle') && el('unconstrainedToggle').checked);
+      showBanner(isLive ? 'Launching live web search sandboxes on Gemini Managed Agents…' : 'Running fast simulated scouts…', 'info');
       el('dispatchBtn').disabled = true;
       try {{
         const res = await fetch('/api/discovery/dispatch', {{
@@ -2497,17 +2883,31 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
           body: JSON.stringify({{
             source_ids: Array.from(selectedIds),
             brief: el('briefInput').value,
-            agent_count: Number(el('agentCountInput').value || 1),
-            leads_per_agent: Number(el('leadsPerAgentInput').value || 2),
-            live: el('liveToggle').checked,
+            agent_count: Math.max(1, Math.min(Number(el('agentCountInput').value || 1), 100)),
+            leads_per_agent: Math.max(1, Math.min(Number(el('leadsPerAgentInput').value || 2), 25)),
+            unconstrained: isUnc,
+            live: isLive,
             reset_previous: el('resetPrevToggle') ? el('resetPrevToggle').checked : false,
           }}),
         }});
         const payload = await res.json();
         if (!res.ok) throw new Error(payload.error || 'Dispatch failed');
-        const modeLabel = payload.mode === 'live' ? 'live' : 'preview';
-        showBanner(`Sent ${{payload.agent_count}} scout(s) in ${{modeLabel}} mode. Click "Next: Investigate Discovered Leads →" to continue.`, 'info');
         syncBatchLinks(payload.batch_id);
+        if (payload.mode === 'live') {{
+          showBanner(
+            `Launched ${{payload.agent_count}} live web-searching scout(s) across ${{selectedIds.size}} source(s)! Streaming live steps & leads below…`,
+            'info'
+          );
+          startBackgroundStreamPolling(payload.batch_id);
+        }} else {{
+          activeStreamStartMs = Date.now();
+          renderLiveStreamState(payload, [], false);
+          const totalSimulated = (payload.workers || []).reduce((acc, w) => acc + (w.lead_count || 0), 0);
+          showBanner(
+            `Simulated ${{payload.agent_count}} scout(s) → ${{totalSimulated}} artist(s) ready. Click "Next: Investigate Discovered Leads →" to continue.`,
+            'info'
+          );
+        }}
       }} catch (err) {{
         showBanner(err.message, 'err');
       }} finally {{
@@ -2517,14 +2917,21 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
 
     el('cascadeBtn').onclick = async () => {{
       if (selectedIds.size === 0) {{ showBanner('Select at least one source first.', 'err'); return; }}
-      const scouts = Math.max(1, Math.min(Number(el('agentCountInput').value || 1), 12));
-      const perScout = Math.max(1, Math.min(Number(el('leadsPerAgentInput').value || 2), 10));
-      const expected = scouts * perScout;
+      stopLiveStreamPolling();
+      forceProceedCascade = false;
+      const scouts = Math.max(1, Math.min(Number(el('agentCountInput').value || 1), 100));
+      const perScout = Math.max(1, Math.min(Number(el('leadsPerAgentInput').value || 2), 25));
+      const isUnc = Boolean(el('unconstrainedToggle') && el('unconstrainedToggle').checked);
+      const isLive = Boolean(el('liveToggle') && el('liveToggle').checked);
       el('cascadeBtn').disabled = true;
       el('dispatchBtn').disabled = true;
       updateFleetScaleBanner(true);
       try {{
-        showBanner(`Step 1/4: ${{scouts}} Regional Scouts scanning ${{selectedIds.size}} source(s)…`, 'info');
+        showBanner(
+          `Step 1/4: Launching ${{scouts}} ${{isLive ? 'Live Web Search' : 'Simulated'}} Scout(s) across ${{selectedIds.size}} source(s)${{isUnc ? ' (All Found · No Cap)' : ''}}…`,
+          'info'
+        );
+        activeStreamStartMs = Date.now();
         const dRes = await fetch('/api/discovery/dispatch', {{
           method: 'POST',
           headers: {{ 'Content-Type': 'application/json' }},
@@ -2533,28 +2940,39 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
             brief: el('briefInput').value,
             agent_count: scouts,
             leads_per_agent: perScout,
-            live: el('liveToggle').checked,
+            unconstrained: isUnc,
+            live: isLive,
             reset_previous: el('resetPrevToggle') ? el('resetPrevToggle').checked : false,
           }}),
         }});
         const dData = await dRes.json();
         if (!dRes.ok) throw new Error(dData.error || 'Stage 1 Discovery failed');
         syncBatchLinks(dData.batch_id);
+        renderLiveStreamState(dData, [], true);
 
+        let discoveredSoFar = (dData.workers || []).reduce((acc, w) => acc + (w.lead_count || 0), 0);
         if (dData.mode === 'live') {{
-          for (let attempt = 0; attempt < 25; attempt++) {{
-            await new Promise((r) => setTimeout(r, 3000));
-            const pollRes = await fetch(`/api/discovery/batches/${{encodeURIComponent(dData.batch_id)}}`);
-            if (!pollRes.ok) break;
-            const pollData = await pollRes.json();
-            const workers = pollData.workers || [];
-            const done = workers.filter((w) => w.status === 'completed').length;
-            showBanner(`Step 1/4: Live Regional Scouts in motion (${{done}}/${{workers.length}} completed)…`, 'info');
-            if (workers.length && workers.every((w) => !['in_progress', 'starting', 'queued'].includes(w.status))) break;
+          // Stream live Managed Agent tool steps & leads every 2.5s until finished (or user clicks Proceed Now)
+          for (let attempt = 0; attempt < 240; attempt++) {{
+            if (forceProceedCascade) break;
+            await new Promise((r) => setTimeout(r, 2500));
+            if (forceProceedCascade) break;
+            const state = await pollBatchStreamOnce(dData.batch_id, true);
+            if (!state) break;
+            discoveredSoFar = state.streamedCount;
+            showBanner(
+              `Step 1/4: Live Web Scouts searching (${{state.doneCount}}/${{state.totalCount}} finished · ${{state.streamedCount}} live leads streamed)…`,
+              'info'
+            );
+            if (state.allFinished) break;
           }}
+          if (el('proceedPartialCascadeBtn')) el('proceedPartialCascadeBtn').style.display = 'none';
         }}
 
-        showBanner(`Step 2/4: Investigating ${{expected}} Regional Finalists (compiling 5-block factual dossiers)…`, 'info');
+        showBanner(
+          `Step 2/4: Investigating All ${{discoveredSoFar || 'Discovered'}} Found Artists (compiling 5-block factual dossiers · 0 dropped)…`,
+          'info'
+        );
         const iRes = await fetch('/api/investigate/run', {{
           method: 'POST',
           headers: {{ 'Content-Type': 'application/json' }},
@@ -2562,35 +2980,64 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
         }});
         const iData = await iRes.json();
         if (!iRes.ok) throw new Error(iData.error || 'Stage 2 Investigation failed');
-        const dossierCount = iData.count || expected;
+        const dossierCount = iData.count || discoveredSoFar;
 
-        showBanner(`Step 3/4: Advocate vs. Skeptic Screening across ${{dossierCount}} Finalists…`, 'info');
-        const sRes = await fetch('/api/screening/run', {{
-          method: 'POST',
-          headers: {{ 'Content-Type': 'application/json' }},
-          body: JSON.stringify({{ live: false }}),
-        }});
-        const sData = await sRes.json();
-        if (!sRes.ok) throw new Error(sData.error || 'Stage 3 Screening failed');
-        const packetCount = sData.count || dossierCount;
+        if (isUnc || dossierCount > 12) {{
+          const topTarget = Math.min(30, Math.max(1, dossierCount));
+          showBanner(
+            `Step 3/4 & 4/4: Scoring All ${{dossierCount}} with gemini-decision-1 Taste Policy (0 tok) + Running Top ${{topTarget}} Neon Pros/Cons Debates…`,
+            'info'
+          );
+          const oaRes = await fetch('/api/screening/option-a', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify({{ max_neon_debates: 30, live_taste: true, live_debates: false }}),
+          }});
+          const oaData = await oaRes.json();
+          if (!oaRes.ok) throw new Error(oaData.error || 'Option A Smart Funnel failed');
+          const totalKept = oaData.total_investigated || dossierCount;
+          const topDebated = oaData.debated_top_count || Math.min(30, totalKept);
+          const revBtn = el('reviewFinalistsBtn');
+          if (revBtn) {{
+            revBtn.textContent = `Review All ${{totalKept}} Discovered Artists (Top ${{topDebated}} Debated First) →`;
+            revBtn.style.display = 'inline-flex';
+          }}
+          if (el('postDispatchLinks')) el('postDispatchLinks').style.display = 'inline-flex';
+          showBanner(
+            `Option A Smart Funnel complete! ${{scouts}} Scouts → ${{totalKept}} Artists Investigated (100% kept) → All ${{totalKept}} Taste-Scored → Top ${{topDebated}} Neon Pros/Cons Debates ready!`,
+            'info'
+          );
+        }} else {{
+          showBanner(`Step 3/4: Advocate vs. Skeptic Screening across ${{dossierCount}} Finalists…`, 'info');
+          const sRes = await fetch('/api/screening/run', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify({{ live: false }}),
+          }});
+          const sData = await sRes.json();
+          if (!sRes.ok) throw new Error(sData.error || 'Stage 3 Screening failed');
+          const packetCount = sData.count || dossierCount;
 
-        showBanner(`Step 4/4: Live gemini-decision-1 Taste Engine scoring ${{packetCount}} Finalists…`, 'info');
-        const tRes = await fetch('/api/screening/taste-score', {{
-          method: 'POST',
-          headers: {{ 'Content-Type': 'application/json' }},
-          body: JSON.stringify({{ live: true }}),
-        }});
-        const tData = await tRes.json();
-        if (!tRes.ok) throw new Error(tData.error || 'Stage 4 Taste Engine scoring failed');
+          showBanner(`Step 4/4: Live gemini-decision-1 Taste Engine scoring ${{packetCount}} Finalists…`, 'info');
+          const tRes = await fetch('/api/screening/taste-score', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify({{ live: true }}),
+          }});
+          const tData = await tRes.json();
+          if (!tRes.ok) throw new Error(tData.error || 'Stage 4 Taste Engine scoring failed');
 
-        const revBtn = el('reviewFinalistsBtn');
-        if (revBtn) {{
-          const labelRegion = scouts >= 8 ? 'Nationwide' : 'Screened';
-          revBtn.textContent = `Review ${{packetCount}} ${{labelRegion}} Finalists →`;
-          revBtn.style.display = 'inline-flex';
+          const revBtn = el('reviewFinalistsBtn');
+          if (revBtn) {{
+            revBtn.textContent = `Review ${{packetCount}} Screened Finalists →`;
+            revBtn.style.display = 'inline-flex';
+          }}
+          if (el('postDispatchLinks')) el('postDispatchLinks').style.display = 'inline-flex';
+          showBanner(
+            `Full Pipeline Cascade complete! ${{scouts}} Scouts → ${{dossierCount}} Dossiers → ${{packetCount}} Screening Packets → ${{tData.count || packetCount}} Live Taste Scores ready.`,
+            'info'
+          );
         }}
-        if (el('postDispatchLinks')) el('postDispatchLinks').style.display = 'inline-flex';
-        showBanner(`Full Pipeline Cascade complete! ${{scouts}} Scouts → ${{dossierCount}} Dossiers → ${{packetCount}} Screening Packets → ${{tData.count || packetCount}} Live Taste Scores ready.`, 'info');
       }} catch (err) {{
         showBanner(err.message, 'err');
       }} finally {{

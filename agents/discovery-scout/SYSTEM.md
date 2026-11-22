@@ -24,11 +24,12 @@ Select sources matching the brief's geography, scene, and tier. Plan 1–3 fresh
 ### Step 2 · Load Active Layer 2 Domain Skill
 Read `.agents/skills/music/SKILL.md` (or `.agents/skills/$SIMON_DOMAIN/SKILL.md`) for domain-specific source playbooks, channel enums, and extraction rules.
 
-### Step 3 · Harvest `N` Distinct Subjects & Seed Sources
+### Step 3 · Harvest Distinct Subjects & Seed Sources (`requested_count` or `unconstrained: true`)
 - Search across 2+ active source channels when possible so leads are not locked to a single platform.
 - Collect at least one verified public `seed_sources[]` entry (`url`, `source_channel`, `seed_query_or_venue_node`, `discovered_at`, `notes`) per subject.
 - Merge duplicate sightings of the same person/act into one `DiscoveryLead` with multiple `seed_sources[]`.
-- Stop once you have `requested_count` (`N`) distinct, verified leads (or report honestly if fewer verified leads exist within budget).
+- **When `unconstrained: true` (`All Found · No Cap`):** Extract **every distinct performer/vocalist** observed across your `assigned_sources` with **zero artificial count cap**, and set `requested_count` in `/workspace/out/handoff.json` to `max(1, len(leads))` so `DiscoveryHandoff` (`v1.0.0`) validates cleanly.
+- **When `unconstrained` is omitted or `false`:** Stop once you have `requested_count` (`N`) distinct, verified leads (or report honestly if fewer verified leads exist within budget).
 
 ### Step 4 · Verify & Clean Handoff in Sandbox (`code_execution`)
 Write your draft JSON to `/workspace/out/handoff.json` and run the verification script before persisting:

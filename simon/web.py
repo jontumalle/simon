@@ -73,6 +73,7 @@ from .source_hunter import (
 from .scout import DEFAULT_TASTE_BRIEF, load_dotenv_if_present, run_scout
 from .screening import (
     compile_judging_model,
+    evaluate_taste_engine_batch,
     evaluate_with_taste_engine,
     list_judging_models,
     list_screening_deck,
@@ -80,6 +81,7 @@ from .screening import (
     list_screening_labels,
     list_taste_scores,
     render_fallback_screening_html,
+    run_option_a_funnel,
     run_screening_batch,
     run_screening_evals,
     save_screening_label,
@@ -307,7 +309,7 @@ def dispatch_http_request(
 
         if parsed.path == "/api/screening/packets":
             qs = parse_qs(parsed.query)
-            limit = int((qs.get("limit") or ["100"])[0])
+            limit = int((qs.get("limit") or ["500"])[0])
             verdict_filter = (qs.get("verdict") or [None])[0]
             deck = list_screening_deck(store, limit=limit, verdict_filter=verdict_filter)
             return (
@@ -344,7 +346,7 @@ def dispatch_http_request(
         if parsed.path in ("/api/screening/taste-scores", "/api/screening/taste-score"):
             qs = parse_qs(parsed.query)
             lead_id = (qs.get("lead_id") or [None])[0]
-            limit = int((qs.get("limit") or ["100"])[0])
+            limit = int((qs.get("limit") or ["500"])[0])
             scores = list_taste_scores(store, lead_id=lead_id, limit=limit)
             return (
                 HTTPStatus.OK,
@@ -417,7 +419,7 @@ def dispatch_http_request(
             dossiers = list_investigator_dossiers(
                 store,
                 lead_id=(qs.get("lead_id") or [None])[0],
-                limit=int((qs.get("limit") or ["50"])[0]),
+                limit=int((qs.get("limit") or ["500"])[0]),
             )
             return (
                 HTTPStatus.OK,
@@ -429,7 +431,7 @@ def dispatch_http_request(
             qs = parse_qs(parsed.query)
             leads = list_discovery_leads(
                 store,
-                limit=int((qs.get("limit") or ["100"])[0]),
+                limit=int((qs.get("limit") or ["500"])[0]),
             )
             return (
                 HTTPStatus.OK,
@@ -482,6 +484,30 @@ def dispatch_http_request(
 
         if parsed.path == "/api/discovery/batches":
             qs = parse_qs(parsed.query)
+            single_batch_id = (qs.get("batch_id") or [None])[0]
+            if single_batch_id:
+                load_dotenv_if_present()
+                wait_flag = (qs.get("wait") or ["0"])[0].lower() in ("1", "true", "yes")
+                since_steps = int((qs.get("since_steps") or ["-1"])[0])
+                timeout_s = min(25.0, max(1.0, float((qs.get("timeout") or ["15"])[0])))
+                batch = refresh_discovery_batch(
+                    store,
+                    str(single_batch_id).strip(),
+                    wait=wait_flag,
+                    since_steps=since_steps,
+                    timeout_s=timeout_s,
+                )
+                if batch is None:
+                    return (
+                        HTTPStatus.NOT_FOUND,
+                        "application/json; charset=utf-8",
+                        json.dumps({"error": "Discovery batch not found."}).encode("utf-8"),
+                    )
+                return (
+                    HTTPStatus.OK,
+                    "application/json; charset=utf-8",
+                    json.dumps(batch, ensure_ascii=False).encode("utf-8"),
+                )
             limit = int((qs.get("limit") or ["20"])[0])
             return (
                 HTTPStatus.OK,
@@ -556,7 +582,7 @@ def dispatch_http_request(
             city = (qs.get("city") or [None])[0]
             tier = (qs.get("tier") or [None])[0]
             status_f = (qs.get("status") or [None])[0]
-            limit = int((qs.get("limit") or ["100"])[0])
+            limit = int((qs.get("limit") or ["200"])[0])
             registry = load_source_registry(store)
             sources = registry["sources"]
             if ch:
@@ -664,6 +690,42 @@ def dispatch_http_request(
             HTTPStatus.NOT_FOUND,
             "application/json; charset=utf-8",
             json.dumps({"error": "Not found."}).encode("utf-8"),
+        )
+
+    if method == "POST" and parsed.path == "/api/screening/option-a":
+        try:
+            req = json.loads((raw_body or b"{}").decode("utf-8"))
+        except ValueError:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": "Invalid JSON request body."}).encode("utf-8"),
+            )
+        max_neon_debates = int(req.get("max_neon_debates") or 30)
+        live_debates = bool(req.get("live_debates", False))
+        live_taste = bool(req.get("live_taste", True))
+        api_key = str(req.get("api_key") or "").strip() or None
+        prefix = str(req.get("prefix") or "").strip() or None
+        load_dotenv_if_present()
+        try:
+            funnel_res = run_option_a_funnel(
+                store=store,
+                max_neon_debates=max_neon_debates,
+                live_debates=live_debates,
+                live_taste=live_taste,
+                api_key=api_key,
+                prefix=prefix,
+            )
+        except (ValueError, RuntimeError, OSError) as exc:
+            return (
+                HTTPStatus.BAD_REQUEST,
+                "application/json; charset=utf-8",
+                json.dumps({"error": str(exc)}).encode("utf-8"),
+            )
+        return (
+            HTTPStatus.OK,
+            "application/json; charset=utf-8",
+            json.dumps(funnel_res, ensure_ascii=False).encode("utf-8"),
         )
 
     if method == "POST" and parsed.path == "/api/screening/run":
@@ -798,11 +860,13 @@ def dispatch_http_request(
                     "application/json; charset=utf-8",
                     json.dumps(out, ensure_ascii=False).encode("utf-8"),
                 )
-            deck = list_screening_deck(store, limit=50)
-            results = [
-                evaluate_with_taste_engine(store, pkt["lead_id"], live=live, api_key=api_key)
-                for pkt in (deck.get("packets") or [])
-            ]
+            max_live_calls = int(req.get("max_live_calls") or 30)
+            results = evaluate_taste_engine_batch(
+                store,
+                live=live,
+                api_key=api_key,
+                max_live_calls=max_live_calls,
+            )
             return (
                 HTTPStatus.OK,
                 "application/json; charset=utf-8",
@@ -1107,6 +1171,7 @@ def dispatch_http_request(
         brief = str(req.get("brief") or "").strip()
         leads_per_agent = int(req.get("leads_per_agent") or 2)
         agent_count = int(req.get("agent_count") or len(source_ids))
+        unconstrained = bool(req.get("unconstrained", False))
         live = bool(req.get("live", False))
         reset_previous = bool(req.get("reset_previous", False))
         api_key = str(req.get("api_key") or "").strip() or None
@@ -1122,6 +1187,7 @@ def dispatch_http_request(
                 agent_count=agent_count,
                 live=live,
                 api_key=api_key,
+                unconstrained=unconstrained,
             )
         except (ValueError, RuntimeError, OSError) as exc:
             return (

@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import re
+import time
 from typing import Any, Dict, List, Optional, Tuple
 import urllib.error
 import urllib.request
@@ -24,6 +25,7 @@ from .db_tools import (
     list_agent_documents,
     sanitize_agent_report,
     save_agent_document,
+    save_agent_documents_batch,
 )
 from .gemini import Gemini, extract_json_object
 from .youtube import extract_video_id
@@ -1115,6 +1117,8 @@ def run_screening_for_dossier(
         "artist_snapshot": snapshot,
         "input_skills_used": list(baseline["input_skills_used"]),
         "mode": mode,
+        "debate_mode": "live_neon" if mode == "live" else "full_pros_cons",
+        "status": "complete",
         "archived": False,
         "screened_at": _utc_now_iso(),
     }
@@ -1294,6 +1298,9 @@ def _normalize_screening_packet(raw_pkt: Dict[str, Any]) -> Dict[str, Any]:
     if snapshot is not None:
         clean["artist_snapshot"] = snapshot
     clean["input_skills_used"] = [RUBRIC_META[k]["skill"] for k in RUBRIC_ORDER]
+    is_on_demand = clean.get("debate_mode") == "on_demand" or clean.get("status") == "tail_on_demand"
+    clean["debate_mode"] = str(clean.get("debate_mode") or ("on_demand" if is_on_demand else "full_pros_cons"))
+    clean["status"] = str(clean.get("status") or ("tail_on_demand" if is_on_demand else "complete"))
     clean.setdefault("screened_at", _utc_now_iso())
     return clean
 
@@ -1622,9 +1629,9 @@ def _seed_demo_packets_into_store(store: Any) -> List[Dict[str, Any]]:
 def list_screening_labels(
     store: Any,
     lead_id: Optional[str] = None,
-    limit: int = 100,
+    limit: int = 500,
 ) -> List[Dict[str, Any]]:
-    rows = list_agent_documents(store, "screening_labels", limit=max(1, min(limit, 100)))
+    rows = list_agent_documents(store, "screening_labels", limit=max(1, min(limit, 1000)))
     labels: List[Dict[str, Any]] = []
     for row in rows:
         doc = _unwrap_doc(row)
@@ -1642,12 +1649,13 @@ def list_screening_labels(
 
 def list_screening_deck(
     store: Any,
-    limit: int = 100,
+    limit: int = 500,
     verdict_filter: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Load Stage 3 Screening Deck, auto-screening unscreened dossiers or seeding demo candidates if empty."""
+    fetch_cap = max(200, min(int(limit), 1000))
     packets_by_lead: Dict[str, Dict[str, Any]] = {}
-    for row in list_agent_documents(store, "screening_packets", limit=100):
+    for row in list_agent_documents(store, "screening_packets", limit=fetch_cap):
         doc = _unwrap_doc(row)
         if not isinstance(doc, dict) or not doc.get("lead_id") or bool(doc.get("archived", False)):
             continue
@@ -1657,14 +1665,63 @@ def list_screening_deck(
             packets_by_lead[lead_key] = clean
 
     # Check Stage 2 investigator_dossiers and auto-generate baseline ScreeningPackets for unscreened leads
-    for row in list_agent_documents(store, "investigator_dossiers", limit=100):
+    unscreened_dossiers: List[Dict[str, Any]] = []
+    for row in list_agent_documents(store, "investigator_dossiers", limit=fetch_cap):
         dossier = _unwrap_doc(row)
         if not isinstance(dossier, dict) or not dossier.get("lead_id") or bool(dossier.get("archived", False)):
             continue
         lead_key = str(dossier["lead_id"])
         if lead_key not in packets_by_lead:
-            generated = run_screening_for_dossier(store, dossier, live=False)
-            packets_by_lead[lead_key] = generated
+            unscreened_dossiers.append(dossier)
+
+    if unscreened_dossiers:
+        active_policy = _get_active_judging_policy(store)
+        auto_batch: List[Tuple[str, Dict[str, Any], Optional[str]]] = []
+        for dossier in unscreened_dossiers:
+            clean_dossier = sanitize_agent_report(dossier)
+            baseline = score_dossier_inputs(clean_dossier)
+            lid = baseline["lead_id"]
+            sname = baseline["stage_name"]
+            pkt_id = str(clean_dossier.get("packet_id") or f"scr_{lid}")
+            snap = _build_artist_snapshot(clean_dossier, sname)
+            det_adv, det_skp, det_judge = _deterministic_cases_and_decision(baseline, snap, active_policy)
+            pkt = _normalize_screening_packet(
+                {
+                    "contract_version": "1.0.0",
+                    "packet_id": pkt_id,
+                    "lead_id": lid,
+                    "dossier_id": str(clean_dossier.get("dossier_id") or clean_dossier.get("_doc_id") or lid),
+                    "stage_name": sname,
+                    "screening_model": "gemini-4-neon",
+                    "verdict": det_judge["verdict"],
+                    "confidence": det_judge["confidence"],
+                    "headline": det_judge["headline"],
+                    "next_action": det_judge["next_action"],
+                    "total_score": baseline["total_score"],
+                    "max_score": 10,
+                    "rubric_scores": baseline["rubric_scores"],
+                    "rubric_breakdown": baseline["rubric_breakdown"],
+                    "pros": baseline["pros"][:6],
+                    "cons": baseline["cons"][:6],
+                    "missing_evidence_flags": baseline["missing_evidence_flags"],
+                    "advocate_case": det_adv,
+                    "skeptic_case": det_skp,
+                    "judge_decision": det_judge,
+                    "dossier_snapshot": clean_dossier,
+                    "artist_snapshot": snap,
+                    "input_skills_used": list(baseline["input_skills_used"]),
+                    "mode": "deterministic_baseline",
+                    "debate_mode": "full_pros_cons",
+                    "status": "complete",
+                    "archived": False,
+                    "screened_at": _utc_now_iso(),
+                }
+            )
+            pkt["archived"] = False
+            packets_by_lead[lid] = pkt
+            auto_batch.append(("screening_packets", pkt, pkt_id))
+        if store is not None and auto_batch:
+            save_agent_documents_batch(store, auto_batch)
 
     # Seed rich demo candidates when both collections are empty
     if not packets_by_lead:
@@ -1673,7 +1730,7 @@ def list_screening_deck(
 
     # Join latest human review from screening_labels onto each packet
     latest_label_by_lead: Dict[str, Dict[str, Any]] = {}
-    for lbl in list_screening_labels(store, limit=100):
+    for lbl in list_screening_labels(store, limit=fetch_cap):
         lid = str(lbl.get("lead_id") or "")
         if lid and lid not in latest_label_by_lead:
             latest_label_by_lead[lid] = {
@@ -1686,7 +1743,7 @@ def list_screening_deck(
 
     # Join latest calibrated taste_score from taste_scores onto each packet
     latest_taste_by_lead: Dict[str, Dict[str, Any]] = {}
-    for ts_doc in list_taste_scores(store, limit=100):
+    for ts_doc in list_taste_scores(store, limit=fetch_cap):
         lid = str(ts_doc.get("lead_id") or "")
         if lid and lid not in latest_taste_by_lead:
             latest_taste_by_lead[lid] = ts_doc
@@ -1702,6 +1759,8 @@ def list_screening_deck(
         key=lambda p: (
             VERDICT_SORT_RANK.get(str((p.get("judge_decision") or {}).get("verdict") or "watch"), 9),
             -int(p.get("total_score") or 0),
+            -float((p.get("latest_taste_score") or {}).get("p_elevate") or 0.0),
+            0 if p.get("debate_mode") != "on_demand" else 1,
             str(p.get("stage_name") or ""),
         )
     )
@@ -1709,13 +1768,17 @@ def list_screening_deck(
     elevate_count = sum(1 for p in all_packets if (p.get("judge_decision") or {}).get("verdict") == "elevate")
     watch_count = sum(1 for p in all_packets if (p.get("judge_decision") or {}).get("verdict") == "watch")
     pass_count = sum(1 for p in all_packets if (p.get("judge_decision") or {}).get("verdict") == "pass")
+    debated_count = sum(1 for p in all_packets if p.get("debate_mode") != "on_demand")
+    tail_on_demand_count = sum(1 for p in all_packets if p.get("debate_mode") == "on_demand")
     human_labeled_count = sum(1 for p in all_packets if p.get("human_review") is not None)
 
     filtered = all_packets
     if verdict_filter and verdict_filter.lower() in VALID_SCREENING_VERDICTS:
         vf = verdict_filter.lower()
         filtered = [p for p in all_packets if (p.get("judge_decision") or {}).get("verdict") == vf]
-    filtered = filtered[: max(1, min(int(limit), 100))]
+    elif verdict_filter and verdict_filter.lower() == "debated":
+        filtered = [p for p in all_packets if p.get("debate_mode") != "on_demand"]
+    filtered = filtered[: max(1, min(int(limit), 1000))]
 
     active_policy = _get_active_judging_policy(store)
     summary = {
@@ -1723,6 +1786,8 @@ def list_screening_deck(
         "elevate_count": elevate_count,
         "watch_count": watch_count,
         "pass_count": pass_count,
+        "debated_count": debated_count,
+        "tail_on_demand_count": tail_on_demand_count,
         "human_labeled_count": human_labeled_count,
         "active_policy_id": (active_policy or {}).get("policy_id"),
     }
@@ -1732,6 +1797,8 @@ def list_screening_deck(
         "elevate_count": elevate_count,
         "watch_count": watch_count,
         "pass_count": pass_count,
+        "debated_count": debated_count,
+        "tail_on_demand_count": tail_on_demand_count,
         "human_labeled_count": human_labeled_count,
         "active_policy": active_policy,
         "summary": summary,
@@ -1757,7 +1824,7 @@ def run_screening_batch(
         ]
 
     dossiers_by_lead: Dict[str, Dict[str, Any]] = {}
-    for row in list_agent_documents(store, "investigator_dossiers", limit=100):
+    for row in list_agent_documents(store, "investigator_dossiers", limit=1000):
         doc = _unwrap_doc(row)
         if isinstance(doc, dict) and doc.get("lead_id") and not bool(doc.get("archived", False)):
             dossiers_by_lead[str(doc["lead_id"])] = doc
@@ -1836,11 +1903,63 @@ def run_screening_batch(
     # Batch screen unscreened dossiers (or all dossiers if already screened, or demo dossiers if DB empty)
     existing_leads = {
         str((_unwrap_doc(r) or {}).get("lead_id"))
-        for r in list_agent_documents(store, "screening_packets", limit=100)
+        for r in list_agent_documents(store, "screening_packets", limit=1000)
         if (_unwrap_doc(r) or {}).get("lead_id") and not bool((_unwrap_doc(r) or {}).get("archived", False))
     }
     unscreened = [d for lid, d in dossiers_by_lead.items() if lid not in existing_leads]
     targets = unscreened or list(dossiers_by_lead.values()) or build_builtin_demo_dossiers()
+    if not live and len(targets) > 20:
+        # Fast batch persistence when screening 20..300+ dossiers deterministically
+        active_policy = _get_active_judging_policy(store)
+        out_packets: List[Dict[str, Any]] = []
+        batch_writes: List[Tuple[str, Dict[str, Any], Optional[str]]] = []
+        for d in targets:
+            clean_dossier = sanitize_agent_report(d)
+            baseline = score_dossier_inputs(clean_dossier)
+            lid = baseline["lead_id"]
+            sname = baseline["stage_name"]
+            pkt_id = str(clean_dossier.get("packet_id") or f"scr_{lid}")
+            snap = _build_artist_snapshot(clean_dossier, sname)
+            det_adv, det_skp, det_judge = _deterministic_cases_and_decision(baseline, snap, active_policy)
+            pkt = _normalize_screening_packet(
+                {
+                    "contract_version": "1.0.0",
+                    "packet_id": pkt_id,
+                    "lead_id": lid,
+                    "dossier_id": str(clean_dossier.get("dossier_id") or clean_dossier.get("_doc_id") or lid),
+                    "stage_name": sname,
+                    "screening_model": "gemini-4-neon",
+                    "verdict": det_judge["verdict"],
+                    "confidence": det_judge["confidence"],
+                    "headline": det_judge["headline"],
+                    "next_action": det_judge["next_action"],
+                    "total_score": baseline["total_score"],
+                    "max_score": 10,
+                    "rubric_scores": baseline["rubric_scores"],
+                    "rubric_breakdown": baseline["rubric_breakdown"],
+                    "pros": baseline["pros"][:6],
+                    "cons": baseline["cons"][:6],
+                    "missing_evidence_flags": baseline["missing_evidence_flags"],
+                    "advocate_case": det_adv,
+                    "skeptic_case": det_skp,
+                    "judge_decision": det_judge,
+                    "dossier_snapshot": clean_dossier,
+                    "artist_snapshot": snap,
+                    "input_skills_used": list(baseline["input_skills_used"]),
+                    "mode": "deterministic_baseline",
+                    "debate_mode": "full_pros_cons",
+                    "status": "complete",
+                    "archived": False,
+                    "screened_at": _utc_now_iso(),
+                }
+            )
+            pkt["archived"] = False
+            out_packets.append(pkt)
+            batch_writes.append(("screening_packets", pkt, pkt_id))
+        if store is not None and batch_writes:
+            save_agent_documents_batch(store, batch_writes)
+        return out_packets
+
     return [
         run_screening_for_dossier(
             store, d, live=live, api_key=api_key, prefix=prefix, gemini=gemini
@@ -1866,7 +1985,7 @@ def _find_packet_for_label(store: Any, lead_id: str, packet_id: Optional[str] = 
         if isinstance(unwrapped, dict) and unwrapped.get("lead_id"):
             return _normalize_screening_packet(unwrapped)
 
-    for row in list_agent_documents(store, "screening_packets", limit=100):
+    for row in list_agent_documents(store, "screening_packets", limit=1000):
         doc = _unwrap_doc(row)
         if not isinstance(doc, dict):
             continue
@@ -2337,12 +2456,12 @@ def compile_judging_model(store: Any) -> Dict[str, Any]:
 def list_taste_scores(
     store: Any,
     lead_id: Optional[str] = None,
-    limit: int = 100,
+    limit: int = 500,
 ) -> List[Dict[str, Any]]:
     """List saved `gemini-decision-1` calibrated taste scores from `taste_scores`."""
     if store is None:
         return []
-    rows = list_agent_documents(store, "taste_scores", limit=max(1, min(limit, 100)))
+    rows = list_agent_documents(store, "taste_scores", limit=max(1, min(limit, 1000)))
     items: List[Dict[str, Any]] = []
     for row in rows:
         doc = _unwrap_doc(row)
@@ -2378,7 +2497,7 @@ def _resolve_dossier_and_packet(
     if store is not None:
         pkt = _find_packet_for_label(store, lead_id=target_id, packet_id=target_id)
         if pkt is None:
-            deck = list_screening_deck(store, limit=100)
+            deck = list_screening_deck(store, limit=500)
             for cand in deck.get("packets") or []:
                 if cand.get("lead_id") == target_id or cand.get("packet_id") == target_id:
                     pkt = cand
@@ -2387,7 +2506,7 @@ def _resolve_dossier_and_packet(
             norm = _normalize_screening_packet(pkt)
             return dict(norm.get("dossier_snapshot") or {}), norm
 
-        for row in list_agent_documents(store, "investigator_dossiers", limit=100):
+        for row in list_agent_documents(store, "investigator_dossiers", limit=1000):
             doc = _unwrap_doc(row)
             if isinstance(doc, dict) and (doc.get("lead_id") == target_id or doc.get("dossier_id") == target_id):
                 return sanitize_agent_report(dict(doc)), None
@@ -2673,6 +2792,530 @@ def evaluate_with_taste_engine(
     if store is not None:
         save_agent_document(store, "taste_scores", clean_taste, doc_id=taste_score_id)
     return clean_taste
+
+
+def _build_taste_score_doc_without_save(
+    dossier: Dict[str, Any],
+    packet: Optional[Dict[str, Any]],
+    baseline: Dict[str, Any],
+    policy: Dict[str, Any],
+    questions_payload: Dict[str, Any],
+    live: bool,
+    resolved_key: Optional[str],
+    timeout_s: float = 12.0,
+) -> Dict[str, Any]:
+    """Evaluate a single candidate against `gemini-decision-1` (or calibrated policy math) without immediate DB I/O."""
+    lead_id = str((packet or {}).get("lead_id") or baseline["lead_id"])
+    stage_name = str((packet or {}).get("stage_name") or baseline["stage_name"])
+    policy_id = str(policy.get("policy_id") or "policy_v1")
+
+    mode = "offline_calibrated_fallback"
+    input_tokens = 0
+    output_tokens = 0
+    answers: Optional[Dict[str, Any]] = None
+
+    if live and resolved_key:
+        input_text = _format_taste_engine_input(dossier, packet, baseline, policy)
+        req_body = {
+            "model": "gemini-decision-1",
+            "input": input_text,
+            "questions": questions_payload,
+        }
+        url = "https://generativelanguage.googleapis.com/v1beta/decisions"
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(req_body).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": resolved_key,
+                "Api-Revision": "2026-05-20",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+                resp_json = json.loads(resp.read().decode("utf-8"))
+            answers = resp_json.get("answers") or {}
+            usage = resp_json.get("usage") or {}
+            input_tokens = int(usage.get("total_input_tokens") or usage.get("input_tokens") or 0)
+            output_tokens = int(usage.get("total_output_tokens") or usage.get("output_tokens") or 0)
+            mode = "live_gemini_decision_1"
+        except Exception:
+            answers = None
+
+    if answers is None:
+        answers = _offline_calibrated_taste_answers(baseline, policy)
+        # Add deterministic fine-grained tie-breaker from reach/comments so large fleets rank smoothly
+        reach = (dossier.get("public_footprint") or {}).get("public_reach") or {}
+        top_views = int(reach.get("top_video_views") or 0)
+        micro_boost = min(0.035, (top_views % 10000) / 300000.0)
+        probs_raw = answers["taste_verdict"]["probabilities"]
+        p_e = round(min(0.97, probs_raw["elevate"] + micro_boost), 4)
+        p_w = round(max(0.02, probs_raw["watch"] - micro_boost * 0.5), 4)
+        p_p = round(max(0.01, 1.0 - p_e - p_w), 4)
+        answers["taste_verdict"]["probabilities"] = {"elevate": p_e, "watch": p_w, "pass": p_p}
+        answers["taste_verdict"]["confidence"] = round(max(p_e, p_w, p_p), 4)
+
+    tv_ans = answers.get("taste_verdict") or answers.get("screening_verdict") or {}
+    raw_choice = str(tv_ans.get("choice") or "watch").strip().lower()
+    taste_verdict = raw_choice if raw_choice in VALID_SCREENING_VERDICTS else "watch"
+    raw_probs = tv_ans.get("probabilities") or {}
+    probabilities = {
+        "elevate": round(float(raw_probs.get("elevate", 0.0)), 4),
+        "watch": round(float(raw_probs.get("watch", 0.0)), 4),
+        "pass": round(float(raw_probs.get("pass", 0.0)), 4),
+    }
+    confidence = round(float(tv_ans.get("confidence", max(probabilities.values() or [0.5]))), 4)
+
+    ls_ans = answers.get("live_signable") or {}
+    live_signable_prob = round(float(ls_ans.get("noul", 0.5)), 4)
+    live_signable_conf = round(float(ls_ans.get("confidence", max(live_signable_prob, 1.0 - live_signable_prob))), 4)
+
+    cf_ans = answers.get("composite_fit") or {}
+    composite_fit_score = round(float(cf_ans.get("score", 2.0)), 3)
+    composite_fit_conf = round(float(cf_ans.get("confidence", confidence)), 4)
+
+    rubric_expected_scores: Dict[str, float] = {}
+    for r_key in RUBRIC_ORDER:
+        r_ans = answers.get(r_key)
+        if isinstance(r_ans, dict) and r_ans.get("score") is not None:
+            rubric_expected_scores[r_key] = round(float(r_ans["score"]), 3)
+
+    return sanitize_agent_report(
+        {
+            "contract_version": "1.0.0",
+            "taste_score_id": f"taste_{lead_id}",
+            "lead_id": lead_id,
+            "packet_id": str((packet or {}).get("packet_id") or f"scr_{lead_id}"),
+            "stage_name": stage_name,
+            "model": "gemini-decision-1",
+            "api_revision": "2026-05-20",
+            "policy_id": policy_id,
+            "policy_version": policy.get("version", 1),
+            "mode": mode,
+            "taste_verdict": taste_verdict,
+            "confidence": confidence,
+            "probabilities": probabilities,
+            "p_elevate": probabilities["elevate"],
+            "p_watch": probabilities["watch"],
+            "p_pass": probabilities["pass"],
+            "live_signable": {
+                "noul": live_signable_prob,
+                "confidence": live_signable_conf,
+            },
+            "composite_fit": {
+                "score": composite_fit_score,
+                "max_score": 4,
+                "confidence": composite_fit_conf,
+            },
+            "rubric_expected_scores": rubric_expected_scores,
+            "usage": {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+            },
+            "archived": False,
+            "evaluated_at": _utc_now_iso(),
+        }
+    )
+
+
+def evaluate_taste_engine_batch(
+    store: Any,
+    live: bool = True,
+    api_key: Optional[str] = None,
+    max_live_calls: int = 30,
+) -> List[Dict[str, Any]]:
+    """Batch-score all active Screening Deck candidates concurrently with `gemini-decision-1`."""
+    deck = list_screening_deck(store, limit=500)
+    packets = deck.get("packets") or []
+    if not packets:
+        return []
+
+    policy = _get_active_judging_policy(store)
+    if policy is None and store is not None:
+        policy = compile_judging_model(store)
+    if policy is None:
+        policy = {
+            "policy_id": "policy_v1",
+            "version": 1,
+            "thresholds": {"elevate_min_score": 7, "watch_min_score": 4},
+            "questions_config": _build_decision_questions_config(
+                {"elevate": [], "watch": [], "pass": []}, 7, 4
+            ),
+            "demos": [],
+        }
+
+    raw_qcfg = dict(policy.get("questions_config") or {})
+    default_qcfg = _build_decision_questions_config(
+        policy.get("override_notes") or {"elevate": [], "watch": [], "pass": []},
+        int((policy.get("thresholds") or {}).get("elevate_min_score", 7)),
+        int((policy.get("thresholds") or {}).get("watch_min_score", 4)),
+    )
+    questions_payload: Dict[str, Any] = {
+        "live_signable": raw_qcfg.get("live_signable") or default_qcfg["live_signable"],
+        "composite_fit": raw_qcfg.get("composite_fit") or default_qcfg["composite_fit"],
+        "taste_verdict": (
+            raw_qcfg.get("taste_verdict")
+            or raw_qcfg.get("screening_verdict")
+            or default_qcfg["taste_verdict"]
+        ),
+    }
+    for r_key in RUBRIC_ORDER:
+        questions_payload[r_key] = raw_qcfg.get(r_key) or default_qcfg[r_key]
+
+    resolved_key = (api_key or os.environ.get("GEMINI_API_KEY") or "").strip() or None
+    live_cap = max(0, int(max_live_calls)) if (live and resolved_key) else 0
+
+    work_items = []
+    for idx, pkt in enumerate(packets):
+        dossier = dict(pkt.get("dossier_snapshot") or {})
+        baseline = score_dossier_inputs(dossier)
+        work_items.append((idx, dossier, pkt, baseline, idx < live_cap))
+
+    results: List[Optional[Dict[str, Any]]] = [None] * len(work_items)
+    live_subset = [item for item in work_items if item[4]]
+    tail_subset = [item for item in work_items if not item[4]]
+
+    if live_subset:
+        with ThreadPoolExecutor(max_workers=min(10, len(live_subset))) as pool:
+            fut_map = {
+                pool.submit(
+                    _build_taste_score_doc_without_save,
+                    dossier,
+                    pkt,
+                    baseline,
+                    policy,
+                    questions_payload,
+                    True,
+                    resolved_key,
+                    12.0,
+                ): idx
+                for idx, dossier, pkt, baseline, _ in live_subset
+            }
+            for fut, idx in fut_map.items():
+                results[idx] = fut.result()
+
+    for idx, dossier, pkt, baseline, _ in tail_subset:
+        results[idx] = _build_taste_score_doc_without_save(
+            dossier, pkt, baseline, policy, questions_payload, False, None
+        )
+
+    final_scores = [r for r in results if r is not None]
+    if store is not None and final_scores:
+        save_agent_documents_batch(
+            store,
+            [("taste_scores", ts, str(ts["taste_score_id"])) for ts in final_scores],
+        )
+    return final_scores
+
+
+def _build_tail_on_demand_packet(
+    clean_dossier: Dict[str, Any],
+    baseline: Dict[str, Any],
+    snapshot: Dict[str, Any],
+    taste_doc: Dict[str, Any],
+    active_policy: Optional[Dict[str, Any]],
+    contender_rank: int,
+) -> Dict[str, Any]:
+    """Build a lightweight `on_demand` ScreeningPacket for tail artists (rank > max_neon_debates)."""
+    lead_id = baseline["lead_id"]
+    stage_name = baseline["stage_name"]
+    packet_id = str(clean_dossier.get("packet_id") or f"scr_{lead_id}")
+    det_adv, det_skp, det_judge = _deterministic_cases_and_decision(baseline, snapshot, active_policy)
+
+    p_elev = float(taste_doc.get("p_elevate") or 0.0)
+    taste_verdict = str(taste_doc.get("taste_verdict") or det_judge["verdict"]).lower()
+    if taste_verdict not in VALID_SCREENING_VERDICTS:
+        taste_verdict = det_judge["verdict"]
+
+    adv_on_demand = dict(det_adv)
+    adv_on_demand["on_demand"] = True
+    adv_on_demand["headline"] = (
+        f"Baseline upside snapshot ({baseline['total_score']}/10 · Elevate Likelihood {round(p_elev * 100)}%) — "
+        "click above to run a live Neon Advocate & Skeptic debate."
+    )
+
+    skp_on_demand = dict(det_skp)
+    skp_on_demand["on_demand"] = True
+    skp_on_demand["headline"] = (
+        f"Baseline diligence flags ({len(baseline['missing_evidence_flags'])} missing item(s)) — "
+        "live Neon Skeptic stress-test available on demand."
+    )
+
+    jd_on_demand = dict(det_judge)
+    jd_on_demand["verdict"] = taste_verdict
+    jd_on_demand["confidence"] = float(taste_doc.get("confidence") or det_judge["confidence"])
+    jd_on_demand["rationale"] = (
+        f"Triaged at Rank #{contender_rank} via 5-Skill Baseline ({baseline['total_score']}/10) + "
+        f"Taste Profile (Elevate Likelihood {round(p_elev * 100)}%). "
+        "Full Neon Pros/Cons debate ready on 1 click."
+    )
+
+    raw_pkt = {
+        "contract_version": "1.0.0",
+        "packet_id": packet_id,
+        "lead_id": lead_id,
+        "dossier_id": str(clean_dossier.get("dossier_id") or clean_dossier.get("_doc_id") or lead_id),
+        "stage_name": stage_name,
+        "screening_model": "gemini-decision-1+on-demand-neon",
+        "verdict": jd_on_demand["verdict"],
+        "confidence": jd_on_demand["confidence"],
+        "headline": jd_on_demand["headline"],
+        "next_action": jd_on_demand["next_action"],
+        "total_score": baseline["total_score"],
+        "max_score": 10,
+        "rubric_scores": baseline["rubric_scores"],
+        "rubric_breakdown": baseline["rubric_breakdown"],
+        "pros": baseline["pros"][:6],
+        "cons": baseline["cons"][:6],
+        "missing_evidence_flags": baseline["missing_evidence_flags"],
+        "advocate_case": adv_on_demand,
+        "skeptic_case": skp_on_demand,
+        "judge_decision": jd_on_demand,
+        "dossier_snapshot": clean_dossier,
+        "artist_snapshot": snapshot,
+        "input_skills_used": list(baseline["input_skills_used"]),
+        "mode": "option_a_tail_on_demand",
+        "debate_mode": "on_demand",
+        "status": "tail_on_demand",
+        "contender_rank": contender_rank,
+        "archived": False,
+        "screened_at": _utc_now_iso(),
+    }
+    norm = _normalize_screening_packet(raw_pkt)
+    norm["archived"] = False
+    norm["debate_mode"] = "on_demand"
+    norm["status"] = "tail_on_demand"
+    norm["contender_rank"] = contender_rank
+    norm["advocate_case"]["on_demand"] = True
+    norm["skeptic_case"]["on_demand"] = True
+    return norm
+
+
+def run_option_a_funnel(
+    store: Any,
+    max_neon_debates: int = 30,
+    live_debates: bool = False,
+    live_taste: bool = True,
+    api_key: Optional[str] = None,
+    prefix: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Execute Option A Smart Funnel across 100% of investigated dossiers:
+
+    1. Keep 100% of active `investigator_dossiers` (zero candidates dropped).
+    2. Score all dossiers with the 5-Skill Rubric Baseline + `gemini-decision-1` Taste Policy
+       (concurrent `ThreadPoolExecutor(max_workers=10)` live calls on top contenders + calibrated
+       policy math on remaining tail so 180+ artists finish in a few seconds).
+    3. Build full Advocate + Skeptic + Judge Pros/Cons packets for the Top `max_neon_debates` (default 30)
+       contenders and lightweight `debate_mode: "on_demand"` packets for the remaining tail.
+    """
+    t0 = time.monotonic()
+    dossiers: List[Dict[str, Any]] = []
+    seen_leads = set()
+    for row in list_agent_documents(store, "investigator_dossiers", limit=1000):
+        doc = _unwrap_doc(row)
+        if not isinstance(doc, dict) or not doc.get("lead_id") or bool(doc.get("archived", False)):
+            continue
+        lid = str(doc["lead_id"])
+        if lid in seen_leads:
+            continue
+        seen_leads.add(lid)
+        dossiers.append(sanitize_agent_report(dict(doc)))
+
+    if not dossiers:
+        dossiers = build_builtin_demo_dossiers()
+
+    active_policy = _get_active_judging_policy(store)
+    if active_policy is None:
+        active_policy = {
+            "policy_id": "policy_v1",
+            "version": 1,
+            "thresholds": {"elevate_min_score": 7, "watch_min_score": 4},
+            "questions_config": _build_decision_questions_config(
+                {"elevate": [], "watch": [], "pass": []}, 7, 4
+            ),
+            "demos": [],
+        }
+
+    raw_qcfg = dict(active_policy.get("questions_config") or {})
+    default_qcfg = _build_decision_questions_config(
+        active_policy.get("override_notes") or {"elevate": [], "watch": [], "pass": []},
+        int((active_policy.get("thresholds") or {}).get("elevate_min_score", 7)),
+        int((active_policy.get("thresholds") or {}).get("watch_min_score", 4)),
+    )
+    questions_payload: Dict[str, Any] = {
+        "live_signable": raw_qcfg.get("live_signable") or default_qcfg["live_signable"],
+        "composite_fit": raw_qcfg.get("composite_fit") or default_qcfg["composite_fit"],
+        "taste_verdict": (
+            raw_qcfg.get("taste_verdict")
+            or raw_qcfg.get("screening_verdict")
+            or default_qcfg["taste_verdict"]
+        ),
+    }
+    for r_key in RUBRIC_ORDER:
+        questions_payload[r_key] = raw_qcfg.get(r_key) or default_qcfg[r_key]
+
+    # Step 1: Deterministic 5-skill baseline across 100% of dossiers
+    scored_entries = []
+    for d in dossiers:
+        base = score_dossier_inputs(d)
+        snap = _build_artist_snapshot(d, base["stage_name"])
+        scored_entries.append((d, base, snap))
+
+    # Provisional rank so live gemini-decision-1 calls prioritize the highest-signal contenders
+    scored_entries.sort(
+        key=lambda item: (
+            -int(item[1]["total_score"]),
+            -int(item[1]["rubric_scores"].get("live_vocal_proof", 0)),
+            -int(item[1]["rubric_scores"].get("listener_pull_cosigns", 0)),
+            -int(item[1]["rubric_scores"].get("stage_momentum_whitespace", 0)),
+            str(item[1]["stage_name"]),
+        )
+    )
+
+    resolved_key = (api_key or os.environ.get("GEMINI_API_KEY") or "").strip() or None
+    debate_cap = max(1, min(int(max_neon_debates or 30), 100))
+    live_taste_cap = min(len(scored_entries), max(debate_cap, 30)) if (live_taste and resolved_key) else 0
+
+    # Step 2: Taste Engine across 100% of dossiers (concurrent live on top contenders + calibrated tail)
+    taste_docs: List[Optional[Dict[str, Any]]] = [None] * len(scored_entries)
+    if live_taste_cap > 0:
+        with ThreadPoolExecutor(max_workers=min(10, live_taste_cap)) as pool:
+            futs = {
+                pool.submit(
+                    _build_taste_score_doc_without_save,
+                    scored_entries[idx][0],
+                    None,
+                    scored_entries[idx][1],
+                    active_policy,
+                    questions_payload,
+                    True,
+                    resolved_key,
+                    12.0,
+                ): idx
+                for idx in range(live_taste_cap)
+            }
+            for fut, idx in futs.items():
+                taste_docs[idx] = fut.result()
+
+    for idx in range(live_taste_cap, len(scored_entries)):
+        d, base, _ = scored_entries[idx]
+        taste_docs[idx] = _build_taste_score_doc_without_save(
+            d, None, base, active_policy, questions_payload, False, None
+        )
+
+    # Combine & sort all M candidates by calibrated P(elevate) & 5-skill total_score
+    combined = [
+        (scored_entries[i][0], scored_entries[i][1], scored_entries[i][2], taste_docs[i] or {})
+        for i in range(len(scored_entries))
+    ]
+    combined.sort(
+        key=lambda item: (
+            VERDICT_SORT_RANK.get(str(item[3].get("taste_verdict") or "watch"), 9),
+            -float(item[3].get("p_elevate") or 0.0),
+            -int(item[1]["total_score"]),
+            str(item[1]["stage_name"]),
+        )
+    )
+
+    # Step 3: Top `debate_cap` get full Advocate/Skeptic/Judge Pros/Cons; tail gets `on_demand`
+    top_slice = combined[:debate_cap]
+    tail_slice = combined[debate_cap:]
+
+    packets_out: List[Dict[str, Any]] = []
+    batch_writes: List[Tuple[str, Dict[str, Any], Optional[str]]] = []
+
+    for _, _, _, ts_doc in combined:
+        if ts_doc:
+            batch_writes.append(("taste_scores", ts_doc, str(ts_doc["taste_score_id"])))
+
+    if live_debates and resolved_key and top_slice:
+        with ThreadPoolExecutor(max_workers=min(6, len(top_slice))) as pool:
+            top_pkts = list(
+                pool.map(
+                    lambda item: run_screening_for_dossier(
+                        None, item[0], live=True, api_key=resolved_key, prefix=prefix
+                    ),
+                    top_slice,
+                )
+            )
+        for rank_idx, pkt in enumerate(top_pkts, start=1):
+            pkt["contender_rank"] = rank_idx
+            pkt["debate_mode"] = "live_neon"
+            pkt["status"] = "complete"
+            packets_out.append(pkt)
+            batch_writes.append(("screening_packets", pkt, str(pkt["packet_id"])))
+    else:
+        now_iso = _utc_now_iso()
+        for rank_idx, (d, base, snap, _) in enumerate(top_slice, start=1):
+            lid = base["lead_id"]
+            sname = base["stage_name"]
+            pkt_id = str(d.get("packet_id") or f"scr_{lid}")
+            det_adv, det_skp, det_judge = _deterministic_cases_and_decision(base, snap, active_policy)
+            pkt = _normalize_screening_packet(
+                {
+                    "contract_version": "1.0.0",
+                    "packet_id": pkt_id,
+                    "lead_id": lid,
+                    "dossier_id": str(d.get("dossier_id") or d.get("_doc_id") or lid),
+                    "stage_name": sname,
+                    "screening_model": "gemini-4-neon",
+                    "verdict": det_judge["verdict"],
+                    "confidence": det_judge["confidence"],
+                    "headline": det_judge["headline"],
+                    "next_action": det_judge["next_action"],
+                    "total_score": base["total_score"],
+                    "max_score": 10,
+                    "rubric_scores": base["rubric_scores"],
+                    "rubric_breakdown": base["rubric_breakdown"],
+                    "pros": base["pros"][:6],
+                    "cons": base["cons"][:6],
+                    "missing_evidence_flags": base["missing_evidence_flags"],
+                    "advocate_case": det_adv,
+                    "skeptic_case": det_skp,
+                    "judge_decision": det_judge,
+                    "dossier_snapshot": d,
+                    "artist_snapshot": snap,
+                    "input_skills_used": list(base["input_skills_used"]),
+                    "mode": "option_a_top_contender",
+                    "debate_mode": "full_pros_cons",
+                    "status": "complete",
+                    "contender_rank": rank_idx,
+                    "archived": False,
+                    "screened_at": now_iso,
+                }
+            )
+            pkt["archived"] = False
+            pkt["contender_rank"] = rank_idx
+            packets_out.append(pkt)
+            batch_writes.append(("screening_packets", pkt, pkt_id))
+
+    for offset, (d, base, snap, ts_doc) in enumerate(tail_slice):
+        rank_num = len(top_slice) + offset + 1
+        tail_pkt = _build_tail_on_demand_packet(d, base, snap, ts_doc, active_policy, rank_num)
+        packets_out.append(tail_pkt)
+        batch_writes.append(("screening_packets", tail_pkt, str(tail_pkt["packet_id"])))
+
+    if store is not None and batch_writes:
+        save_agent_documents_batch(store, batch_writes)
+
+    deck = list_screening_deck(store, limit=max(500, len(packets_out))) if store is not None else {"packets": packets_out}
+    duration_ms = int((time.monotonic() - t0) * 1000)
+    live_taste_count = sum(1 for _, _, _, ts in combined if ts.get("mode") == "live_gemini_decision_1")
+
+    return {
+        "ok": True,
+        "funnel": "option_a_smart_funnel",
+        "total_investigated": len(combined),
+        "taste_scored_count": len(combined),
+        "live_taste_calls": live_taste_count,
+        "debated_top_count": len(top_slice),
+        "tail_on_demand_count": len(tail_slice),
+        "max_neon_debates": debate_cap,
+        "duration_ms": duration_ms,
+        "count": len(packets_out),
+        "deck": deck,
+    }
 
 
 # ---------------------------------------------------------------------------

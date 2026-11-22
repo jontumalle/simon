@@ -273,6 +273,7 @@ def render_screening_page() -> str:
           <span id="deckCounterBadge" class="pill purple" style="font-size:0.84rem;">Artist 0 of 0</span>
           <div id="deckFilterBar" class="filter-pills" role="tablist" aria-label="Filter Screening Deck">
             <button type="button" class="filter-pill active" data-filter="all">All <span class="filter-count" id="countAll">0</span></button>
+            <button type="button" class="filter-pill" data-filter="debated">★ Top Debated <span class="filter-count" id="countDebated">0</span></button>
             <button type="button" class="filter-pill" data-filter="unlabeled">Needs Review <span class="filter-count" id="countUnlabeled">0</span></button>
             <button type="button" class="filter-pill" data-filter="ELEVATE">Elevate <span class="filter-count" id="countElevate">0</span></button>
             <button type="button" class="filter-pill" data-filter="WATCH">Watch <span class="filter-count" id="countWatch">0</span></button>
@@ -406,7 +407,7 @@ def render_screening_page() -> str:
     const urlParams = new URLSearchParams(window.location.search);
     let initialFocusLead = urlParams.get('lead') || '';
     let initialFocusPacket = urlParams.get('packet') || '';
-    const VALID_FILTERS = ['all', 'unlabeled', 'ELEVATE', 'WATCH', 'PASS'];
+    const VALID_FILTERS = ['all', 'debated', 'unlabeled', 'ELEVATE', 'WATCH', 'PASS'];
     const reqFilter = urlParams.get('filter') || 'all';
 
     let allPackets = [];
@@ -457,14 +458,25 @@ def render_screening_page() -> str:
       return Boolean(hr && normalizeVerdict(hr.human_verdict || hr.verdict));
     }}
 
+    function isTailOnDemand(pkt) {{
+      if (!pkt) return false;
+      if (pkt.debate_mode === 'on_demand' || pkt.status === 'tail_on_demand') return true;
+      const adv = pkt.advocate_case || pkt.advocate || {{}};
+      return Boolean(adv.on_demand);
+    }}
+
     function getFilteredPackets() {{
       if (currentFilter === 'all') return allPackets;
+      if (currentFilter === 'debated') return allPackets.filter((p) => !isTailOnDemand(p));
       if (currentFilter === 'unlabeled') return allPackets.filter((p) => !isLabeled(p));
       return allPackets.filter((p) => effectivePacketVerdict(p) === currentFilter);
     }}
 
     function updateFilterCounts() {{
       el('countAll').textContent = String(allPackets.length);
+      if (el('countDebated')) {{
+        el('countDebated').textContent = String(allPackets.filter((p) => !isTailOnDemand(p)).length);
+      }}
       el('countUnlabeled').textContent = String(allPackets.filter((p) => !isLabeled(p)).length);
       el('countElevate').textContent = String(allPackets.filter((p) => effectivePacketVerdict(p) === 'ELEVATE').length);
       el('countWatch').textContent = String(allPackets.filter((p) => effectivePacketVerdict(p) === 'WATCH').length);
@@ -644,7 +656,24 @@ def render_screening_page() -> str:
       el('prevCandidateBtn').disabled = currentIndex <= 0;
       el('nextCandidateBtn').disabled = currentIndex >= total - 1;
 
-      el('candidateJumpPills').innerHTML = filtered.map((pkt, idx) => {{
+      const indicesToRender = [];
+      if (total <= 24) {{
+        for (let i = 0; i < total; i++) indicesToRender.push(i);
+      }} else {{
+        const winStart = Math.max(0, currentIndex - 6);
+        const winEnd = Math.min(total - 1, currentIndex + 6);
+        indicesToRender.push(0);
+        if (winStart > 1) indicesToRender.push(-1);
+        for (let i = winStart; i <= winEnd; i++) {{
+          if (i !== 0 && i !== total - 1) indicesToRender.push(i);
+        }}
+        if (winEnd < total - 2) indicesToRender.push(-2);
+        if (total - 1 !== 0) indicesToRender.push(total - 1);
+      }}
+
+      el('candidateJumpPills').innerHTML = indicesToRender.map((idx) => {{
+        if (idx < 0) return '<span class="mono" style="padding:0 4px;">…</span>';
+        const pkt = filtered[idx];
         const d = extractDossierView(pkt);
         const v = effectivePacketVerdict(pkt) || 'UNSET';
         const activeCls = idx === currentIndex ? 'active' : '';
@@ -934,11 +963,26 @@ def render_screening_page() -> str:
         </section>
 
         <!-- 3. Side-by-Side Debate Grid -->
+        ${{isTailOnDemand(pkt)
+          ? `<div class="taste-engine-panel" style="border-color:var(--accent); background:var(--amber-bg);">
+               <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px;">
+                 <div>
+                   <strong style="font-size:0.94rem;">Option A Tail Artist (Ranked #${{escapeHtml(pkt.contender_rank || (currentIndex + 1))}} of ${{escapeHtml(allPackets.length)}})</strong>
+                   <div style="font-size:0.83rem; color:var(--muted); margin-top:2px;">
+                     Scored across all 5 dossier criteria and your active Taste Profile. Run a full live Advocate vs. Skeptic debate on demand:
+                   </div>
+                 </div>
+                 <button type="button" id="generateTailDebateBtn" class="btn neon" data-lead-id="${{escapeHtml(leadId)}}">
+                   ⚡ Generate Live Neon Pros/Cons Debate for This Artist
+                 </button>
+               </div>
+             </div>`
+          : ''}}
         <section class="debate-grid" aria-label="Advocate and Skeptic Notes">
           <div class="debate-col advocate">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
               <strong style="color:var(--teal); font-size:0.95rem;">Talent Advocate · Pros</strong>
-              <span class="pill ok">Advocate</span>
+              <span class="pill ok">${{isTailOnDemand(pkt) ? 'Baseline Snapshot' : 'Advocate'}}</span>
             </div>
             <div class="debate-headline">${{escapeHtml(advocate.headline || 'Case to elevate this artist')}}</div>
             <ul class="debate-list">${{prosHtml}}</ul>
@@ -950,7 +994,7 @@ def render_screening_page() -> str:
           <div class="debate-col skeptic">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
               <strong style="color:var(--warn); font-size:0.95rem;">Talent Skeptic · Risks &amp; Gaps</strong>
-              <span class="pill warn">Skeptic</span>
+              <span class="pill warn">${{isTailOnDemand(pkt) ? 'Baseline Snapshot' : 'Skeptic'}}</span>
             </div>
             <div class="debate-headline">${{escapeHtml(skeptic.headline || 'Key risks and missing proof')}}</div>
             <ul class="debate-list">${{consHtml}}</ul>
@@ -1042,6 +1086,41 @@ def render_screening_page() -> str:
       const cardTasteBtn = el('cardTasteEngineBtn');
       if (cardTasteBtn) {{
         cardTasteBtn.onclick = () => runTasteEngineForLead(leadId);
+      }}
+      const tailDebateBtn = el('generateTailDebateBtn');
+      if (tailDebateBtn) {{
+        tailDebateBtn.onclick = async () => {{
+          tailDebateBtn.disabled = true;
+          tailDebateBtn.textContent = '⚡ Running Live Neon Advocate + Skeptic + Judge…';
+          showBanner(`Running live Neon Pros/Cons debate for ${{d.stageName}}…`, 'info');
+          try {{
+            const res = await fetch('/api/screening/run', {{
+              method: 'POST',
+              headers: {{ 'Content-Type': 'application/json' }},
+              body: JSON.stringify({{ lead_id: leadId, live: true }}),
+            }});
+            const data = await res.json().catch(() => ({{}}));
+            if (!res.ok) throw new Error(data.error || 'Could not generate live debate.');
+            const updatedPkt = data.packet || (Array.isArray(data.packets) && data.packets[0]);
+            if (updatedPkt) {{
+              updatedPkt.latest_taste_score = pkt.latest_taste_score;
+              updatedPkt.human_review = pkt.human_review;
+              updatedPkt.debate_mode = 'live_neon';
+              updatedPkt.status = 'complete';
+              const idxInAll = allPackets.findIndex((p) => p.lead_id === leadId);
+              if (idxInAll >= 0) allPackets[idxInAll] = updatedPkt;
+            }} else {{
+              await loadPackets();
+            }}
+            syncSelectedVerdictForCurrentPacket();
+            renderDeck();
+            showBanner(`Generated live Neon Pros/Cons debate for ${{d.stageName}}!`, 'info');
+          }} catch (err) {{
+            showBanner(err.message, 'err');
+            tailDebateBtn.disabled = false;
+            tailDebateBtn.textContent = '⚡ Generate Live Neon Pros/Cons Debate for This Artist';
+          }}
+        }};
       }}
       const reasonInput = el('humanReasonInput');
       if (reasonInput) {{
@@ -1166,7 +1245,7 @@ def render_screening_page() -> str:
     }}
 
     async function loadPackets() {{
-      let res = await fetch('/api/screening/packets').catch(() => null);
+      let res = await fetch('/api/screening/packets?limit=500').catch(() => null);
       if (!res || !res.ok) {{
         res = await fetch('/api/screening').catch(() => null);
       }}

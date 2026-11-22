@@ -328,6 +328,40 @@ def save_agent_document(
     return {"ok": True, "collection": collection, "doc_id": resolved_id, "document": record}
 
 
+def save_agent_documents_batch(
+    store: Any,
+    items: List[Tuple[str, Dict[str, Any], Optional[str]]],
+) -> List[Dict[str, Any]]:
+    """Validate and batch-save `(collection, payload, doc_id)` records with minimal DB round-trips."""
+    if not items:
+        return []
+    prepared: List[Tuple[str, str, Dict[str, Any]]] = []
+    now = _utc_now()
+    for collection, payload, doc_id in items:
+        cleaned_payload = (
+            sanitize_agent_report(payload)
+            if collection == "screening_packets" and isinstance(payload, dict)
+            else payload
+        )
+        errors, inferred_id = validate_collection_payload(collection, cleaned_payload)
+        if errors:
+            raise ValueError("; ".join(errors))
+        resolved_id = (doc_id or inferred_id or f"{collection[:6]}_{uuid.uuid4().hex[:10]}").strip()
+        record = dict(cleaned_payload)
+        record.setdefault("_saved_at", now)
+        record["_doc_id"] = resolved_id
+        prepared.append((collection, resolved_id, record))
+
+    if hasattr(store, "save_documents_batch"):
+        store.save_documents_batch(prepared)
+        return [
+            {"ok": True, "collection": col, "doc_id": did, "document": rec}
+            for col, did, rec in prepared
+        ]
+
+    return [save_agent_document(store, col, rec, doc_id=did) for col, did, rec in prepared]
+
+
 def get_agent_document(store: Any, collection: str, doc_id: str) -> Optional[Dict[str, Any]]:
     if collection not in ALLOWED_AGENT_COLLECTIONS:
         raise PermissionError(f"Collection '{collection}' is not allowed for agent access.")
@@ -351,7 +385,7 @@ def get_agent_document(store: Any, collection: str, doc_id: str) -> Optional[Dic
 def list_agent_documents(store: Any, collection: str, limit: int = 25) -> List[Dict[str, Any]]:
     if collection not in ALLOWED_AGENT_COLLECTIONS:
         raise PermissionError(f"Collection '{collection}' is not allowed for agent access.")
-    capped = max(1, min(int(limit), 100))
+    capped = max(1, min(int(limit), 1000))
     if hasattr(store, "list_documents"):
         docs = store.list_documents(collection, limit=capped)
     else:
