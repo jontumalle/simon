@@ -52,6 +52,27 @@ class FirestoreStore:
         self._client.collection(collection).document(doc_id).set(payload)
         return payload
 
+    def save_documents_batch(
+        self, items: List[tuple[str, str, Dict[str, Any]]]
+    ) -> List[Dict[str, Any]]:
+        """Commit up to 400 documents per Firestore WriteBatch for sub-second fleet persistence."""
+        if not items:
+            return []
+        now = _utc_now_iso()
+        saved: List[Dict[str, Any]] = []
+        chunk_size = 400
+        for start in range(0, len(items), chunk_size):
+            batch = self._client.batch()
+            for collection, doc_id, data in items[start : start + chunk_size]:
+                payload = dict(data)
+                payload.setdefault("doc_id", doc_id)
+                payload["updated_at"] = now
+                ref = self._client.collection(collection).document(doc_id)
+                batch.set(ref, payload)
+                saved.append(payload)
+            batch.commit()
+        return saved
+
     def get_document(self, collection: str, doc_id: str) -> Optional[Dict[str, Any]]:
         snap = self._client.collection(collection).document(doc_id).get()
         if not getattr(snap, "exists", False):

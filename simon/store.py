@@ -310,6 +310,38 @@ class SimonStore:
                 conn.close()
         return payload
 
+    def save_documents_batch(
+        self, items: List[tuple[str, str, Dict[str, Any]]]
+    ) -> List[Dict[str, Any]]:
+        """Save many documents inside a single SQLite transaction."""
+        if not items:
+            return []
+        updated_at = datetime.now(timezone.utc).isoformat()
+        saved: List[Dict[str, Any]] = []
+        rows_to_insert = []
+        for collection, doc_id, data in items:
+            payload = dict(data)
+            payload.setdefault("doc_id", doc_id)
+            payload["updated_at"] = updated_at
+            saved.append(payload)
+            rows_to_insert.append(
+                (collection, doc_id, updated_at, json.dumps(payload, ensure_ascii=False))
+            )
+        conn = self._connect()
+        try:
+            with conn:
+                conn.executemany(
+                    """
+                    INSERT OR REPLACE INTO documents (collection, doc_id, updated_at, payload_json)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    rows_to_insert,
+                )
+        finally:
+            if self.db_path != ":memory:":
+                conn.close()
+        return saved
+
     def get_document(self, collection: str, doc_id: str) -> Optional[Dict[str, Any]]:
         conn = self._connect()
         try:

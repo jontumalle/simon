@@ -113,8 +113,19 @@
       <section class="card disc-card">
         <div class="disc-head">
           <h2>2. Send Discovery Scouts</h2>
-          <span class="pill accent">Discovery Scout</span>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <a class="btn" href="/discovery">Full Discovery Orchestrator →</a>
+            <span class="pill accent">Discovery Scout</span>
+          </div>
         </div>
+
+        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
+          <span style="font-size:11.5px; font-weight:700; text-transform:uppercase; color:var(--muted);">Campaign Presets:</span>
+          <button type="button" class="btn btn-primary" id="discPresetIdolBtn">★ American Idol · Uncapped Nationwide Search (All Sources · No Cap)</button>
+          <button type="button" class="btn" id="discPresetNycBtn">🗽 NYC Light Mode (Uncapped · 3 Live NYC Scouts)</button>
+        </div>
+
+        <div id="discFleetScaleBanner" class="phase-lead-bar hidden" style="font-size:12.5px;"></div>
 
         <div style="display:flex; flex-direction:column; gap:6px;">
           <label for="discBriefInput" style="font-size:12.5px; font-weight:700;">Search Brief</label>
@@ -125,15 +136,19 @@
           <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:center;">
             <label style="font-size:12.5px; display:inline-flex; align-items:center; gap:6px;">
               <span>Discovery Scouts:</span>
-              <input type="number" id="discAgentCountInput" class="field-input" min="1" max="10" value="3" style="width:68px; padding:5px 8px;" />
+              <input type="number" id="discAgentCountInput" class="field-input" min="1" max="100" value="3" style="width:72px; padding:5px 8px;" />
             </label>
             <label style="font-size:12.5px; display:inline-flex; align-items:center; gap:6px;">
               <span>Leads / Scout:</span>
-              <input type="number" id="discLeadsPerAgentInput" class="field-input" min="1" max="10" value="2" style="width:68px; padding:5px 8px;" />
+              <input type="number" id="discLeadsPerAgentInput" class="field-input" min="1" max="25" value="2" disabled style="width:68px; padding:5px 8px; opacity:0.45;" />
             </label>
-            <label style="display:inline-flex; align-items:center; gap:6px; font-size:12.5px; cursor:pointer;">
-              <input type="checkbox" id="discLiveToggle" />
-              <span>Run Live Scouts</span>
+            <label style="display:inline-flex; align-items:center; gap:6px; font-size:12.5px; cursor:pointer; font-weight:700;">
+              <input type="checkbox" id="discUnconstrainedToggle" checked />
+              <span>All Found (No Cap)</span>
+            </label>
+            <label style="display:inline-flex; align-items:center; gap:6px; font-size:12.5px; cursor:pointer; font-weight:700;">
+              <input type="checkbox" id="discLiveToggle" checked />
+              <span>🌐 Live Web Search Agents (staging-simon-discovery-scout)</span>
             </label>
             <label style="display:inline-flex; align-items:center; gap:6px; font-size:12.5px; cursor:pointer;">
               <input type="checkbox" id="discResetPrevToggle" checked />
@@ -144,8 +159,17 @@
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
             <button id="discClearOldRunsBtn" class="btn" type="button">↺ Clear Old Runs</button>
             <button id="discSyncToPipelineBtn" class="btn" type="button">Send to Phase 1 →</button>
+            <button id="discCascadeBtn" class="btn" type="button" style="font-weight:700;">⚡ Run Full Pipeline Cascade</button>
             <button id="discDispatchBtn" class="btn btn-primary" type="button">Send Discovery Scouts</button>
           </div>
+        </div>
+
+        <div id="discLiveStreamBar" class="phase-lead-bar hidden" style="flex-direction:column; align-items:stretch; gap:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+            <strong id="discLiveStreamTitle">🌐 Live Web Search Stream</strong>
+            <button type="button" id="discProceedPartialBtn" class="btn btn-primary hidden">Proceed Now with Leads Found So Far →</button>
+          </div>
+          <div id="discLiveStreamWorkers" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:8px;"></div>
         </div>
 
         <div id="discPostDispatchBar" class="phase-lead-bar hidden">

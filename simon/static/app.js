@@ -559,7 +559,7 @@
     $('discSelectFilteredBtn').addEventListener('click', () => {
       state.filteredSources.forEach((s) => state.selectedSourceIds.add(s.source_id));
       if (state.selectedSourceIds.size > 0) {
-        $('discAgentCountInput').value = Math.min(state.selectedSourceIds.size, 10);
+        $('discAgentCountInput').value = Math.min(state.selectedSourceIds.size, 100);
       }
       renderDiscSources();
     });
@@ -574,6 +574,104 @@
     });
     $('discRefreshDataBtn').addEventListener('click', refreshDiscoveryData);
 
+    const syncDiscUncUi = () => {
+      const unc = $('discUnconstrainedToggle') && $('discUnconstrainedToggle').checked;
+      if ($('discLeadsPerAgentInput')) {
+        $('discLeadsPerAgentInput').disabled = Boolean(unc);
+        $('discLeadsPerAgentInput').style.opacity = unc ? '0.45' : '1';
+      }
+      const banner = $('discFleetScaleBanner');
+      if (banner && state.selectedSourceIds.size > 0) {
+        const scouts = Math.max(1, Math.min(Number($('discAgentCountInput').value || 1), 100));
+        const srcCount = state.selectedSourceIds.size;
+        const est = srcCount * 4;
+        const topD = Math.min(30, est);
+        banner.innerHTML = unc
+          ? `<span><strong>Option A Smart Funnel:</strong> <strong>${scouts}</strong> Scouts across <strong>${srcCount}</strong> sources (No Cap) → <strong>~${est}</strong> Investigated (100% kept) → All <strong>~${est}</strong> Scored by <code>gemini-decision-1</code> (0 tok) → <strong>Top ${topD}</strong> Full Pros/Cons Debates</span>`
+          : `<span><strong>Fleet Math:</strong> ${scouts} Scouts × ${$('discLeadsPerAgentInput').value} Leads = ${scouts * Number($('discLeadsPerAgentInput').value || 2)} Candidates</span>`;
+        banner.classList.remove('hidden');
+      }
+    };
+    if ($('discUnconstrainedToggle')) $('discUnconstrainedToggle').addEventListener('change', syncDiscUncUi);
+    $('discAgentCountInput').addEventListener('input', syncDiscUncUi);
+
+    if ($('discPresetIdolBtn')) {
+      $('discPresetIdolBtn').addEventListener('click', () => {
+        state.selectedSourceIds.clear();
+        state.sources.filter((s) => s.status !== 'inactive').forEach((s) => state.selectedSourceIds.add(s.source_id));
+        $('discBriefInput').value = 'American Idol Nationwide Search: scour grassroots open mics, public radio live rooms, and indie venue calendars across all US & global music cities for unsigned breakout vocalists with undeniable live single-take command.';
+        if ($('discLiveToggle')) $('discLiveToggle').checked = true;
+        if ($('discUnconstrainedToggle')) $('discUnconstrainedToggle').checked = true;
+        if ($('discResetPrevToggle')) $('discResetPrevToggle').checked = true;
+        const isLive = $('discLiveToggle') && $('discLiveToggle').checked;
+        $('discAgentCountInput').value = isLive
+          ? Math.min(16, Math.max(12, Math.ceil(state.selectedSourceIds.size / 3)))
+          : Math.max(1, state.selectedSourceIds.size);
+        renderDiscSources();
+        syncDiscUncUi();
+        setBanner(`Loaded ★ American Idol · Uncapped Nationwide Search (${state.selectedSourceIds.size} sources · No Cap).`, 'info');
+      });
+    }
+
+    if ($('discPresetNycBtn')) {
+      $('discPresetNycBtn').addEventListener('click', () => {
+        state.selectedSourceIds.clear();
+        const pref = ['yt_sofar_sounds', 'nyc_babys_all_right', 'nyc_rockwood_music_hall', 'bc_brooklyn_soul_rnb', 'nyc_pianos_showroom', 'nyc_petes_candy_store'];
+        pref.forEach((id) => {
+          if (state.sources.some((s) => s.source_id === id)) state.selectedSourceIds.add(id);
+        });
+        if (state.selectedSourceIds.size < 6) {
+          state.sources.filter((s) => s.status !== 'inactive' && s.location && ['New York', 'Jersey City'].includes(s.location.city)).slice(0, 6)
+            .forEach((s) => state.selectedSourceIds.add(s.source_id));
+        }
+        $('discBriefInput').value = 'NYC Light Mode (Uncapped): search grassroots Brooklyn and Manhattan live rooms, Sofar sessions, and Bandcamp arrivals for every distinct unsigned solo vocalist.';
+        if ($('discLiveToggle')) $('discLiveToggle').checked = true;
+        if ($('discUnconstrainedToggle')) $('discUnconstrainedToggle').checked = true;
+        if ($('discResetPrevToggle')) $('discResetPrevToggle').checked = true;
+        $('discAgentCountInput').value = 3;
+        renderDiscSources();
+        syncDiscUncUi();
+        setBanner(`Loaded 🗽 NYC Light Mode (${state.selectedSourceIds.size} NYC sources across 3 live web scouts · No Cap).`, 'info');
+      });
+    }
+
+    let discStreamTimer = null;
+    let discProceedNow = false;
+    const stopDiscStream = () => { if (discStreamTimer) { clearInterval(discStreamTimer); discStreamTimer = null; } };
+    if ($('discProceedPartialBtn')) {
+      $('discProceedPartialBtn').addEventListener('click', () => { discProceedNow = true; });
+    }
+
+    const pollDiscBatchOnce = async (batchId, startMs, allowProceed) => {
+      const bRes = await fetch(`/api/discovery/batches?batch_id=${encodeURIComponent(batchId)}&refresh=1`).catch(() => null);
+      if (!bRes || !bRes.ok) return null;
+      const bData = await bRes.json();
+      const workers = bData.workers || [];
+      const term = new Set(['completed', 'failed', 'cancelled', 'incomplete', 'budget_exceeded', 'error']);
+      const done = workers.filter((w) => term.has(String(w.status || ''))).length;
+      const totalLeads = workers.reduce((acc, w) => acc + Number(w.lead_count || 0), 0);
+      const elapsed = Math.max(1, Math.round((Date.now() - startMs) / 1000));
+      if ($('discLiveStreamBar')) $('discLiveStreamBar').classList.remove('hidden');
+      if ($('discLiveStreamTitle')) {
+        $('discLiveStreamTitle').textContent = `🌐 Live Web Search · ${done}/${workers.length} Scouts Finished · ${totalLeads} Lead(s) Streamed · ${elapsed}s`;
+      }
+      if ($('discProceedPartialBtn')) {
+        $('discProceedPartialBtn').classList.toggle('hidden', !(allowProceed && done < workers.length && totalLeads > 0));
+      }
+      if ($('discLiveStreamWorkers')) {
+        $('discLiveStreamWorkers').innerHTML = workers.map((w, i) => {
+          const steps = w.steps || [];
+          const last = steps.length ? (steps[steps.length - 1].preview || 'Searching live web…') : 'Opening assigned sources…';
+          return `<div class="card" style="padding:10px; font-size:12px;">
+            <div style="display:flex; justify-content:space-between; gap:6px;"><strong>Scout ${i + 1}</strong><span class="pill">${esc(w.status)} (${w.lead_count || 0})</span></div>
+            <div class="muted" style="margin-top:4px;">${esc(String(last).slice(0, 140))}</div>
+          </div>`;
+        }).join('');
+      }
+      await refreshDiscoveryData();
+      return { allFinished: workers.length > 0 && done >= workers.length, done, total: workers.length, totalLeads };
+    };
+
     $('discSyncToPipelineBtn').addEventListener('click', () => {
       const payload = {
         brief: $('discBriefInput').value.trim(),
@@ -587,6 +685,7 @@
 
     if ($('discClearOldRunsBtn')) {
       $('discClearOldRunsBtn').addEventListener('click', async () => {
+        stopDiscStream();
         const btn = $('discClearOldRunsBtn');
         btn.disabled = true;
         setBanner('Archiving previous runs for a clean workspace…', 'info');
@@ -599,6 +698,7 @@
           const payload = await res.json();
           if (!res.ok) throw new Error(payload.error || 'Workspace reset failed');
           if ($('discPostDispatchBar')) $('discPostDispatchBar').classList.add('hidden');
+          if ($('discLiveStreamBar')) $('discLiveStreamBar').classList.add('hidden');
           await Promise.all([refreshDiscoveryData(), refreshScreeningPackets()]);
           setBanner('Workspace cleared — ready for a fresh end-to-end run.', 'info');
         } catch (err) {
@@ -614,7 +714,10 @@
         setBanner('Pick at least one source first.', 'error');
         return;
       }
-      setBanner('Sending discovery scouts…', 'info');
+      stopDiscStream();
+      const isLive = $('discLiveToggle').checked;
+      const isUnc = $('discUnconstrainedToggle') ? $('discUnconstrainedToggle').checked : false;
+      setBanner(isLive ? 'Launching live web search sandboxes…' : 'Sending simulated scouts…', 'info');
       $('discDispatchBtn').disabled = true;
       try {
         const res = await fetch('/api/discovery/dispatch', {
@@ -623,24 +726,105 @@
           body: JSON.stringify({
             source_ids: Array.from(state.selectedSourceIds),
             brief: $('discBriefInput').value,
-            agent_count: Number($('discAgentCountInput').value || 1),
-            leads_per_agent: Number($('discLeadsPerAgentInput').value || 2),
-            live: $('discLiveToggle').checked,
+            agent_count: Math.max(1, Math.min(Number($('discAgentCountInput').value || 1), 100)),
+            leads_per_agent: Math.max(1, Math.min(Number($('discLeadsPerAgentInput').value || 2), 25)),
+            unconstrained: isUnc,
+            live: isLive,
             reset_previous: $('discResetPrevToggle') ? $('discResetPrevToggle').checked : false,
           }),
         });
         const payload = await res.json();
         if (!res.ok) throw new Error(payload.error || 'Discovery dispatch failed');
-        const msg = `Sent ${payload.agent_count} scout(s) in ${formatStatus(payload.mode)} mode.`;
+        const msg = `Launched ${payload.agent_count} scout(s) in ${formatStatus(payload.mode)} mode.`;
         setBanner(msg, 'info');
         syncDiscoveryBatchLinks(payload.batch_id, msg);
         await refreshDiscoveryData();
+        if (payload.mode === 'live') {
+          const startMs = Date.now();
+          await pollDiscBatchOnce(payload.batch_id, startMs, false);
+          discStreamTimer = setInterval(async () => {
+            const st = await pollDiscBatchOnce(payload.batch_id, startMs, false);
+            if (st && st.allFinished) stopDiscStream();
+          }, 2500);
+        }
       } catch (err) {
         setBanner(err.message, 'error');
       } finally {
         $('discDispatchBtn').disabled = false;
       }
     });
+
+    if ($('discCascadeBtn')) {
+      $('discCascadeBtn').addEventListener('click', async () => {
+        if (!state.selectedSourceIds.size) {
+          setBanner('Pick at least one source first.', 'error');
+          return;
+        }
+        stopDiscStream();
+        discProceedNow = false;
+        const scouts = Math.max(1, Math.min(Number($('discAgentCountInput').value || 1), 100));
+        const perScout = Math.max(1, Math.min(Number($('discLeadsPerAgentInput').value || 2), 25));
+        const isLive = $('discLiveToggle').checked;
+        const isUnc = $('discUnconstrainedToggle') ? $('discUnconstrainedToggle').checked : false;
+        $('discCascadeBtn').disabled = true;
+        $('discDispatchBtn').disabled = true;
+        try {
+          setBanner(`Step 1/4: Launching ${scouts} ${isLive ? 'Live Web Search' : 'Simulated'} Scouts…`, 'info');
+          const startMs = Date.now();
+          const dRes = await fetch('/api/discovery/dispatch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              source_ids: Array.from(state.selectedSourceIds),
+              brief: $('discBriefInput').value,
+              agent_count: scouts,
+              leads_per_agent: perScout,
+              unconstrained: isUnc,
+              live: isLive,
+              reset_previous: $('discResetPrevToggle') ? $('discResetPrevToggle').checked : false,
+            }),
+          });
+          const dData = await dRes.json();
+          if (!dRes.ok) throw new Error(dData.error || 'Discovery dispatch failed');
+          syncDiscoveryBatchLinks(dData.batch_id, 'Cascade running…');
+          if (dData.mode === 'live') {
+            for (let attempt = 0; attempt < 240; attempt++) {
+              if (discProceedNow) break;
+              await new Promise((r) => setTimeout(r, 2500));
+              if (discProceedNow) break;
+              const st = await pollDiscBatchOnce(dData.batch_id, startMs, true);
+              if (!st || st.allFinished) break;
+            }
+            if ($('discProceedPartialBtn')) $('discProceedPartialBtn').classList.add('hidden');
+          }
+          setBanner('Step 2/4: Investigating 100% of discovered artists…', 'info');
+          const iRes = await fetch('/api/investigate/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+          const iData = await iRes.json();
+          if (!iRes.ok) throw new Error(iData.error || 'Investigation failed');
+
+          setBanner(`Step 3/4 & 4/4: Running Option A Smart Funnel across ${iData.count || 0} artists…`, 'info');
+          const oaRes = await fetch('/api/screening/option-a', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ max_neon_debates: 30, live_taste: true, live_debates: false }),
+          });
+          const oaData = await oaRes.json();
+          if (!oaRes.ok) throw new Error(oaData.error || 'Option A funnel failed');
+          await Promise.all([refreshDiscoveryData(), refreshScreeningPackets()]);
+          if ($('discOpenInvestigateBtn')) {
+            $('discOpenInvestigateBtn').href = '/screen';
+            $('discOpenInvestigateBtn').textContent = `Review All ${oaData.total_investigated} Discovered Artists (Top ${oaData.debated_top_count} Debated First) →`;
+          }
+          if ($('discPostDispatchBar')) $('discPostDispatchBar').classList.remove('hidden');
+          setBanner(`Option A Smart Funnel complete! ${oaData.total_investigated} artists investigated & Taste-scored → Top ${oaData.debated_top_count} Pros/Cons debates ready on /screen.`, 'info');
+        } catch (err) {
+          setBanner(err.message, 'error');
+        } finally {
+          $('discCascadeBtn').disabled = false;
+          $('discDispatchBtn').disabled = false;
+        }
+      });
+    }
   }
 
   // =========================================================
