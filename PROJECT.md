@@ -34,6 +34,7 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 ## Recent sessions
 *Working memory (LRU pointer cache, max 12, most recent first). Maintained by the `project-manager` skill/subagent.*
 
+- 2026-11-21 · source hunter & nationwide cascade · shipped `source-hunter` cron trigger, 42-source 8-city seed & American Idol cascade (PR #35, 117/117) → `pm/log/2026-11-21-source-hunter-and-american-idol-preset.md`, `agents/source-hunter/`, `simon/source_hunter.py`
 - 2026-11-21 · ui flow unification · unified 56px sticky topbar, 5 even tabs, 1320px layout, Plain-English overhaul & 114/114 tests (PRs #30–#34) → `pm/log/2026-11-21-ui-flow-unification.md`, `simon/static/`, `simon/discovery_ui.py`, `agents/`
 - 2026-11-21 · legacy mvp removal · removed MVP shortlist UI, brief drawer, synthesis-scout agent & 3_shortlist alias (PR #33) → `pm/log/2026-11-21-remove-legacy-mvp.md`, `simon/static/`, `simon/phases.py`, `agents/`
 - 2026-11-21 · process audit & subagents · 53-session telemetry audit, `simon-ops` plugin (5 dedicated subagents), env rule & 2 workflow skills → `pm/log/2026-11-21-process-audit-and-subagents.md`, `.agents/plugins/simon-ops/`, `.agents/rules/`, `.agents/skills/`
@@ -45,4 +46,3 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 - 2026-11-21 · reporting layer & two-stage ui · merged PRs #13/#14 (`AgentReport` v1.0.0, shared field-reporting/source-discovery skills, 2-stage UI) → `pm/log/2026-11-21-reporting-layer-two-stage-ui.md`, `data/agent_report_schema.json`, `agents/_shared/skills/`
 - 2026-11-21 · staging fleet smoke test · verified 9/9 staging managed agents live via concurrent /api/fleet/run (0 failures) → `pm/log/2026-11-21-staging-fleet-smoke-test.md`
 - 2026-11-21 · cloud run & firestore · merged PR #4 (`b2057e8`), deployed `simon-staging`, seeded 36 sources & live traces → `pm/log/2026-11-21-cloudrun-firestore-platform.md`, `simon/`, `data/`, `.agents/`
-- 2026-11-21 · shared youtube skill · enabled YouTube Data API v3, synced `/v1beta/credentials` & wired skill into 5 agents (PR #11, 40/40) → `pm/log/2026-11-21-shared-youtube-skill.md`, `agents/_shared/skills/youtube/`, `tests/`

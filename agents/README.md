@@ -43,6 +43,7 @@ Any agent can opt into shared sandbox tools by adding them to `shared_skills` in
 
 ```mermaid
 flowchart LR
+    S0["Stage 0 · Source Expansion\nsource-hunter (cron 09:00 ET)\ngemini-4-hydrogen (64k)"]
     S1["Stage 1 · Discovery\ndiscovery-scout\ngemini-4-hydrogen (192k)"]
     S2A["Stage 2A · Identity\nidentity-resolver\ngemini-4-argon (64k)"]
     S2B["Stage 2B · Parallel Forensics\nfootprint-profiler · signal-forensics\ntrack-record-mapper\ngemini-4-argon (64k)"]
@@ -51,6 +52,7 @@ flowchart LR
     S3T["Calibrated Taste Engine\nDSPy + gemini-decision-1"]
     S4["Stage 4 · Outcome\nshowcase-producer\ngemini-4-carbon"]
 
+    S0 -. "Expands Registry" .-> S1
     S1 --> S2A --> S2B --> S3C --> S3J --> S4
     S3J -. "Human Override" .-> S3T
     S3T -. "Taste Score" .-> S4
@@ -60,6 +62,7 @@ flowchart LR
 
 | Stage | Directory / Agent | Model & Budget | Network / Tools | Role | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Stage 0 · Source Expansion** | `source-hunter` | `gemini-4-hydrogen` (`64k`) | Search + URL + Python + `youtube` + `simon-db` | Daily (`/v1beta/triggers` `0 9 * * *` ET) & on-demand registry gap hunter (`POST /api/sources/hunt`) | **Active** |
 | **Stage 1 · Discovery** | `discovery-scout` | `gemini-4-hydrogen` (`192k`) | Search + oEmbed + `youtube` + `simon-db` | Discovers unranked leads from grassroots music sources (`DiscoveryHandoff` v1.0.0) | **Active** |
 | **Stage 2A · Investigation** | `identity-resolver` | `gemini-4-argon` (`64k`) | Search + URL + `youtube` + `simon-db` | 2-step (`1a Generic -> 1b Domain`) identity, link graph, MusicBrainz MBID & contact route | **Active** |
 | **Stage 2B · Investigation** | `footprint-profiler` | `gemini-4-argon` (`64k`) | URL + Python + `youtube` + `simon-db` | Zero-decode oEmbed media queue, public reach & Python concentration math | **Active** |
