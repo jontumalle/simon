@@ -36,7 +36,6 @@ from .investigator import (
     run_signal_forensics,
     run_track_record_mapper,
 )
-from .scout import DEFAULT_TASTE_BRIEF
 from .screening import run_screening_batch
 
 

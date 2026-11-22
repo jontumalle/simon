@@ -214,7 +214,7 @@ class TestFirestoreAndPlatform(unittest.TestCase):
         status, _, body = dispatch_http_request(store, "POST", "/api/sources/seed")
         self.assertEqual(status, 200)
         seeded = json.loads(body.decode("utf-8"))
-        self.assertEqual(seeded["seeded_count"], 36)
+        self.assertEqual(seeded["seeded_count"], 42)
         self.assertEqual(seeded["collection"], "source_registry")
 
         status, _, body = dispatch_http_request(

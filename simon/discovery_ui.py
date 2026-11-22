@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 import sys
 import time
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 import uuid
 
 from .db_tools import (
@@ -50,7 +50,8 @@ def _utc_now_iso() -> str:
 
 def load_source_registry(store: SimonStore) -> Dict[str, Any]:
     """Load seeded reference sources merged with any newly discovered sources in simon-db."""
-    sources: List[Dict[str, Any]] = []
+    seed_sources: List[Dict[str, Any]] = []
+    new_sources: List[Dict[str, Any]] = []
     seen_urls = set()
 
     if SOURCE_SEED_PATH.is_file():
@@ -60,9 +61,9 @@ def load_source_registry(store: SimonStore) -> Dict[str, Any]:
             if not url or url in seen_urls:
                 continue
             seen_urls.add(url)
-            sources.append(src)
+            seed_sources.append(src)
 
-    # Merge any live discovered_sources saved via simon-db
+    # Merge any live discovered_sources saved via simon-db or Source Hunter (pinned first as NEW)
     db_docs = list_agent_documents(store, "discovered_sources", limit=100)
     for row in db_docs:
         doc = row.get("data") if isinstance(row, dict) and isinstance(row.get("data"), dict) else row
@@ -72,7 +73,7 @@ def load_source_registry(store: SimonStore) -> Dict[str, Any]:
         if not url or url in seen_urls:
             continue
         seen_urls.add(url)
-        sources.append(
+        new_sources.append(
             {
                 "source_id": str(doc.get("source_id") or doc.get("_doc_id") or f"db_{uuid.uuid4().hex[:8]}"),
                 "name": str(doc.get("name") or doc.get("title_or_node") or url),
@@ -81,15 +82,19 @@ def load_source_registry(store: SimonStore) -> Dict[str, Any]:
                 "source_type": str(doc.get("source_type") or "discovered"),
                 "location": doc.get("location") or {"scope": "global", "city": None, "area": None, "country": None},
                 "genre_tags": doc.get("genre_tags") or ["all"],
-                "career_tier": str(doc.get("career_tier") or "mixed"),
+                "career_tier": str(doc.get("career_tier") or "grassroots"),
                 "access_method": str(doc.get("access_method") or "public_web"),
-                "why_useful": str(doc.get("why_useful") or "Discovered by Simon agent."),
+                "why_useful": str(doc.get("why_useful") or "Discovered by Simon Source Hunter."),
                 "discovered_by": str(doc.get("discovered_by") or "stage_1_discovery"),
                 "status": str(doc.get("status") or "active"),
                 "notes": doc.get("notes"),
                 "last_checked_at": doc.get("last_checked_at"),
+                "is_new": True,
+                "discovered_at": doc.get("discovered_at") or doc.get("created_at") or (row.get("_saved_at") if isinstance(row, dict) else None),
             }
         )
+
+    sources = new_sources + seed_sources
 
     channels = sorted({s.get("source_channel", "other") for s in sources})
     cities = sorted({(s.get("location") or {}).get("city") or "Global" for s in sources})
@@ -114,7 +119,7 @@ def load_source_registry(store: SimonStore) -> Dict[str, Any]:
 
 def _partition_sources(sources: List[Dict[str, Any]], agent_count: int) -> List[List[Dict[str, Any]]]:
     """Distribute selected sources evenly across N discovery agents."""
-    n = max(1, min(int(agent_count), 10))
+    n = max(1, min(int(agent_count), 12))
     buckets: List[List[Dict[str, Any]]] = [[] for _ in range(n)]
     for idx, src in enumerate(sources):
         buckets[idx % n].append(src)
@@ -560,71 +565,44 @@ def _build_simulated_worker(
     brief: str,
     leads_per_agent: int,
     assigned_sources: List[Dict[str, Any]],
+    used_names: Optional[Set[str]] = None,
 ) -> Dict[str, Any]:
-    """Produce a realistic, contract-valid DiscoveryHandoff v1.0.0 worker result for instant UI testing."""
-    demo_leads_pool: List[Dict[str, Any]] = []
-    if DEMO_HANDOFF_PATH.is_file():
-        demo = json.loads(DEMO_HANDOFF_PATH.read_text(encoding="utf-8"))
-        demo_leads_pool = demo.get("leads", [])
+    """Produce a realistic, contract-valid DiscoveryHandoff v1.0.0 worker result across 20 US regional artists."""
+    from .demo_flow import select_regional_vocalists_for_sources
 
     primary_src = assigned_sources[0]
-    src_channel = primary_src.get("source_channel", "youtube_live_session")
-    if src_channel == "musicbrainz":
-        src_channel = "other"
+    chosen_profiles = select_regional_vocalists_for_sources(
+        assigned_sources=assigned_sources,
+        count=leads_per_agent,
+        used_names=used_names,
+        worker_index=worker_index,
+    )
 
     leads: List[Dict[str, Any]] = []
-    for k in range(leads_per_agent):
-        if demo_leads_pool and src_channel == "youtube_live_session":
-            base = demo_leads_pool[(worker_index + k) % len(demo_leads_pool)]
-            leads.append(
-                {
-                    "lead_id": f"lead_w{worker_index + 1}_{k + 1:02d}",
-                    "stage_name": base["stage_name"],
-                    "seed_sources": [
-                        {
-                            "url": base["seed_sources"][0]["url"],
-                            "source_channel": "youtube_live_session",
-                            "seed_query_or_venue_node": primary_src["name"],
-                            "discovered_at": _utc_now_iso(),
-                            "notes": f"Simulated discovery from {primary_src['name']}.",
-                        }
-                    ],
-                    "attribution_status": base.get("attribution_status", "verified"),
-                    "context_snippet": base.get("context_snippet")
-                    or f"Live vocal video listed under {primary_src['name']}.",
-                }
-            )
-        else:
-            sample_names = [
-                "Maya Vance",
-                "Soraia Bell",
-                "Devon K.",
-                "Nadia Solis",
-                "Tessa Morales",
-                "Eliot Gray",
-                "Kira Osei",
-                "Jules Navarro",
-            ]
-            artist = sample_names[(worker_index * 3 + k) % len(sample_names)]
-            leads.append(
-                {
-                    "lead_id": f"lead_w{worker_index + 1}_{k + 1:02d}",
-                    "stage_name": artist,
-                    "seed_sources": [
-                        {
-                            "url": primary_src["url"],
-                            "source_channel": src_channel,
-                            "seed_query_or_venue_node": primary_src["name"],
-                            "discovered_at": _utc_now_iso(),
-                            "notes": f"Listed on {primary_src['name']} ({(primary_src.get('location') or {}).get('city') or 'Global'}).",
-                        }
-                    ],
-                    "attribution_status": "verified" if src_channel == "bandcamp_local_arrival" else "uncertain",
-                    "context_snippet": (
-                        f"Listed on {primary_src['name']} ({src_channel}) matching brief constraints."
-                    ),
-                }
-            )
+    for k, prof in enumerate(chosen_profiles):
+        src = assigned_sources[k % len(assigned_sources)]
+        src_channel = src.get("source_channel", "youtube_live_session")
+        if src_channel == "musicbrainz":
+            src_channel = "other"
+        seed_url = prof["clip_url"] if src_channel == "youtube_live_session" else src["url"]
+        city_label = (src.get("location") or {}).get("city") or prof.get("region_key") or "US"
+        leads.append(
+            {
+                "lead_id": f"lead_w{worker_index + 1}_{k + 1:02d}",
+                "stage_name": prof["stage_name"],
+                "seed_sources": [
+                    {
+                        "url": seed_url,
+                        "source_channel": src_channel,
+                        "seed_query_or_venue_node": src["name"],
+                        "discovered_at": _utc_now_iso(),
+                        "notes": f"Listed on {src['name']} ({city_label}).",
+                    }
+                ],
+                "attribution_status": prof.get("attribution_override") or "verified",
+                "context_snippet": f"{prof['seed_note']} Listed via {src['name']}.",
+            }
+        )
 
     handoff = {
         "contract_version": "1.0.0",
@@ -719,7 +697,7 @@ def dispatch_discovery_batch(
 
     clean_brief = (brief or DEFAULT_DISCOVERY_BRIEF).strip()
     n_leads = max(1, min(int(leads_per_agent or 2), 10))
-    n_agents = max(1, min(int(agent_count or len(selected)), 10))
+    n_agents = max(1, min(int(agent_count or len(selected)), 12))
     partitions = _partition_sources(selected, n_agents)
 
     batch_id = f"disc_{uuid.uuid4().hex[:10]}"
@@ -729,8 +707,11 @@ def dispatch_discovery_batch(
     workers: List[Dict[str, Any]] = []
 
     if not live:
+        used_names: Set[str] = set()
         for idx, assigned in enumerate(partitions):
-            worker = _build_simulated_worker(idx, batch_id, clean_brief, n_leads, assigned)
+            worker = _build_simulated_worker(
+                idx, batch_id, clean_brief, n_leads, assigned, used_names=used_names
+            )
             worker["report_id"] = f"rep_{batch_id}_w{idx + 1}"
             workers.append(worker)
             if worker["contract_valid"] and isinstance(worker.get("output_json"), dict):
@@ -1431,11 +1412,97 @@ _SHARED_CSS = (
 
 _DISCOVERY_PAGE_CSS = """
   .wrap.wrap-wide { max-width: 1320px; }
-  .selector-toolbar {
+  .preset-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .preset-btn {
+    padding: 7px 13px;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    color: var(--text);
+    cursor: pointer;
+    transition: transform 0.1s ease, border-color 0.14s ease, background 0.14s ease;
+  }
+  .preset-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .preset-btn.flagship {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(45, 212, 191, 0.16));
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.22);
+  }
+  .fleet-scale-banner {
+    display: none;
+    padding: 11px 14px;
+    margin-bottom: 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(45, 212, 191, 0.42);
+    background: rgba(45, 212, 191, 0.08);
+    font-size: 0.84rem;
+    line-height: 1.5;
+    color: var(--text);
+  }
+  .discovery-options-grid {
     display: grid;
-    grid-template-columns: minmax(260px, 1.8fr) repeat(4, minmax(155px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 10px;
     margin-bottom: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+  }
+  .opt-group-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .opt-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .hunter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(45, 212, 191, 0.32);
+    background: rgba(45, 212, 191, 0.05);
+  }
+  .hunter-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    justify-content: flex-end;
+  }
+  .hunter-controls input {
+    min-width: 260px;
+    max-width: 400px;
+    flex: 1;
+    padding: 8px 11px;
+    font-size: 0.86rem;
+  }
+  .selector-toolbar {
+    display: grid;
+    grid-template-columns: minmax(260px, 1.8fr) repeat(4, minmax(145px, 1fr));
+    gap: 10px;
+    margin-bottom: 10px;
   }
   @media (max-width: 980px) {
     .selector-toolbar { grid-template-columns: 1fr 1fr; }
@@ -1446,20 +1513,20 @@ _DISCOVERY_PAGE_CSS = """
   .selector-toolbar input,
   .selector-toolbar select {
     width: 100%;
-    min-height: 42px;
-    padding: 10px 13px;
-    font-size: 0.92rem;
+    min-height: 38px;
+    padding: 8px 11px;
+    font-size: 0.88rem;
   }
-  .channel-chips {
+  .channel-chips, .region-chips {
     display: flex;
     flex-wrap: wrap;
     gap: 7px;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
   }
   .chip-btn {
     padding: 5px 11px;
     border-radius: 999px;
-    font-size: 0.78rem;
+    font-size: 0.77rem;
     font-weight: 600;
     border: 1px solid var(--border);
     background: var(--panel-2);
@@ -1478,12 +1545,12 @@ _DISCOVERY_PAGE_CSS = """
     flex-wrap: wrap;
     align-items: center;
     gap: 7px;
-    padding: 10px 12px;
-    margin-bottom: 12px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
     border-radius: 10px;
     border: 1px solid var(--border);
     background: var(--panel-2);
-    font-size: 0.82rem;
+    font-size: 0.81rem;
   }
   .sel-chip {
     border: 1px solid var(--accent);
@@ -1491,41 +1558,46 @@ _DISCOVERY_PAGE_CSS = """
     color: var(--accent);
     border-radius: 999px;
     padding: 3px 10px;
-    font-size: 0.78rem;
+    font-size: 0.77rem;
     font-weight: 600;
     cursor: pointer;
   }
   .source-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: 14px;
-    min-height: 520px;
-    max-height: 76vh;
-    overflow-y: auto;
-    padding: 4px 6px 6px 2px;
-  }
-  .source-grid.expanded {
-    max-height: none;
-    overflow: visible;
+    gap: 10px;
+    padding: 2px 0;
   }
   .source-item {
-    padding: 16px 18px;
-    border-radius: 13px;
+    padding: 11px 14px;
+    border-radius: 11px;
     display: flex;
     flex-direction: column;
-    gap: 9px;
-    min-height: 156px;
+    gap: 6px;
+    min-height: 74px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--panel-2);
+    transition: border-color 0.12s ease, background 0.12s ease;
+  }
+  .source-item:hover { border-color: var(--accent); }
+  .source-item.selected {
+    border-color: var(--accent);
+    background: rgba(245, 158, 11, 0.08);
+  }
+  .source-item.is-new-source {
+    border-color: rgba(45, 212, 191, 0.55);
   }
   .source-check {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
-    border-radius: 6px;
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
     border: 1.5px solid var(--border);
     background: var(--panel);
-    font-size: 0.78rem;
+    font-size: 0.74rem;
     font-weight: 800;
     flex-shrink: 0;
   }
@@ -1536,43 +1608,95 @@ _DISCOVERY_PAGE_CSS = """
   }
   .source-title {
     font-weight: 700;
-    font-size: 0.98rem;
+    font-size: 0.92rem;
     margin: 0;
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     gap: 8px;
   }
-  .source-why {
-    font-size: 0.86rem;
-    color: var(--text);
-    opacity: 0.9;
-    line-height: 1.45;
-    margin: 0;
-  }
-  .source-genres {
+  .source-meta-line {
     display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     flex-wrap: wrap;
-    gap: 5px;
-    margin-top: auto;
-    padding-top: 2px;
-  }
-  .genre-tag {
-    font-size: 0.71rem;
-    padding: 2px 7px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
+    font-size: 0.79rem;
     color: var(--muted);
   }
-  .source-note {
-    font-size: 0.77rem;
+  .source-why {
+    font-size: 0.8rem;
     color: var(--muted);
+    line-height: 1.35;
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
   .source-ext {
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     font-weight: 600;
     color: var(--teal);
     white-space: nowrap;
+  }
+  .pagination-bar {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 420px;
+    width: calc(100vw - 40px);
+    pointer-events: none;
+  }
+  .toast-card {
+    pointer-events: auto;
+    background: var(--panel);
+    border: 1.5px solid var(--teal);
+    border-radius: 12px;
+    padding: 14px 16px;
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+    animation: toastSlideIn 0.22s ease-out;
+  }
+  @keyframes toastSlideIn {
+    from { opacity: 0; transform: translateY(-10px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .toast-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 0.92rem;
+    color: var(--teal);
+    margin-bottom: 8px;
+  }
+  .toast-close {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+  }
+  .toast-list {
+    margin: 0 0 10px 18px;
+    padding: 0;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: var(--text);
   }
 """
 
@@ -1611,11 +1735,12 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
   <style>{_SHARED_CSS}{_DISCOVERY_PAGE_CSS}</style>
 </head>
 <body>
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
   {render_page_topbar("/discovery", "Discovery")}
   <div class="wrap wrap-wide">
     <div class="page-hero">
       <h1>1. Discovery Dashboard <span class="pill amber">Stage 1</span></h1>
-      <p>Pick your sources, write a brief, and send scouts. Track live progress in <strong>Field News</strong>.</p>
+      <p>Launch a campaign preset or custom brief, fine-tune discovery options, and manage grassroots sources below.</p>
     </div>
     {render_discovery_subnav("/discovery")}
 
@@ -1623,40 +1748,60 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
 
     <section class="card">
       <div class="section-head">
-        <h2>1. Select Discovery Sources <span id="selectedBadge" class="pill amber">0 selected</span> <span id="showingBadge" class="pill">0 / 0 shown</span></h2>
-        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-          <button class="btn" type="button" id="selectQuickBtn">Quick Pick: 3 NYC Active</button>
-          <button class="btn" type="button" id="selectFilteredBtn">Select All Shown</button>
-          <button class="btn" type="button" id="clearSelBtn">Clear</button>
-          <button class="btn" type="button" id="toggleExpandBtn">Expand Full List</button>
+        <h2>1. Orchestrate Discovery Fleet</h2>
+        <span id="agentIdBadge" class="pill blue">Discovery Scout</span>
+      </div>
+
+      <div class="preset-row">
+        <span style="font-size:0.78rem; font-weight:700; text-transform:uppercase; color:var(--muted);">Quick Campaign Presets:</span>
+        <button type="button" class="preset-btn flagship" id="presetIdolBtn">★ American Idol · Nationwide Search (Max Fleet · 8 Regions)</button>
+        <button type="button" class="preset-btn" id="presetNycBtn">First Listen NYC (3 Scouts · Local Soul/R&amp;B)</button>
+        <button type="button" class="preset-btn" id="presetRadioBtn">Tiny Desk &amp; Radio Live Rooms (4 Scouts · National Acoustic)</button>
+      </div>
+
+      <div id="fleetScaleBanner" class="fleet-scale-banner"></div>
+
+      <div class="discovery-options-grid">
+        <div>
+          <div class="opt-group-label">Scene / Format Focus</div>
+          <div class="opt-chips" id="optFormatGroup">
+            <button type="button" class="chip-btn active" data-opt-format="">All Formats</button>
+            <button type="button" class="chip-btn" data-opt-format="open_mic_lineup">Raw Open Mic</button>
+            <button type="button" class="chip-btn" data-opt-format="youtube_live_session">Radio Live Session</button>
+            <button type="button" class="chip-btn" data-opt-format="diy_venue_calendar">DIY Club Bill</button>
+            <button type="button" class="chip-btn" data-opt-format="bandcamp_local_arrival">Bandcamp Underground</button>
+          </div>
+        </div>
+        <div>
+          <div class="opt-group-label">Genre Focus</div>
+          <div class="opt-chips" id="optGenreGroup">
+            <button type="button" class="chip-btn active" data-opt-genre="">Any Genre</button>
+            <button type="button" class="chip-btn" data-opt-genre="soul_rnb">Soul &amp; R&amp;B</button>
+            <button type="button" class="chip-btn" data-opt-genre="indie_alt">Indie &amp; Alt</button>
+            <button type="button" class="chip-btn" data-opt-genre="country_americana">Country &amp; Americana</button>
+            <button type="button" class="chip-btn" data-opt-genre="jazz_acoustic">Jazz &amp; Acoustic</button>
+          </div>
+        </div>
+        <div>
+          <div class="opt-group-label">Artist Stage</div>
+          <div class="opt-chips" id="optStageGroup">
+            <button type="button" class="chip-btn active" data-opt-stage="ground_floor">Unsigned / Pre-Breakout</button>
+            <button type="button" class="chip-btn" data-opt-stage="grassroots">Grassroots Local</button>
+            <button type="button" class="chip-btn" data-opt-stage="tastemaker">Touring Indie</button>
+          </div>
         </div>
       </div>
 
-      <div class="selector-toolbar">
-        <input type="search" id="sourceSearchInput" placeholder="Search sources by name, neighborhood, genre, or scouting note…" aria-label="Search discovery sources" />
-        <select id="channelFilter"><option value="">All channels</option></select>
-        <select id="cityFilter"><option value="">All locations</option></select>
-        <select id="tierFilter"><option value="">All career tiers</option></select>
-        <select id="genreFilter"><option value="">All genres</option></select>
-      </div>
-
-      <div id="channelChips" class="channel-chips"></div>
-      <div id="selectedTray" class="selected-tray" style="display:none;"></div>
-      <div id="sourceGrid" class="source-grid"></div>
-    </section>
-
-    <section class="card">
-      <div class="section-head">
-        <h2>2. Orchestrate Discovery Fleet</h2>
-        <span id="agentIdBadge" class="pill blue">Discovery Scout</span>
-      </div>
       <label for="briefInput" style="display:block; font-weight:600; font-size:0.86rem; margin-bottom:6px;">Search Brief</label>
       <textarea id="briefInput">{DEFAULT_DISCOVERY_BRIEF}</textarea>
+
+      <div id="selectedTray" class="selected-tray" style="display:none; margin-top:10px; margin-bottom:0;"></div>
+
       <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; margin-top:14px;">
         <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:center;">
           <label style="font-size:0.86rem;">
             Discovery Scouts:
-            <input type="number" id="agentCountInput" min="1" max="10" value="3" style="width:68px; margin-left:6px;" />
+            <input type="number" id="agentCountInput" min="1" max="12" value="3" style="width:68px; margin-left:6px;" />
           </label>
           <label style="font-size:0.86rem;">
             Leads / Scout:
@@ -1673,23 +1818,79 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
         </div>
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
           <div id="postDispatchLinks" style="display:none; gap:8px; flex-wrap:wrap; align-items:center;">
+            <a id="reviewFinalistsBtn" class="btn primary" href="/screen" style="display:none;">Review 16 Nationwide Finalists →</a>
             <a id="nextInvestigateBtn" class="btn primary" href="/investigate?autorun=1">Next: Investigate Discovered Leads →</a>
             <a id="followFieldNewsBtn" class="btn" href="/field-news">Follow in Field News →</a>
             <a id="openReportsBtn" class="btn" href="/reports">Open Scouting Reports →</a>
           </div>
           <button id="clearOldRunsBtn" class="btn" type="button">↺ Clear Old Runs</button>
-          <a class="btn" href="/?tab=discovery">Open in Agency Studio →</a>
+          <button id="cascadeBtn" class="btn" type="button" style="border-color:rgba(45,212,191,0.55); color:var(--teal); font-weight:700;">⚡ Run Full Pipeline Cascade (Auto-Advance All Stages)</button>
           <button id="dispatchBtn" class="btn primary" type="button">Send Discovery Scouts</button>
         </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <h2>2. Select Discovery Sources <span id="selectedBadge" class="pill amber">0 selected</span> <span id="showingBadge" class="pill">0 / 0 shown</span></h2>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <button class="btn" type="button" id="selectQuickBtn">Quick Pick: 3 NYC Active</button>
+          <button class="btn" type="button" id="selectFilteredBtn">Select All Shown</button>
+          <button class="btn" type="button" id="clearSelBtn">Clear</button>
+          <button class="btn" type="button" id="toggleExpandBtn">Show All</button>
+        </div>
+      </div>
+
+      <div class="hunter-bar">
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span class="pill ok" id="hunterSchedulePill">⏱ Source Hunter: Runs Daily (9:00 AM ET) · On-Demand</span>
+          <span style="font-size:0.81rem; color:var(--muted);">Expand regional open mics, radio sessions &amp; indie venue calendars automatically.</span>
+        </div>
+        <div class="hunter-controls">
+          <input type="text" id="huntFocusInput" placeholder="Optional focus (e.g. Detroit soul, Philly indie, college radio)…" aria-label="Source Hunter focus" />
+          <button type="button" class="btn primary" id="huntSourcesBtn">🔍 Find New Sources</button>
+        </div>
+      </div>
+
+      <div id="regionPills" class="region-chips">
+        <button type="button" class="chip-btn active" data-region="all">All</button>
+        <button type="button" class="chip-btn" data-region="nyc">NYC</button>
+        <button type="button" class="chip-btn" data-region="south">South</button>
+        <button type="button" class="chip-btn" data-region="midwest_tx">Midwest &amp; TX</button>
+        <button type="button" class="chip-btn" data-region="west">West Coast</button>
+        <button type="button" class="chip-btn" data-region="national">National</button>
+        <button type="button" class="chip-btn" data-region="new">✨ Newly Added</button>
+      </div>
+
+      <div class="selector-toolbar">
+        <input type="search" id="searchFilter" data-legacy="sourceSearchInput" placeholder="Instant search by name, city, neighborhood, genre, channel, note, or URL…" aria-label="Search discovery sources" />
+        <select id="channelFilter"><option value="">All channels</option></select>
+        <select id="cityFilter"><option value="">All locations</option></select>
+        <select id="tierFilter"><option value="">All career tiers</option></select>
+        <select id="genreFilter"><option value="">All genres</option></select>
+      </div>
+
+      <div id="channelChips" class="channel-chips"></div>
+      <div id="sourceGrid" class="source-grid"></div>
+      <div id="paginationBar" class="pagination-bar" style="display:none;">
+        <button type="button" class="btn" id="showMoreSourcesBtn">Show 8 more</button>
+        <button type="button" class="btn" id="collapseSourcesBtn" style="display:none;">Collapse</button>
       </div>
     </section>
   </div>
 
   <script>
+    const PAGE_SIZE = 8;
+    const NATIONWIDE_BRIEF = 'American Idol Nationwide Search: scour grassroots open mics, public radio live rooms, and indie venue calendars across 8 US music regions (NYC, Nashville, Atlanta, Austin, Chicago, New Orleans, LA, Seattle) for unsigned breakout vocalists with undeniable live single-take command.';
+
     let allSources = [];
     let currentFiltered = [];
     const selectedIds = new Set();
-    let isExpanded = false;
+    const newlyAddedIds = new Set();
+    let visibleLimit = PAGE_SIZE;
+    let activeRegion = 'all';
+    let baseBriefText = {json.dumps(DEFAULT_DISCOVERY_BRIEF)};
+    const activeOptions = {{ format: '', genre: '', stage: 'ground_floor' }};
 
     const el = (id) => document.getElementById(id);
     function esc(s) {{ const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }}
@@ -1699,6 +1900,65 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       b.textContent = msg; b.className = 'banner ' + (kind || 'info'); b.style.display = 'block';
     }}
 {_FORMAT_LABEL_JS}
+
+    function isNewSource(s) {{
+      return Boolean(s && (s.is_new || newlyAddedIds.has(s.source_id) || (s.discovered_by && s.discovered_by !== 'seed_curated')));
+    }}
+
+    function matchesRegionBucket(s, bucket) {{
+      if (!bucket || bucket === 'all') return true;
+      if (bucket === 'new') return isNewSource(s);
+      const loc = s.location || {{}};
+      const city = String(loc.city || '').toLowerCase();
+      const scope = String(loc.scope || '').toLowerCase();
+      if (bucket === 'nyc') return ['new york', 'jersey city'].includes(city);
+      if (bucket === 'south') return ['nashville', 'atlanta', 'new orleans', 'memphis', 'asheville', 'durham', 'chapel hill', 'birmingham', 'charleston'].includes(city);
+      if (bucket === 'midwest_tx') return ['chicago', 'austin', 'detroit', 'minneapolis', 'houston', 'dallas', 'cleveland', 'milwaukee', 'st. louis', 'kansas city'].includes(city);
+      if (bucket === 'west') return ['los angeles', 'seattle', 'oakland', 'san francisco', 'portland', 'san diego', 'denver'].includes(city);
+      if (bucket === 'national') return !city || scope === 'national' || scope === 'global';
+      return true;
+    }}
+
+    function updateFleetScaleBanner(forceShow) {{
+      const box = el('fleetScaleBanner');
+      if (!box) return;
+      const scouts = Math.max(1, Math.min(Number(el('agentCountInput').value || 1), 12));
+      const perScout = Math.max(1, Math.min(Number(el('leadsPerAgentInput').value || 2), 10));
+      const candidates = scouts * perScout;
+      const stage2Tasks = candidates * 4;
+      const stage3Tasks = candidates * 3;
+      const totalInvocations = scouts + stage2Tasks + stage3Tasks;
+      const scoutLabel = scouts >= 8 ? `${{scouts}} Regional Discovery Scouts` : `${{scouts}} Discovery Scout${{scouts === 1 ? '' : 's'}}`;
+      box.innerHTML = `<strong>Fleet Scale Math:</strong> ${{scoutLabel}} → <strong>${{candidates}} Candidates</strong> × 4 Stage-2 Investigators (${{stage2Tasks}} tasks) → ${{candidates}} × 3 Stage-3 Critics/Judges (${{stage3Tasks}} tasks) + 1 Zero-Token <code>gemini-decision-1</code> Taste Engine pass = <strong>${{totalInvocations}} Total Agent Invocations</strong>`;
+      if (forceShow) box.style.display = 'block';
+    }}
+
+    function buildEnrichedBrief() {{
+      const clauses = [];
+      const fmtLabels = {{
+        open_mic_lineup: 'prioritize raw acoustic open-mic lineups',
+        youtube_live_session: 'prioritize single-take public radio and live room sessions',
+        diy_venue_calendar: 'prioritize grassroots DIY club calendars and early support bills',
+        bandcamp_local_arrival: 'prioritize self-released Bandcamp underground vocalists',
+      }};
+      const genreLabels = {{
+        soul_rnb: 'focus on Soul, R&B, and gospel-inflected phrasing',
+        indie_alt: 'focus on Indie, Alt-Pop, and chamber-folk vocalists',
+        country_americana: 'focus on Country, Americana, and roots storytellers',
+        jazz_acoustic: 'focus on Vocal Jazz and stripped acoustic arrangements',
+      }};
+      const stageLabels = {{
+        ground_floor: 'target unsigned pre-breakout vocalists',
+        grassroots: 'target active grassroots local draw vocalists',
+        tastemaker: 'target rising touring indie vocalists without major label deals',
+      }};
+      if (activeOptions.format && fmtLabels[activeOptions.format]) clauses.push(fmtLabels[activeOptions.format]);
+      if (activeOptions.genre && genreLabels[activeOptions.genre]) clauses.push(genreLabels[activeOptions.genre]);
+      if (activeOptions.stage && stageLabels[activeOptions.stage]) clauses.push(stageLabels[activeOptions.stage]);
+      if (!clauses.length) return baseBriefText;
+      const baseClean = baseBriefText.replace(/\\s*\\[Focus:.*\\]$/, '').trim();
+      return `${{baseClean}} [Focus: ${{clauses.join('; ')}}.]`;
+    }}
 
     function syncBatchLinks(batchId) {{
       if (!batchId) return;
@@ -1712,6 +1972,50 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       if (el('postDispatchLinks')) el('postDispatchLinks').style.display = 'inline-flex';
     }}
 
+    function showSourceHunterToast(payload) {{
+      const container = el('toastContainer');
+      if (!container) return;
+      const added = Array.isArray(payload.added_sources) ? payload.added_sources : [];
+      const count = payload.added_count != null ? payload.added_count : added.length;
+      const toast = document.createElement('div');
+      toast.className = 'toast-card';
+      toast.setAttribute('role', 'status');
+      const itemsHtml = added.length
+        ? `<ul class="toast-list">${{added.map((s) => {{
+            const city = (s.location && s.location.city) || 'US';
+            const ch = formatLabel(s.source_channel || 'other');
+            return `<li><strong>${{esc(s.name)}}</strong> — ${{esc(city)}} · ${{esc(ch)}}</li>`;
+          }}).join('')}}</ul>`
+        : `<div style="font-size:0.82rem; color:var(--muted); margin-bottom:8px;">All matching sources are already active in your registry.</div>`;
+
+      toast.innerHTML = `
+        <div class="toast-head">
+          <span>✨ Source Hunter added ${{count}} new source${{count === 1 ? '' : 's'}}</span>
+          <button type="button" class="toast-close" aria-label="Close notification">×</button>
+        </div>
+        ${{itemsHtml}}
+        <div style="display:flex; gap:8px; justify-content:flex-end;">
+          ${{added.length ? '<button type="button" class="btn primary toast-select-btn" style="padding:5px 10px; font-size:0.78rem;">Select New Sources</button>' : ''}}
+        </div>
+      `;
+      container.prepend(toast);
+
+      const dismiss = () => {{ if (toast.parentNode) toast.parentNode.removeChild(toast); }};
+      const timer = setTimeout(dismiss, 9200);
+      toast.querySelector('.toast-close').onclick = () => {{ clearTimeout(timer); dismiss(); }};
+      const selBtn = toast.querySelector('.toast-select-btn');
+      if (selBtn) {{
+        selBtn.onclick = () => {{
+          added.forEach((s) => {{ if (s.source_id) selectedIds.add(s.source_id); }});
+          el('agentCountInput').value = Math.min(Math.max(1, selectedIds.size), 12);
+          updateFleetScaleBanner(false);
+          renderSources();
+          clearTimeout(timer);
+          dismiss();
+        }};
+      }}
+    }}
+
     function renderChannelChips() {{
       const activeChannel = el('channelFilter').value;
       const counts = new Map();
@@ -1720,7 +2024,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
         counts.set(ch, (counts.get(ch) || 0) + 1);
       }});
       const chips = [
-        `<button type="button" class="chip-btn ${{activeChannel === '' ? 'active' : ''}}" data-channel="">All (${{allSources.length}})</button>`,
+        `<button type="button" class="chip-btn ${{activeChannel === '' ? 'active' : ''}}" data-channel="">All Channels (${{allSources.length}})</button>`,
       ];
       Array.from(counts.keys()).sort().forEach((ch) => {{
         chips.push(
@@ -1731,6 +2035,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       el('channelChips').querySelectorAll('.chip-btn').forEach((btn) => {{
         btn.onclick = () => {{
           el('channelFilter').value = btn.dataset.channel || '';
+          visibleLimit = PAGE_SIZE;
           renderSources();
         }};
       }});
@@ -1746,10 +2051,11 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       const byId = new Map(allSources.map((s) => [s.source_id, s]));
       const items = Array.from(selectedIds).map((id) => {{
         const src = byId.get(id);
-        const name = src ? src.name : id;
+        const city = src && src.location && src.location.city ? ` (${{src.location.city}})` : '';
+        const name = src ? `${{src.name}}${{city}}` : id;
         return `<button type="button" class="sel-chip" data-remove-id="${{esc(id)}}" title="Remove source">${{esc(name)}} ×</button>`;
       }});
-      tray.innerHTML = `<span style="font-weight:700; color:var(--muted);">Selected:</span>` + items.join('');
+      tray.innerHTML = `<span style="font-weight:700; color:var(--muted);">Active Sources (${{selectedIds.size}}):</span>` + items.join('');
       tray.style.display = 'flex';
       tray.querySelectorAll('.sel-chip').forEach((btn) => {{
         btn.onclick = () => {{
@@ -1760,25 +2066,31 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
     }}
 
     function resetFilters() {{
-      el('sourceSearchInput').value = '';
+      el('searchFilter').value = '';
       el('channelFilter').value = '';
       el('cityFilter').value = '';
       el('tierFilter').value = '';
       el('genreFilter').value = '';
+      activeRegion = 'all';
+      el('regionPills').querySelectorAll('.chip-btn').forEach((b) => {{
+        b.classList.toggle('active', b.dataset.region === 'all');
+      }});
+      visibleLimit = PAGE_SIZE;
       renderSources();
     }}
 
     function renderSources() {{
-      const q = (el('sourceSearchInput').value || '').trim().toLowerCase();
+      const q = (el('searchFilter').value || '').trim().toLowerCase();
       const ch = el('channelFilter').value;
       const city = el('cityFilter').value;
       const tier = el('tierFilter').value;
       const genre = el('genreFilter').value;
 
-      currentFiltered = allSources.filter((s) => {{
+      const filtered = allSources.filter((s) => {{
         const loc = s.location || {{}};
         const sCity = loc.city || 'Global';
         const tags = Array.isArray(s.genre_tags) ? s.genre_tags : [];
+        if (!matchesRegionBucket(s, activeRegion)) return false;
         if (ch && s.source_channel !== ch) return false;
         if (city && sCity !== city) return false;
         if (tier && s.career_tier !== tier) return false;
@@ -1789,6 +2101,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
             s.why_useful,
             s.notes,
             s.source_channel,
+            s.url,
             sCity,
             loc.area,
             tags.join(' '),
@@ -1798,87 +2111,217 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
         return true;
       }});
 
+      // Pin newly added sources right at the top, followed by selected sources
+      currentFiltered = filtered.slice().sort((a, b) => {{
+        const aNew = isNewSource(a) ? 1 : 0;
+        const bNew = isNewSource(b) ? 1 : 0;
+        if (aNew !== bNew) return bNew - aNew;
+        return 0;
+      }});
+
       renderChannelChips();
       renderSelectedTray();
 
+      const slice = currentFiltered.slice(0, visibleLimit);
       el('selectedBadge').textContent = `${{selectedIds.size}} selected`;
-      el('showingBadge').textContent = `${{currentFiltered.length}} / ${{allSources.length}} shown`;
+      el('showingBadge').textContent = `${{slice.length}} / ${{currentFiltered.length}} shown`;
+      el('toggleExpandBtn').textContent = visibleLimit >= currentFiltered.length && currentFiltered.length > PAGE_SIZE ? 'Collapse' : 'Show All';
 
       if (!currentFiltered.length) {{
         el('sourceGrid').innerHTML = `
-          <div style="grid-column: 1 / -1; padding: 36px 20px; text-align: center; color: var(--muted);">
+          <div style="grid-column: 1 / -1; padding: 28px 20px; text-align: center; color: var(--muted);">
             <div style="font-weight:700; margin-bottom:8px;">No sources match the active filters.</div>
             <button type="button" class="btn" id="resetFiltersBtn">Reset Filters</button>
           </div>`;
+        el('paginationBar').style.display = 'none';
         if (el('resetFiltersBtn')) el('resetFiltersBtn').onclick = resetFilters;
         return;
       }}
 
-      el('sourceGrid').innerHTML = currentFiltered.map((s) => {{
+      el('sourceGrid').innerHTML = slice.map((s) => {{
         const isSel = selectedIds.has(s.source_id);
+        const isNew = isNewSource(s);
         const loc = s.location || {{}};
         const sCity = loc.city || 'Global';
-        const locLabel = loc.area ? `${{loc.area}} · ${{sCity}}` : sCity;
-        const statusCls = s.status === 'active' ? 'ok' : 'warn';
-        const tags = (Array.isArray(s.genre_tags) ? s.genre_tags : []).filter((g) => g && g !== 'all').slice(0, 5);
-        const tagsHtml = tags.length
-          ? `<div class="source-genres">${{tags.map((g) => `<span class="genre-tag">${{esc(formatLabel(g))}}</span>`).join('')}}</div>`
-          : '';
-        const noteHtml = s.notes ? `<div class="source-note">Note: ${{esc(s.notes)}}</div>` : '';
+        const locLabel = loc.area ? `${{sCity}} · ${{loc.area}}` : sCity;
+        const tags = (Array.isArray(s.genre_tags) ? s.genre_tags : []).filter((g) => g && g !== 'all').slice(0, 3);
+        const tagSummary = tags.map((g) => formatLabel(g)).join(', ');
         const extHtml = s.url
           ? `<a class="source-ext" href="${{esc(s.url)}}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Open ↗</a>`
           : '';
+        const newBadge = isNew ? '<span class="pill ok">NEW</span>' : '';
 
         return `
-          <div class="source-item ${{isSel ? 'selected' : ''}}" data-id="${{esc(s.source_id)}}">
+          <div class="source-item ${{isSel ? 'selected' : ''}} ${{isNew ? 'is-new-source' : ''}}" data-id="${{esc(s.source_id)}}">
             <div class="source-title">
-              <span style="display:flex; align-items:flex-start; gap:9px;">
+              <span style="display:flex; align-items:center; gap:8px; min-width:0;">
                 <span class="source-check">${{isSel ? '✓' : ''}}</span>
-                <span>${{esc(s.name)}}</span>
+                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${{esc(s.name)}}</span>
+                ${{newBadge}}
               </span>
               <span style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
                 ${{extHtml}}
-                <span class="pill ${{statusCls}}">${{esc(formatLabel(s.status))}}</span>
               </span>
             </div>
-            <div style="display:flex; gap:6px; flex-wrap:wrap;">
-              <span class="pill blue">${{esc(formatLabel(s.source_channel))}}</span>
-              <span class="pill">${{esc(locLabel)}}</span>
-              <span class="pill">${{esc(formatLabel(s.career_tier))}}</span>
+            <div class="source-meta-line">
+              <span style="display:flex; gap:5px; flex-wrap:wrap; align-items:center;">
+                <span class="pill blue">${{esc(formatLabel(s.source_channel))}}</span>
+                <span class="pill">${{esc(locLabel)}}</span>
+                ${{tagSummary ? `<span>· ${{esc(tagSummary)}}</span>` : ''}}
+              </span>
             </div>
-            <div class="source-why">${{esc(s.why_useful)}}</div>
-            ${{noteHtml}}
-            ${{tagsHtml}}
+            <div class="source-why" title="${{esc(s.why_useful)}}">${{esc(s.why_useful)}}</div>
           </div>`;
       }}).join('');
+
+      const pBar = el('paginationBar');
+      const moreBtn = el('showMoreSourcesBtn');
+      const colBtn = el('collapseSourcesBtn');
+      if (currentFiltered.length > PAGE_SIZE) {{
+        pBar.style.display = 'flex';
+        if (slice.length < currentFiltered.length) {{
+          const rem = Math.min(PAGE_SIZE, currentFiltered.length - slice.length);
+          moreBtn.style.display = 'inline-flex';
+          moreBtn.textContent = `Show ${{rem}} more (showing ${{slice.length}} of ${{currentFiltered.length}})`;
+        }} else {{
+          moreBtn.style.display = 'none';
+        }}
+        colBtn.style.display = visibleLimit > PAGE_SIZE ? 'inline-flex' : 'none';
+      }} else {{
+        pBar.style.display = 'none';
+      }}
 
       document.querySelectorAll('.source-item').forEach((node) => {{
         node.onclick = () => {{
           const id = node.dataset.id;
           if (selectedIds.has(id)) selectedIds.delete(id);
           else selectedIds.add(id);
-          if (selectedIds.size > 0) el('agentCountInput').value = Math.min(selectedIds.size, 10);
+          if (selectedIds.size > 0) el('agentCountInput').value = Math.min(selectedIds.size, 12);
+          updateFleetScaleBanner(false);
           renderSources();
         }};
       }});
     }}
 
-    async function init() {{
-      const res = await fetch('/api/sources');
+    function populateDropdownOptions() {{
+      const keepVal = (sel) => sel.value;
+      const chVal = keepVal(el('channelFilter'));
+      const cityVal = keepVal(el('cityFilter'));
+      const tierVal = keepVal(el('tierFilter'));
+      const genreVal = keepVal(el('genreFilter'));
+
+      el('channelFilter').innerHTML = '<option value="">All channels</option>';
+      el('cityFilter').innerHTML = '<option value="">All locations</option>';
+      el('tierFilter').innerHTML = '<option value="">All career tiers</option>';
+      el('genreFilter').innerHTML = '<option value="">All genres</option>';
+
+      const channels = Array.from(new Set(allSources.map((s) => s.source_channel || 'other'))).sort();
+      const cities = Array.from(new Set(allSources.map((s) => (s.location && s.location.city) || 'Global'))).sort();
+      const tiers = Array.from(new Set(allSources.map((s) => s.career_tier || 'mixed'))).sort();
+      const genres = Array.from(new Set(allSources.flatMap((s) => Array.isArray(s.genre_tags) ? s.genre_tags : []).filter((g) => g && g !== 'all'))).sort();
+
+      channels.forEach((c) => el('channelFilter').add(new Option(formatLabel(c), c)));
+      cities.forEach((c) => el('cityFilter').add(new Option(c, c)));
+      tiers.forEach((t) => el('tierFilter').add(new Option(formatLabel(t), t)));
+      genres.forEach((g) => el('genreFilter').add(new Option(formatLabel(g), g)));
+
+      el('channelFilter').value = chVal;
+      el('cityFilter').value = cityVal;
+      el('tierFilter').value = tierVal;
+      el('genreFilter').value = genreVal;
+    }}
+
+    async function reloadSourcesFromApi() {{
+      const res = await fetch('/api/sources?limit=200');
       const data = await res.json();
       allSources = data.sources || [];
-      (data.channels || []).forEach((c) => el('channelFilter').add(new Option(formatLabel(c), c)));
-      (data.cities || []).forEach((c) => el('cityFilter').add(new Option(c, c)));
-      (data.tiers || []).forEach((t) => el('tierFilter').add(new Option(formatLabel(t), t)));
-      const genres = (data.genres && data.genres.length)
-        ? data.genres
-        : Array.from(new Set(allSources.flatMap((s) => Array.isArray(s.genre_tags) ? s.genre_tags : []).filter((g) => g && g !== 'all'))).sort();
-      genres.forEach((g) => el('genreFilter').add(new Option(formatLabel(g), g)));
-      // Default quick selection: 3 active diverse sources
+      if (data.schedule && data.schedule.frequency && el('hunterSchedulePill')) {{
+        el('hunterSchedulePill').textContent = `⏱ Source Hunter: ${{data.schedule.frequency}} · On-Demand`;
+      }}
+      populateDropdownOptions();
+    }}
+
+    function applyAmericanIdolPreset() {{
+      resetFilters();
+      selectedIds.clear();
+      const regionSpecs = [
+        {{ city: 'New York', preferred: ['nyc_rockwood_music_hall', 'yt_sofar_sounds', 'nyc_babys_all_right'] }},
+        {{ city: 'Nashville', preferred: ['src_nashville_bluebird', 'src_nashville_wmot'] }},
+        {{ city: 'Atlanta', preferred: ['src_atlanta_eddies'] }},
+        {{ city: 'Austin', preferred: ['src_austin_kutx'] }},
+        {{ city: 'Chicago', preferred: ['yt_audiotree'] }},
+        {{ city: 'New Orleans', preferred: ['src_nola_wwoz'] }},
+        {{ city: 'Los Angeles', preferred: ['src_la_hotelcafe'] }},
+        {{ city: 'Seattle', preferred: ['yt_kexp_live', 'yt_tiny_desk_contest'] }},
+      ];
+      const byId = new Map(allSources.map((s) => [s.source_id, s]));
+      regionSpecs.forEach((spec) => {{
+        let picked = null;
+        for (const id of spec.preferred) {{
+          if (byId.has(id)) {{ picked = byId.get(id); break; }}
+        }}
+        if (!picked) {{
+          picked = allSources.find((s) => s.status === 'active' && s.location && s.location.city === spec.city && !selectedIds.has(s.source_id));
+        }}
+        if (picked) selectedIds.add(picked.source_id);
+      }});
+      baseBriefText = NATIONWIDE_BRIEF;
+      el('briefInput').value = buildEnrichedBrief();
+      el('agentCountInput').value = 8;
+      el('leadsPerAgentInput').value = 2;
+      if (el('resetPrevToggle')) el('resetPrevToggle').checked = true;
+      updateFleetScaleBanner(true);
+      renderSources();
+      showBanner('Loaded ★ American Idol · Nationwide Search across 8 US music regions (8 scouts × 2 leads = 16 regional finalists).', 'info');
+    }}
+
+    function applyFirstListenNycPreset() {{
+      resetFilters();
+      selectedIds.clear();
+      ['yt_sofar_sounds', 'nyc_babys_all_right', 'bc_brooklyn_soul_rnb'].forEach((id) => {{
+        if (allSources.some((s) => s.source_id === id)) selectedIds.add(id);
+      }});
+      if (selectedIds.size < 3) {{
+        allSources.filter((s) => s.status === 'active' && s.location && s.location.city === 'New York').slice(0, 3)
+          .forEach((s) => selectedIds.add(s.source_id));
+      }}
+      baseBriefText = 'First Listen NYC: find unsigned Brooklyn and Lower Manhattan solo vocalists performing stripped-back live soul, R&B, or acoustic sets.';
+      el('briefInput').value = buildEnrichedBrief();
+      el('agentCountInput').value = 3;
+      el('leadsPerAgentInput').value = 2;
+      if (el('resetPrevToggle')) el('resetPrevToggle').checked = true;
+      updateFleetScaleBanner(true);
+      renderSources();
+      showBanner('Loaded First Listen NYC preset (3 local scouts × 2 leads = 6 NYC finalists).', 'info');
+    }}
+
+    function applyRadioLiveRoomsPreset() {{
+      resetFilters();
+      selectedIds.clear();
+      ['yt_tiny_desk_contest', 'src_nashville_wmot', 'src_austin_kutx', 'yt_kexp_live'].forEach((id) => {{
+        if (allSources.some((s) => s.source_id === id)) selectedIds.add(id);
+      }});
+      if (selectedIds.size < 4) {{
+        allSources.filter((s) => s.status === 'active' && s.source_channel === 'youtube_live_session').slice(0, 4)
+          .forEach((s) => selectedIds.add(s.source_id));
+      }}
+      baseBriefText = 'Tiny Desk & Radio Live Rooms: find unsigned vocalists across public radio live sessions and Tiny Desk Contest entries with unedited single-mic phrasing.';
+      el('briefInput').value = buildEnrichedBrief();
+      el('agentCountInput').value = 4;
+      el('leadsPerAgentInput').value = 2;
+      if (el('resetPrevToggle')) el('resetPrevToggle').checked = true;
+      updateFleetScaleBanner(true);
+      renderSources();
+      showBanner('Loaded Tiny Desk & Radio Live Rooms preset (4 national session scouts × 2 leads = 8 finalists).', 'info');
+    }}
+
+    async function init() {{
+      await reloadSourcesFromApi();
       ['yt_sofar_sounds', 'nyc_babys_all_right', 'bc_brooklyn_soul_rnb'].forEach((id) => {{
         if (allSources.some((s) => s.source_id === id)) selectedIds.add(id);
       }});
       el('agentCountInput').value = Math.max(1, selectedIds.size);
+      updateFleetScaleBanner(false);
       renderSources();
 
       const bRes = await fetch('/api/discovery/batches');
@@ -1890,25 +2333,136 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       }}
     }}
 
-    el('sourceSearchInput').oninput = renderSources;
-    ['channelFilter', 'cityFilter', 'tierFilter', 'genreFilter'].forEach((id) => el(id).onchange = renderSources);
+    el('presetIdolBtn').onclick = applyAmericanIdolPreset;
+    el('presetNycBtn').onclick = applyFirstListenNycPreset;
+    el('presetRadioBtn').onclick = applyRadioLiveRoomsPreset;
+
+    el('agentCountInput').oninput = () => updateFleetScaleBanner(true);
+    el('leadsPerAgentInput').oninput = () => updateFleetScaleBanner(true);
+    el('briefInput').oninput = () => {{ baseBriefText = el('briefInput').value.replace(/\\s*\\[Focus:.*\\]$/, '').trim(); }};
+
+    // Discovery Option chip handlers
+    el('optFormatGroup').querySelectorAll('.chip-btn').forEach((btn) => {{
+      btn.onclick = () => {{
+        el('optFormatGroup').querySelectorAll('.chip-btn').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeOptions.format = btn.dataset.optFormat || '';
+        el('channelFilter').value = activeOptions.format;
+        el('briefInput').value = buildEnrichedBrief();
+        visibleLimit = PAGE_SIZE;
+        renderSources();
+      }};
+    }});
+    el('optGenreGroup').querySelectorAll('.chip-btn').forEach((btn) => {{
+      btn.onclick = () => {{
+        el('optGenreGroup').querySelectorAll('.chip-btn').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeOptions.genre = btn.dataset.optGenre || '';
+        const genreMap = {{ soul_rnb: 'soul', indie_alt: 'indie', country_americana: 'americana', jazz_acoustic: 'jazz' }};
+        const mapped = genreMap[activeOptions.genre] || '';
+        if (Array.from(el('genreFilter').options).some((o) => o.value === mapped)) {{
+          el('genreFilter').value = mapped;
+        }} else {{
+          el('genreFilter').value = '';
+        }}
+        el('briefInput').value = buildEnrichedBrief();
+        visibleLimit = PAGE_SIZE;
+        renderSources();
+      }};
+    }});
+    el('optStageGroup').querySelectorAll('.chip-btn').forEach((btn) => {{
+      btn.onclick = () => {{
+        el('optStageGroup').querySelectorAll('.chip-btn').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeOptions.stage = btn.dataset.optStage || '';
+        el('briefInput').value = buildEnrichedBrief();
+      }};
+    }});
+
+    // Region filter pills
+    el('regionPills').querySelectorAll('.chip-btn').forEach((btn) => {{
+      btn.onclick = () => {{
+        el('regionPills').querySelectorAll('.chip-btn').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeRegion = btn.dataset.region || 'all';
+        visibleLimit = PAGE_SIZE;
+        renderSources();
+      }};
+    }});
+
+    el('searchFilter').oninput = () => {{ visibleLimit = PAGE_SIZE; renderSources(); }};
+    ['channelFilter', 'cityFilter', 'tierFilter', 'genreFilter'].forEach((id) => {{
+      el(id).onchange = () => {{ visibleLimit = PAGE_SIZE; renderSources(); }};
+    }});
+
+    el('showMoreSourcesBtn').onclick = () => {{
+      visibleLimit += PAGE_SIZE;
+      renderSources();
+    }};
+    el('collapseSourcesBtn').onclick = () => {{
+      visibleLimit = PAGE_SIZE;
+      renderSources();
+    }};
+
     el('selectQuickBtn').onclick = () => {{
       selectedIds.clear();
       allSources.filter((s) => s.status === 'active' && (s.location && s.location.city === 'New York')).slice(0, 3)
         .forEach((s) => selectedIds.add(s.source_id));
       el('agentCountInput').value = Math.max(1, selectedIds.size);
+      updateFleetScaleBanner(false);
       renderSources();
     }};
     el('selectFilteredBtn').onclick = () => {{
-      currentFiltered.forEach((s) => selectedIds.add(s.source_id));
-      if (selectedIds.size > 0) el('agentCountInput').value = Math.min(selectedIds.size, 10);
+      currentFiltered.slice(0, visibleLimit).forEach((s) => selectedIds.add(s.source_id));
+      if (selectedIds.size > 0) el('agentCountInput').value = Math.min(selectedIds.size, 12);
+      updateFleetScaleBanner(false);
       renderSources();
     }};
     el('clearSelBtn').onclick = () => {{ selectedIds.clear(); renderSources(); }};
     el('toggleExpandBtn').onclick = () => {{
-      isExpanded = !isExpanded;
-      el('sourceGrid').classList.toggle('expanded', isExpanded);
-      el('toggleExpandBtn').textContent = isExpanded ? 'Collapse List' : 'Expand Full List';
+      if (visibleLimit >= currentFiltered.length && currentFiltered.length > PAGE_SIZE) {{
+        visibleLimit = PAGE_SIZE;
+      }} else {{
+        visibleLimit = Math.max(currentFiltered.length, PAGE_SIZE);
+      }}
+      renderSources();
+    }};
+
+    // Source Hunter button + Toast notification
+    el('huntSourcesBtn').onclick = async () => {{
+      const btn = el('huntSourcesBtn');
+      const focusVal = (el('huntFocusInput').value || '').trim();
+      btn.disabled = true;
+      btn.textContent = 'Hunting…';
+      try {{
+        const res = await fetch('/api/sources/hunt', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{
+            focus: focusVal,
+            count: 3,
+            live: el('liveToggle').checked,
+          }}),
+        }});
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload.error || 'Source Hunter failed');
+        (payload.added_sources || []).forEach((s) => {{
+          if (s.source_id) newlyAddedIds.add(s.source_id);
+        }});
+        await reloadSourcesFromApi();
+        activeRegion = 'all';
+        el('regionPills').querySelectorAll('.chip-btn').forEach((b) => {{
+          b.classList.toggle('active', b.dataset.region === 'all');
+        }});
+        visibleLimit = Math.max(PAGE_SIZE, (payload.added_count || 0) + 4);
+        renderSources();
+        showSourceHunterToast(payload);
+      }} catch (err) {{
+        showBanner(err.message, 'err');
+      }} finally {{
+        btn.disabled = false;
+        btn.textContent = '🔍 Find New Sources';
+      }}
     }};
 
     el('clearOldRunsBtn').onclick = async () => {{
@@ -1923,6 +2477,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
         const payload = await res.json();
         if (!res.ok) throw new Error(payload.error || 'Reset failed');
         if (el('postDispatchLinks')) el('postDispatchLinks').style.display = 'none';
+        if (el('reviewFinalistsBtn')) el('reviewFinalistsBtn').style.display = 'none';
         showBanner(`Workspace cleared (${{payload.total_archived || 0}} old run(s) archived). Ready for a new Discovery run.`, 'info');
       }} catch (err) {{
         showBanner(err.message, 'err');
@@ -1956,6 +2511,90 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       }} catch (err) {{
         showBanner(err.message, 'err');
       }} finally {{
+        el('dispatchBtn').disabled = false;
+      }}
+    }};
+
+    el('cascadeBtn').onclick = async () => {{
+      if (selectedIds.size === 0) {{ showBanner('Select at least one source first.', 'err'); return; }}
+      const scouts = Math.max(1, Math.min(Number(el('agentCountInput').value || 1), 12));
+      const perScout = Math.max(1, Math.min(Number(el('leadsPerAgentInput').value || 2), 10));
+      const expected = scouts * perScout;
+      el('cascadeBtn').disabled = true;
+      el('dispatchBtn').disabled = true;
+      updateFleetScaleBanner(true);
+      try {{
+        showBanner(`Step 1/4: ${{scouts}} Regional Scouts scanning ${{selectedIds.size}} source(s)…`, 'info');
+        const dRes = await fetch('/api/discovery/dispatch', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{
+            source_ids: Array.from(selectedIds),
+            brief: el('briefInput').value,
+            agent_count: scouts,
+            leads_per_agent: perScout,
+            live: el('liveToggle').checked,
+            reset_previous: el('resetPrevToggle') ? el('resetPrevToggle').checked : false,
+          }}),
+        }});
+        const dData = await dRes.json();
+        if (!dRes.ok) throw new Error(dData.error || 'Stage 1 Discovery failed');
+        syncBatchLinks(dData.batch_id);
+
+        if (dData.mode === 'live') {{
+          for (let attempt = 0; attempt < 25; attempt++) {{
+            await new Promise((r) => setTimeout(r, 3000));
+            const pollRes = await fetch(`/api/discovery/batches/${{encodeURIComponent(dData.batch_id)}}`);
+            if (!pollRes.ok) break;
+            const pollData = await pollRes.json();
+            const workers = pollData.workers || [];
+            const done = workers.filter((w) => w.status === 'completed').length;
+            showBanner(`Step 1/4: Live Regional Scouts in motion (${{done}}/${{workers.length}} completed)…`, 'info');
+            if (workers.length && workers.every((w) => !['in_progress', 'starting', 'queued'].includes(w.status))) break;
+          }}
+        }}
+
+        showBanner(`Step 2/4: Investigating ${{expected}} Regional Finalists (compiling 5-block factual dossiers)…`, 'info');
+        const iRes = await fetch('/api/investigate/run', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{}}),
+        }});
+        const iData = await iRes.json();
+        if (!iRes.ok) throw new Error(iData.error || 'Stage 2 Investigation failed');
+        const dossierCount = iData.count || expected;
+
+        showBanner(`Step 3/4: Advocate vs. Skeptic Screening across ${{dossierCount}} Finalists…`, 'info');
+        const sRes = await fetch('/api/screening/run', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ live: false }}),
+        }});
+        const sData = await sRes.json();
+        if (!sRes.ok) throw new Error(sData.error || 'Stage 3 Screening failed');
+        const packetCount = sData.count || dossierCount;
+
+        showBanner(`Step 4/4: Live gemini-decision-1 Taste Engine scoring ${{packetCount}} Finalists…`, 'info');
+        const tRes = await fetch('/api/screening/taste-score', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ live: true }}),
+        }});
+        const tData = await tRes.json();
+        if (!tRes.ok) throw new Error(tData.error || 'Stage 4 Taste Engine scoring failed');
+
+        const revBtn = el('reviewFinalistsBtn');
+        if (revBtn) {{
+          const labelRegion = scouts >= 8 ? 'Nationwide' : 'Screened';
+          revBtn.textContent = `Review ${{packetCount}} ${{labelRegion}} Finalists →`;
+          revBtn.style.display = 'inline-flex';
+        }}
+        if (el('postDispatchLinks')) el('postDispatchLinks').style.display = 'inline-flex';
+        showBanner(`Full Pipeline Cascade complete! ${{scouts}} Scouts → ${{dossierCount}} Dossiers → ${{packetCount}} Screening Packets → ${{tData.count || packetCount}} Live Taste Scores ready.`, 'info');
+      }} catch (err) {{
+        showBanner(err.message, 'err');
+      }} finally {{
+        el('cascadeBtn').disabled = false;
         el('dispatchBtn').disabled = false;
       }}
     }};
