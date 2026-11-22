@@ -1,6 +1,11 @@
-# 2026-11-21 — UI Drift, Discovery Sub-Flow & Plain-English Overhaul (PRs #30, #31 & #32)
+# 2026-11-21 — UI Drift, Discovery Sub-Flow, Plain-English Overhaul & Sticky Topbar (PRs #30, #31, #32 & #34)
 
 ## What Happened
+- **Unified Sticky Topbar, 5 Even Numbered Tabs & 1320px Layout (`9e037b1`, PR #34)**:
+  - Added `render_page_topbar(active_path, subtitle)` in `simon/discovery_ui.py` so `/discovery`, `/field-news`, `/reports`, `/investigate`, `/screen`, `/taste-profile`, and `/evals` share the exact full-bleed sticky topbar (`56px` height, `S` brand mark, `Tools ▾` with theme toggle inside) as `/`.
+  - Standardized all 5 primary navigation tabs across every page (`1. Discovery`, `2. Investigate`, `3. Screening`, `4. Taste Profile`, `5. Talent Review`) with identical `32px` button/link height and spacing (`simon/static/app.css`, `simon/static/index.html`, `simon/discovery_ui.py`).
+  - Unified page width to `1320px` across all 8 screens (removing `1440px` and `1360px` width jumps) and moved page titles/subtitles into a uniform `.page-hero` block below the topbar.
+  - Verified **114/114** unit tests passing (`tests/test_agency_studio_ui.py`).
 - **Management-Facing Plain-English UI Copy Overhaul (`76cf37f`, PR #32 — 6-agent swarm)**:
   - **`/taste-profile` (`simon/taste_profile_ui.py`)**: Replaced `policy_v*`, `0-output-token gemini-decision-1`, `dspy.BootstrapFewShot`, `questions_config`, `demos[]`, `screening_labels`, `human_override`, `simon-*`, `pros[]/cons[]/missing_fields`, and snake_case reviewer/metric keys with plain A&R management copy and display formatters.
   - **`/screen` (`simon/screening_ui.py`)**: Replaced `DSPy`, `gemini-decision-1 · 0 tok`, `P(elevate)`, `questions_config`, `gemini-4-neon`, `policy_v1`, and raw `lead_id:` labels with management-facing buttons, pills, and formatters.

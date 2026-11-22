@@ -20,7 +20,7 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 | **[data/](./data/README.md)** | Data & Schemas | Manifest schemas, evaluation datasets (paired with `examples/` fixtures and gitignored `local/`) |
 | **[ideas/](./ideas/README.md)** | Ideas & Verticals | Product riffing, discovery sources, future verticals, and pitch framing |
 | **[tests/](./tests/)** | Verification | Unit tests, fixture smoke tests, and agent evaluation harnesses |
-| **[.agents/](./.agents/)** | Repo Agent Ops | Antigravity rules (`plain-english`), skills (`project-manager`, `process-observer`, `main-sync`, `knowledge-governance`, `managed-agents-curator`) & hooks |
+| **[.agents/](./.agents/)** | Repo Agent Ops | Antigravity rules (`plain-english`, `python-and-worktree-env`), skills (`project-manager`, `process-observer`, `main-sync`, `cloudrun-deploy-and-verify`, `ui-flow-audit`, etc.), `plugins/simon-ops/` (5 dedicated subagents) & hooks |
 
 ---
 
@@ -34,7 +34,9 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 ## Recent sessions
 *Working memory (LRU pointer cache, max 12, most recent first). Maintained by the `project-manager` skill/subagent.*
 
-- 2026-11-21 · ui flow unification · unified 5-stage nav, Discovery sub-flow, management-facing Plain-English overhaul & 113/113 tests (PRs #30–#32) → `pm/log/2026-11-21-ui-flow-unification.md`, `simon/static/`, `simon/discovery_ui.py`, `agents/`
+- 2026-11-21 · ui flow unification · unified 56px sticky topbar, 5 even tabs, 1320px layout, Plain-English overhaul & 114/114 tests (PRs #30–#34) → `pm/log/2026-11-21-ui-flow-unification.md`, `simon/static/`, `simon/discovery_ui.py`, `agents/`
+- 2026-11-21 · legacy mvp removal · removed MVP shortlist UI, brief drawer, synthesis-scout agent & 3_shortlist alias (PR #33) → `pm/log/2026-11-21-remove-legacy-mvp.md`, `simon/static/`, `simon/phases.py`, `agents/`
+- 2026-11-21 · process audit & subagents · 53-session telemetry audit, `simon-ops` plugin (5 dedicated subagents), env rule & 2 workflow skills → `pm/log/2026-11-21-process-audit-and-subagents.md`, `.agents/plugins/simon-ops/`, `.agents/rules/`, `.agents/skills/`
 - 2026-11-21 · screening, taste & demo flow · shipped Stage 3 Screening Fleet, `/screen`, `/taste-profile` & clean staging demo (PRs #24/#28) → `pm/log/2026-11-21-screening-taste-and-demo-flow.md`, `simon/screening.py`, `simon/demo_flow.py`
 - 2026-11-21 · label-signing recall eval · live 3-worker recall run (192k tokens, 24 leads), `/evals` trace selector & honest offline scoring (`602a30c`) → `pm/log/2026-11-21-label-signing-recall-eval.md`, `simon/vertex_eval.py`, `agents/discovery-scout/`
 - 2026-11-21 · multi-agent vertex evals · merged PR #20 (runner, /evals UI, 65/65 tests) & 9-agent 3-layer rubrics baseline (119 rubrics) → `pm/log/2026-11-21-discovery-vertex-evals.md`, `simon/vertex_eval.py`, `data/evals/`
@@ -44,5 +46,3 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 - 2026-11-21 · staging fleet smoke test · verified 9/9 staging managed agents live via concurrent /api/fleet/run (0 failures) → `pm/log/2026-11-21-staging-fleet-smoke-test.md`
 - 2026-11-21 · cloud run & firestore · merged PR #4 (`b2057e8`), deployed `simon-staging`, seeded 36 sources & live traces → `pm/log/2026-11-21-cloudrun-firestore-platform.md`, `simon/`, `data/`, `.agents/`
 - 2026-11-21 · shared youtube skill · enabled YouTube Data API v3, synced `/v1beta/credentials` & wired skill into 5 agents (PR #11, 40/40) → `pm/log/2026-11-21-shared-youtube-skill.md`, `agents/_shared/skills/youtube/`, `tests/`
-- 2026-11-21 · discovery agent & evals · upgraded Stage 1 discovery scout (PR #7), source registry seed & 37/37 evals → `agents/discovery-scout/`, `data/`, `notes/managed-agents/`, `tests/`
-- 2026-11-21 · managed-agents deploy & ci · merged PR #2 (deploy CLI, fleet API, Actions CI) & live-deployed 5 staging agents → `pm/log/2026-11-21-managed-agents-deploy-ci.md`, `simon/`, `.github/`
