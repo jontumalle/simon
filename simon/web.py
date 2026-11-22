@@ -484,19 +484,28 @@ def dispatch_http_request(
 
         if parsed.path == "/api/discovery/batches":
             qs = parse_qs(parsed.query)
-            single_batch_id = (qs.get("batch_id") or [None])[0]
+            single_batch_id = (qs.get("batch_id") or [""])[0].strip()
             if single_batch_id:
-                load_dotenv_if_present()
+                refresh_flag = (qs.get("refresh") or ["1"])[0].lower() in ("1", "true", "yes")
                 wait_flag = (qs.get("wait") or ["0"])[0].lower() in ("1", "true", "yes")
                 since_steps = int((qs.get("since_steps") or ["-1"])[0])
                 timeout_s = min(25.0, max(1.0, float((qs.get("timeout") or ["15"])[0])))
-                batch = refresh_discovery_batch(
-                    store,
-                    str(single_batch_id).strip(),
-                    wait=wait_flag,
-                    since_steps=since_steps,
-                    timeout_s=timeout_s,
-                )
+                load_dotenv_if_present()
+                if refresh_flag or wait_flag:
+                    batch = refresh_discovery_batch(
+                        store,
+                        single_batch_id,
+                        wait=wait_flag,
+                        since_steps=since_steps,
+                        timeout_s=timeout_s,
+                    )
+                else:
+                    found = get_agent_document(store, "fleet_runs", single_batch_id)
+                    batch = (
+                        found.get("data")
+                        if isinstance(found, dict) and isinstance(found.get("data"), dict)
+                        else found
+                    )
                 if batch is None:
                     return (
                         HTTPStatus.NOT_FOUND,

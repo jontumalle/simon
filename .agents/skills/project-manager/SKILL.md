@@ -1,66 +1,66 @@
 ---
 name: project-manager
 description: >-
-  Harvests session documents and brain artifacts across chat windows, distills decisions, live
-  status, session logs, and partner resources into the Simon repository's Life OS-inspired
-  knowledge model, updates the Recent sessions LRU cache in PROJECT.md, and continuously syncs
-  documentation directly to origin/main. Activate this skill in every chat window whenever
-  documents, research, artifacts, plans, or code milestones are produced, or when processing items
-  from pm/inbox/ or raw transcripts.
+  Harvests session documents and brain artifacts across chat windows, maintains versioned product
+  and UI truth in pm/product/, distills decisions, concise live status (<120 lines), session logs,
+  and partner resources into the Simon knowledge model, updates the Recent sessions LRU cache in
+  PROJECT.md, and syncs documentation directly to origin/main. Activate in every chat window
+  whenever features, UI routes, documents, research, plans, or code milestones are produced.
 ---
 
-# Simon Project Manager (Steward) Skill — Cross-Window Harvesting & `main` Sync
+# Simon Project Manager (Steward) Skill — Product Truth, Harvesting & `main` Sync
 
-This skill implements the **Steward / Project Manager** role for the Simon repository (modeled after Life OS). Its job in **every chat window** is to rescue reusable documents/artifacts from ephemeral chat contexts, distill completed work and decisions into the repository's Knowledge Model, and push documentation updates straight to `origin/main` with zero repercussions.
+This skill defines Simon's single **Project Manager (Steward)** role. We intentionally maintain product and UI specs inside this Steward rather than adding a separate technical-writer subagent: one Steward keeps `pm/product/`, `pm/current.md`, `pm/decisions.md`, `pm/log/`, and `PROJECT.md` atomic in a single `--docs-only` commit and avoids concurrent `edit_file` collisions across parallel chats.
 
 ## 1. Launching in the Background (For Primary Agent — Every Chat Window)
 
-Whenever a chat window produces documents, research, brain artifacts, plans, architectural decisions, or code milestones, launch a background subagent via `invoke_subagent`:
-- **`TypeName`**: `"self"`
-- **`Role`**: `"Project Manager (Steward)"`
-- **`Prompt`**: Pass:
-  1. Instruction to read `.agents/skills/project-manager/SKILL.md`, `.agents/skills/main-sync/SKILL.md`, `PROJECT.md`, `pm/scope.md`, and `pm/current.md`.
-  2. The session's artifact directory path (`<appDataDir>/brain/<conversation-id>`) and paths to any standalone markdown docs, notes, or transcripts produced in the session so none stay trapped in the chat window.
-  3. Concise summary of what happened, what code/files changed, confirmed owner decisions, and any new CLIs/SDKs/plugins/env vars introduced.
-  4. Instruction to delegate synchronization to the **`main-sync` skill (`Track A · Docs & Knowledge Sync`, `--docs-only`)** — noting that documentation file writes and `--docs-only` sync are auto-approved by `.agents/hooks.json`, and the Steward must **never** sync runtime code (`--code` belongs exclusively to coding agents).
+Whenever a chat window ships or modifies features/UI, produces research or brain artifacts, confirms decisions, or lands code PRs, launch the dedicated Steward subagent via `invoke_subagent` (prefer `simon-ops:simon-steward`, or `TypeName: "self"` with `Role: "Project Manager (Steward)"`). Pass:
+1. Instruction to read `.agents/skills/project-manager/SKILL.md`, `.agents/skills/main-sync/SKILL.md`, `pm/product/README.md`, `PROJECT.md`, `pm/scope.md`, and `pm/current.md`.
+2. The session's artifact directory (`<appDataDir>/brain/<conversation-id>`) and paths to any standalone markdown docs, notes, or `pm/inbox/` items so nothing stays trapped in chat.
+3. Concise summary of changed files/PRs, confirmed owner decisions, new CLIs/SDKs/plugins/env vars, and **one Feature-Version Delta line per touched feature**:
+   `FEAT-XX: v1.1 -> v1.2 | PR #NN | Summary of user-visible change or retirement`
+4. Instruction to sync exclusively via **`main-sync` Track A (`--docs-only`)** — Steward never commits or pushes runtime code (`--code` belongs to coding agents).
 
 ---
 
-## 2. Cross-Window Document Harvesting & `main` Sync Runbook (For Steward Agent)
+## 2. Steward Runbook: Harvest, Maintain Product Versions & Sync `main`
 
-Before writing, read `.agents/skills/main-sync/SKILL.md`, `PROJECT.md`, `pm/scope.md`, `pm/current.md`, and `pm/decisions.md`.
+Before editing, run `git pull --rebase --autostash origin main`. Always call `read_file` on shared head files (`PROJECT.md`, `pm/current.md`, `pm/decisions.md`, `RESOURCES.md`, and any target `pm/product/*.md` file) **immediately before** calling `edit_file` on them.
 
-### Step 1 · Harvest Session Documents & Artifacts
-Check whether the chat session produced any standalone markdown documents, research reports, architecture notes, plans, transcripts, `pm/inbox/` captures, or Antigravity brain artifacts (`<appDataDir>/brain/<conversation-id>/*.md`) whose knowledge belongs in the repository:
-- Copy or distill reusable documents into the appropriate established bucket (`notes/managed-agents/`, `ideas/`, `agents/`, `pm/`, `data/`) so context is never trapped or lost inside a single chat window or ephemeral artifact directory.
-- Skip purely transient scratch files or internal task checklists that add no durable repo value once distilled into `pm/log/` and `pm/current.md`.
-- **Setup-Stage Guardrail**: Never invent new top-level folders or overwrite authored product runtime code (`simon/`). Established buckets go straight into the model; only flag genuinely unmapped items back to the caller/user rather than guessing.
+### Step 1 · Harvest Session Documents & Brain Artifacts
+Check whether the session produced standalone markdown docs, research notes, plans, or brain artifacts (`<appDataDir>/brain/<conversation-id>/*.md`) that belong in the repository:
+- Distill reusable artifacts into established buckets (`pm/product/`, `notes/managed-agents/`, `ideas/`, `agents/`, `pm/`, `data/`).
+- Skip transient scratch checklists once distilled into `pm/log/` and `pm/product/`.
+- **Setup-Stage Guardrail**: Never invent new top-level directories or touch runtime code (`simon/`, `tests/`, `examples/`). Ask the caller/user only when an item is genuinely unmapped.
 
-### Step 2 · Distill into Steward Files & `PROJECT.md`
-Update the repository's governance and pointer files while respecting bucket modalities:
+### Step 2 · Versioned Product & UI Maintenance Protocol (`pm/product/`)
+On **every** Steward run, check whether any feature, route, wireframe, or user story was added, changed, proposed, split across UI shells, or retired. Update `pm/product/` **in place** using the locked terms in [pm/product/README.md](../../../pm/product/README.md) so product docs always show current truth plus version provenance:
+
+| Lifecycle Tag | Trigger | Required In-Place Steward Update |
+| :--- | :--- | :--- |
+| **`v1.0` (Added)** | New feature, agent stage, or UI route merged | Assign next `FEAT-XX` in `pm/product/features.md`, map persona acceptance criteria in `pm/product/user-stories.md`, and add layout/handoff zones in `pm/product/wireframes.md` (and `ui-strategy.md` if routes changed). |
+| **`v1.x` (Modified)** | Filter, copy pass, model swap, state fix, or API tweak | Update current behavior **in place** in `features.md` (plus `wireframes.md` / `user-stories.md` if UI/criteria changed) and append one dated PR line to `Version History`. |
+| **`v2.0` (Remodeled)** | Major layout, contract, or primary user-flow overhaul | Replace current-state spec in place across `features.md`, `wireframes.md`, and `ui-strategy.md`, recording prior behavior in `Version History`. |
+| **`Proposed` (Backlog)** | User requested a feature/fix in chat or triage, not yet merged | Add or update under `Proposed / Backlog` in `features.md` and `user-stories.md` with source chat/PR and target wave. |
+| **`Split-UI`** | SPA (`simon/static/`) and SSR (`simon/*_ui.py`) diverge | Mark `Split-UI` in `features.md` and `ui-strategy.md`, naming exact missing controls on each surface until consolidated. |
+| **`Retired`** | Feature, route, or agent removed (e.g., PR `#33` MVP shortlist) | Move entry to `Retired` in `features.md`, note any remaining dead code to clean up, remove obsolete wireframes/stories from active sections, and prune from `pm/current.md`. |
+
+### Step 3 · Distill into Governance & Pointer Files (Strict `<120-Line` Cap on `pm/current.md`)
 
 | Target | Modality & Rules |
 | :--- | :--- |
-| `pm/log/YYYY-MM-DD-<slug>.md` | **What happened** — dated, factual, concise bullets referencing changed files/commits and harvested docs. Prefer appending to today's topic log over creating duplicate files. |
-| `pm/decisions.md` | **Decisions confirmed** — append `- **YYYY-MM-DD · Title**: Rationale & outcome.` Never rewrite past decisions unless superseded (append a new dated entry instead). |
-| `pm/current.md` | **State right now** — refresh `Live Now`, `Next Up`, and `Blockers / Open Items` to match reality today, and set `*Updated: YYYY-MM-DD*`. |
-| `RESOURCES.md` | **Partner toolchain sync** — add reproducible macOS/Linux install instructions for any newly adopted CLI, Python package, MCP server, plugin, or env var name (never commit secret values!). |
-| `notes/managed-agents/` | **How-to engineering knowledge** — architecture, SDK/REST patterns, sandbox environment & deployment playbooks. |
-| `agents/<agent-id>/` | **Curated Managed Agents** — declarative agent specs (`agent.json`), `SYSTEM.md` prompts, and usage docs. |
-| `ideas/` · `data/` | **Explorations, schemas & datasets** — product discovery/verticals (`ideas/`) and manifest schemas or eval benchmarks (`data/`). |
-| `PROJECT.md` (`Recent sessions`) | **LRU Working Memory (max 12)** — `- YYYY-MM-DD · <workstream> · <≤15 word summary> → <key paths>`. Touch & move to top if the workstream already exists; drop oldest if >12; never edit `## Focus` unless the owner explicitly changed priorities. |
+| `pm/product/*.md` | **Living product & UI truth** — updated in place per Step 2 (`README.md`, `ui-strategy.md`, `features.md`, `user-stories.md`, `wireframes.md`) using management-facing STE-100 Plain English. |
+| `pm/current.md` | **Crisp live snapshot (`<120 lines` hard cap)** — rewrite/prune in place rather than appending PR dumps! Keep only current `Live Now` truth (pointing to `pm/product/` and `pm/log/` for history), active `Next Up` waves, and real `Blockers / Open Items`. Immediately delete shipped or `Retired` items from `Next Up`. |
+| `pm/log/YYYY-MM-DD-<slug>.md` | **Chronological session log** — dated, factual bullets citing PRs, commit SHAs, `FEAT-XX` deltas, and harvested docs. Append to today's topic log when matching. |
+| `pm/decisions.md` | **Append-only decision record** — append `- **YYYY-MM-DD · Title**: Rationale & outcome.` Never erase prior decisions; append a superseding entry when direction changes. |
+| `RESOURCES.md` | **Partner toolchain manifest** — reproducible macOS/Linux install steps for new CLIs, packages, plugins, or env var names (never commit secret values). |
+| `notes/managed-agents/` · `agents/` · `ideas/` · `data/` | **Playbooks, agent specs, explorations & schemas** — file reusable technical patterns in `notes/managed-agents/` and keep `agents/README.md` aligned with deployed packages. |
+| `PROJECT.md` (`Recent sessions`) | **LRU Working Memory (max 12)** — `- YYYY-MM-DD · <workstream> · <≤15 word summary> → <key paths>`. Move existing workstream to top or insert and drop 13th entry; never edit `## Focus` without explicit owner direction. |
 
-### Step 3 · Sync via `main-sync` Skill (`Track A · Docs Sync` Only)
-Follow [`.agents/skills/main-sync/SKILL.md`](../main-sync/SKILL.md) (**Track A · Docs & Knowledge Sync**). Creating/editing documentation in established buckets and running `--docs-only` sync are **auto-approved** by `.agents/scripts/auto_approve_toolchain.py` (`PreToolUse`):
-1. Run:
+### Step 4 · Sync via `main-sync` (`Track A · Docs Sync` Only) & Report Back
+1. Verify `wc -l pm/current.md` is strictly `< 120` lines, then sync straight to `origin/main`:
    ```bash
    python3 .agents/scripts/sync_main.py --docs-only -m "docs(pm): <concise summary>"
    ```
-   - **Strict Separation from Code Sync**: Never pass `--code` or `--all` from the Steward. Unfinished `simon/` or `tests/` code in the working tree stays untouched (`--docs-only` unstages non-doc paths and rebases with `--autostash`), because code changes follow `main-sync` **Track B (`--code`)** with mandatory test/smoke gates and `--paths` / `--branch` controls.
-2. **Graceful Fallback**: If the remote `git push` fails (e.g., offline or network error), verify that the **local commit on `main` succeeded** (`committed: true`) and report the exact remote push status/error clearly.
-
-### Step 4 · Report Back
-Return (via `send_message` when running as a subagent) a concise summary covering:
-1. Harvested session/brain artifacts and where they were filed (plus any unmapped items flagged for the user),
-2. Every Steward / Knowledge Model file updated with a one-line description, and
-3. Exact `main` commit and `origin/main` push status.
+   - Never pass `--code` or `--all`. If `git push` fails offline, confirm `committed: true` locally and report the exact push error.
+2. Return a concise report covering: (a) harvested artifacts, (b) `FEAT-XX` version transitions applied in `pm/product/`, (c) updated Steward files + `pm/current.md` line count, and (d) synced `main` commit SHA.

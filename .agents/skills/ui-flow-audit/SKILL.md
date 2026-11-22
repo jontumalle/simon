@@ -1,36 +1,52 @@
 ---
 name: ui-flow-audit
 description: >-
-  Standard workflow for auditing and fixing Simon's Web Studio UI (simon/static/, simon/web.py,
-  simon/discovery_ui.py, simon/screening.py): management-facing Plain-English copy pass, explicit
-  client/server state-machine verification, cross-screen flow consistency, and Python unittest UI
-  regression verification without node. Activate whenever reviewing UI drift, copy clarity,
-  navigation flows, or frontend state bugs.
+  Standard workflow for pre-checking pm/product/ route ownership and auditing or fixing Simon's Web
+  Studio UI (simon/static/, simon/web.py, simon/discovery_ui.py, simon/screening_ui.py,
+  simon/taste_profile_ui.py): pre-code spec check, management-facing Plain-English copy pass,
+  explicit 5-state verification, cross-screen flow consistency, Python unittest verification without
+  node, and Steward FEAT-XX delta handoff. Activate before editing UI or reviewing UI drift.
 ---
 
-# Simon UI Flow, Copy & State-Machine Audit
+# Simon UI Flow, Spec Ownership & State-Machine Audit
+
+## 0. Mandatory Pre-Code Spec Check (`pm/product/`)
+Before editing **any** UI file (`simon/static/*`, `simon/*_ui.py`, `simon/web.py`, `simon/phases.py`, `simon/demo_flow.py`), read:
+1. [pm/product/README.md](../../../pm/product/README.md) — Locked STE-100 terminology and `FEAT-XX` lifecycle tags.
+2. [pm/product/ui-strategy.md](../../../pm/product/ui-strategy.md) — Canonical 5-stage spine, SPA vs. SSR route ownership, 5-state contract, and URL handoff rules.
+3. [pm/product/wireframes.md](../../../pm/product/wireframes.md) & [pm/product/features.md](../../../pm/product/features.md) — Exact page zones, controls, and active `FEAT-01`–`FEAT-22` specs.
+
+**Hard Route-Ownership Gate:** Confirm whether the target screen belongs to Python SSR (`simon/*_ui.py`) or the `/` SPA (`simon/static/`). Never ship a feature onto one shell while leaving a competing duplicate surface stale; if consolidating a route, delete or redirect the superseded surface in the same PR.
+
+---
 
 ## 1. Scope & Files
-Simon's UI is served directly by Python (`simon/web.py`, `simon/discovery_ui.py`, `simon/static/`). There is **no `node` / npm build step** in this workspace.
+Simon's UI is served directly by Python (`simon/web.py`, `simon/discovery_ui.py`, `simon/screening_ui.py`, `simon/taste_profile_ui.py`, `simon/static/`). There is **no `node` / npm build step** in this workspace.
 
 Key surfaces to inspect together when auditing cross-screen consistency:
-- Navigation & stage framing: `simon/static/` + `simon/web.py`
-- Stage 1 Discovery & Sources: `simon/discovery_ui.py`
-- Stage 2 Investigation & Reports: `simon/web.py` / `simon/phases.py`
-- Stage 3 Screening & Taste Profile: `simon/screening.py` / `simon/static/`
-- Evals Dashboard: `/evals` routes in `simon/web.py`
+- Shared `56px` sticky topbar (`1320px` width) & `Tools ▾` popover: `simon/discovery_ui.py` + `simon/static/`
+- Stage 1 Discovery, Field News & Scouting Reports: `simon/discovery_ui.py` (`/discovery`, `/field-news`, `/reports`)
+- Stage 2 Investigate: `simon/discovery_ui.py` (`/investigate`) + `simon/demo_flow.py`
+- Stage 3 Screening & Stage 4 Taste Profile: `simon/screening_ui.py` (`/screen`), `simon/taste_profile_ui.py` (`/taste-profile`), `simon/screening.py`
+- Stage 5 Talent Review, Pipeline Runner & Agent Lab: `simon/static/{index.html,app.js,app.css}` + `simon/phases.py`
+- Agent Evals: `simon/discovery_ui.py` (`/evals`) + `simon/vertex_eval.py`
 
 ---
 
-## 2. Three-Point Audit Checklist
-1. **Management-Facing Plain-English Copy** (pair with `.agents/rules/plain-english.md`):
-   - Replace raw internal keys (`snake_case` field names, agent slugs, schema jargon, HTTP codes) with plain A&R / management labels.
-   - Keep button labels action-first and concise.
-2. **Explicit State Machines (No Implicit UI Flags)**:
-   - Every async view (Discovery run, Investigation, Screening deck, Eval run) must model explicit states (`idle`, `loading`/`running`, `ready`/`success`, `empty`, `error`) so spinners, buttons, and empty-states never collide.
-   - Confirm route transitions preserve active context (selected preset, lead ID, stage tab).
-3. **Cross-Screen Flow Unification**:
-   - Verify the 5-stage navigation bar, stage numbers, and CTAs (`Discovery → Investigate → Screen → Taste Profile → Evals`) use identical terminology across every template.
+## 2. Four-Point Audit Checklist
+1. **Management-Facing Plain-English Copy** (pair with `.agents/rules/plain-english.md` + `pm/product/README.md` Locked Terminology):
+   - Replace raw internal keys (`snake_case` field names, `policy_v*`, `0-output-token`, `dspy`, `lead_id`, `interaction_id`, agent slugs, schema versions) with locked A&R labels (`Taste Profile`, `Quality Check`, `Artist`, `Scout Run`, `5. Talent Review`).
+   - Keep sentences under 25 words and button labels action-first.
+2. **Explicit 5-State Machines & Continuous Playback Invariant**:
+   - Every async surface must model explicit states (`idle`, `running`, `ready`, `empty`, `error` using `--warn` / `.pill.warn`, never undefined `--bad`).
+   - **Continuous Playback Invariant**: Verdict clicks, override typing, and filter toggles on `/screen` or `/?tab=review` must update targeted DOM nodes without unmounting or reloading the active YouTube Moment Verifier iframe.
+   - Remove dead DOM IDs and unpopulated drawers whenever retiring features.
+3. **Cross-Screen Flow & URL Handoff Unification**:
+   - Confirm all 8 routes render the identical `56px` sticky topbar (`1. Discovery`, `2. Investigate`, `3. Screening`, `4. Taste Profile`, `5. Talent Review` + `Tools ▾`).
+   - Confirm URL parameters (`?tab=`, `?subtab=`, `?phase=`, `?batch=`, `?report=`, `?lead=`, `?subject=`, `?packet=`, `?filter=`, `?autorun=1`) use `pushState` on page/tab transitions, `replaceState` on filter/selection updates, and restore cleanly on `popstate`.
+4. **Steward Feature-Version Delta Handoff**:
+   - Record every user-visible feature or wireframe change as a structured delta line for `Project Manager (Steward)`:
+     `FEAT-XX: v1.1 -> v1.2 | PR #NN | Summary of user-visible change or retirement`
 
 ---
 

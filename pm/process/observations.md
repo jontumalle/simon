@@ -94,3 +94,51 @@
 - **Operating Spectrum**:
   - *Where it helps*: Existing repo skills drove consistent governance, evals, and doc syncing.
   - *Where it drags*: Uncodified Cloud Run / CI and UI-audit flows forced agents to re-discover CLI paths (`gcloud`), staging service names, and test suites on every session.
+
+---
+
+## 2026-11-21 · 60-Session Product/UI Convergence & Steward Lifecycle Audit (22 Root Chats, 38 Subagents, PRs #1–#35)
+
+### `OBS-2026-11-21-12` · Split-Brain SPA vs. SSR UI Drift & 5-PR Convergence Loop
+- **Facets**: `parallel-concurrency`, `skill-adoption`, `subagent-orchestration`
+- **Observed Signal & Evidence**: Across PRs `#10–#35`, JT built `/` as a vanilla-JS SPA (`simon/static/{index.html,app.js,app.css}` in PRs `#16, #19, #25, #33`) while Kevin built 7 Python SSR pages (`simon/{discovery_ui,screening_ui,taste_profile_ui}.py` in PRs `#10, #13–#15, #18, #20–#24, #28, #35`). In [d82cb8b4](conversation://d82cb8b4-4fee-4513-ae62-4555bf78bc11) (`steps 0, 134, 287`) and [07ae3887](conversation://07ae3887-55a1-4a51-b26d-6fedd56987c5) (`steps 0, 132, 207, 257`), the user flagged unlinked Discovery screens, unequal headers (`1440px` vs `1320px`), hidden sub-flows, and raw internal keys — requiring a **5-PR stabilization loop** (`#27, #30, #31, #32, #34`). Minutes after PR `#34` unified the `56px` topbar, subagent [0a227a03](conversation://0a227a03-c05c-42fe-8185-e538378def33) merged PR `#35` (`Source Hunter`, 42 sources across 8 regions, `American Idol` preset, `Run Full Pipeline Cascade`) onto SSR `/discovery` while topbar tab `1. Discovery` still routed to stale SPA `/?tab=discovery`, prompting [c6683ac6](conversation://c6683ac6-75a0-4c58-8c8e-fd0d192e135d) (`step 0`).
+- **Operating Spectrum**:
+  - *Where it helps*: Letting teammates ship zero-build Python SSR templates alongside a zero-dependency `/` SPA enabled 35 PRs and 8 working screens in one hackathon day without Node/bundler setup drag.
+  - *Where it drags*: Without a shared route-ownership table or wireframe spec, parallel builders attach new controls to whichever shell they open first — creating duplicate Stage 1 implementations (`/?tab=discovery` vs `/discovery`), duplicated CSS/JS helpers, and multi-PR visual alignment loops.
+- **Graduated Adaptation Space**:
+  - *Light calibration*: Lock canonical route ownership and STE-100 terminology in `pm/product/ui-strategy.md` and `pm/product/README.md`, requiring engineers to check which shell owns a stage before editing UI files.
+  - *Medium calibration*: Enforce a single-owner rule per stage (e.g., `FEAT-20` routing `1. Discovery` directly to `/discovery` and retiring `/?tab=discovery` in the same PR) while keeping `/`, `/screen`, and `/taste-profile` on their proven shells so 117 existing tests stay intact.
+  - *Deeper calibration*: Extract shared Python/HTML shell chrome (`topbar`, theme tokens, `formatLabel`, status banners) or unify onto one frontend shell post-hackathon once live demo velocity is no longer the primary constraint.
+
+### `OBS-2026-11-21-13` · Retrospective-Changelog Steward Gap vs. Living Versioned Product Specs
+- **Facets**: `skill-adoption`, `subagent-orchestration`
+- **Observed Signal & Evidence**: `repo:project-manager` ran `21×` across 60 sessions (including dedicated `simon-steward` runs [82db7ab9](conversation://82db7ab9-3000-4326-b58d-09f6d3fb82b2) and [e54ea46d](conversation://e54ea46d-7ed6-4600-bbbf-df6b1b968659)), reliably recording every PR in `pm/log/` and `PROJECT.md`. However, `ui-flow-audit` was invoked only `1×` ([921c1b75](conversation://921c1b75-517e-434b-9d7e-f3b15c282211) at `23:51Z`, `0×` during PR `#35` in [0a227a03](conversation://0a227a03-c05c-42fe-8185-e538378def33)), and zero files in `pm/` tracked current wireframes, user stories, or feature versions (`v1.0` -> `v2.0` -> `Retired`).
+- **Operating Spectrum**:
+  - *Where it helps*: Append-only session logs (`pm/log/`) and `decisions.md` preserve complete historical provenance with zero risk of overwriting teammate history during fast parallel sprints.
+  - *Where it drags*: When Steward acts purely as a post-hoc changelog writer, no document answers *"what does each screen show right now, and which user stories are live vs. proposed?"* — forcing teammates and coding agents to reverse-engineer product truth from raw `app.js` and `*_ui.py` code.
+- **Graduated Adaptation Space**:
+  - *Light calibration*: Add `pm/product/` (`README.md`, `ui-strategy.md`, `features.md`, `user-stories.md`, `wireframes.md`) to `PROJECT.md` so every `SessionStart` surfaces the product blueprint.
+  - *Medium calibration*: Upgrade the existing `Project Manager (Steward)` (`project-manager/SKILL.md` + `simon-steward.md`) with an **in-place Versioned Product Maintenance Protocol** (`v1.0`, `v1.x`, `v2.0`, `Proposed`, `Split-UI`, `Retired`) fed by one-line `FEAT-XX` deltas from `simon-feature-engineer` — explicitly avoiding a separate technical-writer subagent that would double token spend and re-create concurrent `edit_file` collisions on `pm/`.
+  - *Deeper calibration*: Pair Steward updates with lightweight contract assertions in `tests/` that verify every topbar link and active `FEAT-XX` route resolves to its canonical owner.
+
+### `OBS-2026-11-21-14` · Stale `Next Up` & Retired-Feature Residue After Fast Refactors
+- **Facets**: `parallel-concurrency`, `skill-adoption`, `toolchain-env`
+- **Observed Signal & Evidence**: After PR `#29` (`f75d51f`, retiring Phase 3B `performance-critic`/`booking-critic` from `phases.py` in [d82cb8b4](conversation://d82cb8b4-4fee-4513-ae62-4555bf78bc11) `steps 236–244`) and PR `#33` (`f80a6f5`, deleting legacy MVP shortlist UI and `agents/synthesis-scout/`), `pm/current.md` remained 85 lines / 26 KB long — still instructing agents in `Next Up` (`lines 79–83`) to wire deleted `SIMON_SYNTHESIS_AGENT` and `run_881b5370` into `data/mvp_contracts.json`, while mixing obsolete `3-tab Studio`, `5. Vocal Studio`, and `6. Evals / 7. Screening Deck / 8. Taste Profile` labels (`lines 14–37`). Simultaneously, `simon/static/app.js` retained dead DOM hooks (`#reviewTopbarControls`, `#promoteBar`, `#profileDrawer`, empty `#traceDrawer`), `simon/gemini.py:417` kept `synthesize_shortlist()`, `phases.py` kept legacy critic Lab presets, and retiring `performance-critic` dropped `@ MM:SS` vocal moment chips.
+- **Operating Spectrum**:
+  - *Where it helps*: Scoped feature-branch refactors (PRs `#29` and `#33`) shipped user-visible decluttering fast without blocking on repo-wide dead-code sweeps across `simon/scout.py` and `tests/test_mvp_scout.py`.
+  - *Where it drags*: Without an explicit `Retired` lifecycle step in Steward and a conciseness cap on `pm/current.md`, historical paragraphs accumulate indefinitely and stale `Next Up` items mislead new chat windows into building against deleted agents or schemas.
+- **Graduated Adaptation Space**:
+  - *Light calibration*: Enforce a strict `<120-line` live-snapshot cap on `pm/current.md` and require Steward to prune shipped or `Retired` items from `Live Now` and `Next Up` on every run.
+  - *Medium calibration*: Track retired capabilities explicitly under `Retired` (`FEAT-18`, `FEAT-19`) in `pm/product/features.md` — recording both what was removed and any quarantined code (`simon/scout.py`, orphan DOM IDs, dropped `@ MM:SS` chips tracked as `FEAT-22`) so staged cleanup never loses context.
+  - *Deeper calibration*: Add DOM-ID and route-label smoke checks to `tests/test_agency_studio_ui.py` and `tests/test_discovery_ui.py` so orphaned selectors or stale `5. Vocal Studio` menu labels fail unit tests immediately on refactor PRs.
+
+### `OBS-2026-11-21-15` · Multi-Agent Swarm Velocity Tailwinds on Cross-Screen UI Overhauls & Full-Repo Audits
+- **Facets**: `subagent-orchestration`, `velocity-tailwind`
+- **Observed Signal & Evidence**: In [07ae3887](conversation://07ae3887-55a1-4a51-b26d-6fedd56987c5) (`step 207` -> PR `#32` `76cf37f`), a 6-agent swarm partitioned `/taste-profile`, `/screen`, `/discovery`–`/evals`, and `/` SPA by file ownership, stripping raw internal jargon across all 8 screens in one cohesive pass (`113/113` tests passing). Similarly, [c6683ac6](conversation://c6683ac6-75a0-4c58-8c8e-fd0d192e135d) orchestrated 4 read-only mappers (`git-historian`, `ui-mapper`, `chat-auditor`, `backend-mapper` -> board `#10–#13`) feeding a single `triage-lead` (`#14`) before waking non-overlapping authors (`spec-author` vs. `process-author`) and a dedicated `verifier`.
+- **Operating Spectrum**:
+  - *Where it helps*: Two-phase swarm topology (**read-only fan-out -> single taxonomy/ID lock -> disjoint-file authors -> independent verifier**) eliminates concurrent `edit_file` collisions completely while synthesizing 60 sessions and 35 PRs in minutes.
+  - *Where it drags*: Multi-agent swarms carry fixed coordination and board-reading token overhead; spawning a 6–8 agent swarm for a single-file bug fix or routine 1-route copy edit is slower and costlier than one `simon-feature-engineer` worktree run.
+- **Graduated Adaptation Space**:
+  - *Light calibration*: Reserve multi-agent swarms for cross-cutting audits, multi-surface refactors (`>= 4` disjoint files), or parallel eval authoring; route single-slice code changes to a single `simon-feature-engineer` subagent.
+  - *Medium calibration*: When parallel writers share cross-file IDs or locked terms, insert a canonical ID/terminology lock post (`triage-lead`) between read-only discovery workers and parallel writers so cross-references (`FEAT-01`–`FEAT-22`, route tables) align on the first pass; skip the extra stage when writers own fully independent domains.
+  - *Deeper calibration*: Gate final `sync_main.py` execution behind a read-only `verifier` pass (`[author-done]` -> `[verified-sync]`) whenever multiple authors update coupled governance and product specs simultaneously.

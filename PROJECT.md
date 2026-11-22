@@ -13,7 +13,8 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 | :--- | :--- | :--- |
 | **[RESOURCES.md](./RESOURCES.md)** | Toolchain Manifest | Running list of CLIs, SDKs, plugins, and env vars for all teammates & agents |
 | **[governance/](./governance/README.md)** | Operating Charters | Durable charters: `git-flow.md`, `pipeline-domains.md`, `agent-ops-and-safety.md`, `knowledge-and-stewardship.md` |
-| **[pm/](./pm/)** | Project Management | `current.md`, `scope.md`, `decisions.md`, `log/` (session logs), `process/` (workflow telemetry & improvements), `inbox/` |
+| **[pm/product/](./pm/product/README.md)** | Product & UI Specs | Canonical UI strategy, SPA/SSR route map, ASCII wireframes, user stories & versioned features (`FEAT-01`–`FEAT-22`) |
+| **[pm/](./pm/)** | Project Management | `current.md` (`<120` lines), `scope.md`, `decisions.md`, `log/` (session logs), `process/` (workflow telemetry), `inbox/` |
 | **[notes/managed-agents/](./notes/managed-agents/README.md)** | How-To & Architecture | Playbooks for Gemini Managed Agents, repo-mounted sandboxes, Credentials/Files APIs, deployment |
 | **[agents/](./agents/README.md)** | Curated Agents | Versioned definitions, prompts, environment specs, and deploy configs for Simon's Managed Agents |
 | **[simon/](./simon/)** | Product Code | Python runtime, multimodal audio listener (`gemini-4-hydrogen`), Managed Agent orchestrator |
@@ -34,6 +35,7 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 ## Recent sessions
 *Working memory (LRU pointer cache, max 12, most recent first). Maintained by the `project-manager` skill/subagent.*
 
+- 2026-11-21 · product & ui strategy · added `pm/product/` (`FEAT-01`–`22`, wireframes, UI strategy) & version-aware Steward → `pm/product/`, `pm/process/`, `.agents/skills/`
 - 2026-11-21 · source hunter & nationwide cascade · shipped `source-hunter` cron trigger, 42-source 8-city seed & American Idol cascade (PR #35, 117/117) → `pm/log/2026-11-21-source-hunter-and-american-idol-preset.md`, `agents/source-hunter/`, `simon/source_hunter.py`
 - 2026-11-21 · ui flow unification · unified 56px sticky topbar, 5 even tabs, 1320px layout, Plain-English overhaul & 114/114 tests (PRs #30–#34) → `pm/log/2026-11-21-ui-flow-unification.md`, `simon/static/`, `simon/discovery_ui.py`, `agents/`
 - 2026-11-21 · legacy mvp removal · removed MVP shortlist UI, brief drawer, synthesis-scout agent & 3_shortlist alias (PR #33) → `pm/log/2026-11-21-remove-legacy-mvp.md`, `simon/static/`, `simon/phases.py`, `agents/`
@@ -45,4 +47,3 @@ Governance rules: [AGENTS.md](./AGENTS.md) · Partner toolchain & dependencies: 
 - 2026-11-21 · agency studio ui remodel · remodeled `/` into 3-tab studio (Talent Review, Phase Runner, Agent Lab), unified theme & phase runner API (PR #16) → `pm/log/2026-11-21-agency-studio-ui.md`, `simon/static/`, `simon/phases.py`
 - 2026-11-21 · reporting layer & two-stage ui · merged PRs #13/#14 (`AgentReport` v1.0.0, shared field-reporting/source-discovery skills, 2-stage UI) → `pm/log/2026-11-21-reporting-layer-two-stage-ui.md`, `data/agent_report_schema.json`, `agents/_shared/skills/`
 - 2026-11-21 · staging fleet smoke test · verified 9/9 staging managed agents live via concurrent /api/fleet/run (0 failures) → `pm/log/2026-11-21-staging-fleet-smoke-test.md`
-- 2026-11-21 · cloud run & firestore · merged PR #4 (`b2057e8`), deployed `simon-staging`, seeded 36 sources & live traces → `pm/log/2026-11-21-cloudrun-firestore-platform.md`, `simon/`, `data/`, `.agents/`

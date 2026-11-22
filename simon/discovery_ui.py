@@ -30,6 +30,7 @@ from .fleet import (
     poll_interaction,
     resolve_discovery_agent_id,
 )
+from .gemini import extract_json_object
 from .store import SimonStore
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -750,7 +751,7 @@ def dispatch_discovery_batch(
         archive_pipeline_workspace(store)
 
     clean_brief = (brief or DEFAULT_DISCOVERY_BRIEF).strip()
-    n_leads = max(1, min(int(leads_per_agent or 2), 25))
+    n_leads = max(1, min(int(leads_per_agent or 2), 50))
     n_agents = max(1, min(int(agent_count or len(selected)), 100))
     partitions = _partition_sources(selected, n_agents)
 
@@ -850,7 +851,13 @@ def dispatch_discovery_batch(
             }
             for idx, assigned in enumerate(partitions)
         ]
-        prompt_template = _build_discovery_worker_prompt(unconstrained=unconstrained)
+        prompt_template = (
+            "Run Stage 1 Discovery for this JSON assignment:\n{target}\n\n"
+            "Focus specifically on the `assigned_sources` list provided above using live `google_search` and `url_context`:\n"
+            "1. Search the live web for REAL, verifiable emerging vocalists/artists featured on or performing at `assigned_sources` matching `search_brief`.\n"
+            "2. Do NOT artificially cap leads — return EVERY verified real artist you find with a real http(s) URL (when `unconstrained: true`, extract every distinct artist found with zero artificial cap; otherwise aim for at least `requested_count`) and set `requested_count` equal to `max(1, len(leads))`.\n"
+            "3. Avoid slow shell loops: validate against DiscoveryHandoff v1.0.0 (`contract_version: \"1.0.0\"`, `run_id`, `search_brief`, `requested_count`, `generated_at`, `leads`, `discovered_sources`) with neutral factual `context_snippet` (no scores/ranks) and return ONLY the JSON object immediately."
+        )
         fleet_res = dispatch_fleet(
             agent_id=agent_id,
             assignments=assignments,
@@ -863,13 +870,6 @@ def dispatch_discovery_batch(
         )
         for idx, fw in enumerate(fleet_res["workers"]):
             assigned = partitions[idx]
-            out_json = _normalize_handoff_for_validation(
-                fw.get("output_json"),
-                run_id_fallback=f"{batch_id}_w{idx + 1}",
-                brief_fallback=clean_brief,
-                unconstrained=unconstrained,
-            )
-            validation = _validate_handoff_payload(out_json) if fw.get("status") == "completed" else None
             worker = {
                 "index": idx,
                 "worker_id": f"agent_{idx + 1:02d}",
@@ -889,13 +889,22 @@ def dispatch_discovery_batch(
                     for s in assigned
                 ],
                 "steps": fw.get("steps") or [],
-                "output_json": validation.get("cleaned", out_json) if validation else out_json,
+                "output_json": fw.get("output_json"),
                 "output_text": fw.get("output_text"),
-                "contract_valid": validation["valid"] if validation else None,
-                "contract_errors": validation["errors"] if validation else [],
-                "lead_count": validation["lead_count"] if validation else 0,
+                "contract_valid": None,
+                "contract_errors": [],
+                "lead_count": 0,
                 "error": fw.get("error"),
             }
+            if fw.get("status") == "completed":
+                _ingest_completed_live_worker(
+                    store=store,
+                    batch_id=batch_id,
+                    search_brief=clean_brief,
+                    worker=worker,
+                    polled=fw,
+                    multi_worker=(len(fleet_res["workers"]) > 1),
+                )
             workers.append(worker)
             _sync_worker_agent_report(store, batch_id, clean_brief, worker, mode="live")
         mode = "live"
@@ -960,6 +969,172 @@ def _batch_has_active_workers(batch: Dict[str, Any]) -> bool:
     return False
 
 
+_VALID_SEED_CHANNELS = frozenset(
+    {
+        "youtube_live_session",
+        "diy_venue_calendar",
+        "diy_venue_flyer_ocr",
+        "bandcamp_local_arrival",
+        "open_mic_lineup",
+        "bgv_or_session_credit_graph",
+        "event_listing",
+        "other",
+    }
+)
+
+
+def _ingest_completed_live_worker(
+    store: SimonStore,
+    batch_id: str,
+    search_brief: str,
+    worker: Dict[str, Any],
+    polled: Dict[str, Any],
+    multi_worker: bool = False,
+) -> None:
+    """Normalize completed live worker output, salvage valid leads, and save handoff + leads immediately."""
+    worker["output_text"] = polled.get("output_text")
+    raw_json = polled.get("output_json")
+    if not isinstance(raw_json, dict) and polled.get("output_text"):
+        try:
+            raw_json = extract_json_object(str(polled["output_text"]))
+        except ValueError:
+            raw_json = None
+
+    if not isinstance(raw_json, dict):
+        validation = _validate_handoff_payload(None)
+        worker["output_json"] = None
+        worker["contract_valid"] = False
+        worker["contract_errors"] = validation["errors"]
+        worker["lead_count"] = 0
+        return
+
+    worker_idx = int(worker.get("index") or 0)
+    raw_leads_list = raw_json.get("leads") if isinstance(raw_json.get("leads"), list) else []
+    allowed_top = {
+        "contract_version",
+        "run_id",
+        "search_brief",
+        "requested_count",
+        "generated_at",
+        "leads",
+        "discovered_sources",
+    }
+    norm_json = {k: v for k, v in raw_json.items() if k in allowed_top}
+    norm_json["contract_version"] = "1.0.0"
+    norm_json["run_id"] = str(norm_json.get("run_id") or f"{batch_id}_w{worker_idx + 1}").strip()
+    norm_json["search_brief"] = str(
+        norm_json.get("search_brief") or search_brief or DEFAULT_DISCOVERY_BRIEF
+    ).strip()
+    norm_json["generated_at"] = str(norm_json.get("generated_at") or _utc_now_iso()).strip()
+    norm_json["requested_count"] = max(1, len(raw_leads_list))
+    norm_json.setdefault("discovered_sources", [])
+
+    validation = _validate_handoff_payload(norm_json)
+    cleaned_obj = validation.get("cleaned") if isinstance(validation.get("cleaned"), dict) else {}
+    candidate_leads = cleaned_obj.get("leads") if isinstance(cleaned_obj.get("leads"), list) and cleaned_obj.get("leads") else raw_leads_list
+    assigned_sources = worker.get("assigned_sources") or []
+
+    salvaged_leads: List[Dict[str, Any]] = []
+    seen_names: Set[str] = set()
+    for k, item in enumerate(candidate_leads):
+        if not isinstance(item, dict):
+            continue
+        stage_name = str(item.get("stage_name") or item.get("artist_name") or item.get("name") or "").strip()
+        if not stage_name:
+            continue
+        name_key = stage_name.lower()
+        if name_key in seen_names:
+            continue
+        seen_names.add(name_key)
+
+        raw_lid = str(item.get("lead_id") or "").strip()
+        if not raw_lid or (multi_worker and not raw_lid.startswith(f"lead_{batch_id[-6:]}")):
+            lead_id = f"lead_{batch_id[-6:]}_w{worker_idx + 1}_{k + 1:02d}"
+        else:
+            lead_id = raw_lid
+
+        attr = str(item.get("attribution_status") or "verified").strip()
+        if attr not in ("verified", "uncertain"):
+            attr = "verified"
+
+        snippet_raw = item.get("context_snippet")
+        if snippet_raw is None and item.get("notes"):
+            snippet_raw = item.get("notes")
+        snippet = str(snippet_raw).strip() if snippet_raw is not None else None
+        if snippet == "":
+            snippet = None
+
+        seeds_out: List[Dict[str, Any]] = []
+        for s in item.get("seed_sources") or []:
+            if not isinstance(s, dict):
+                continue
+            u = str(s.get("url") or "").strip()
+            if not u.startswith(("http://", "https://")):
+                continue
+            ch = str(s.get("source_channel") or "other").strip()
+            if ch not in _VALID_SEED_CHANNELS:
+                ch = "other"
+            if ch == "youtube_live_session" and not any(
+                tok in u for tok in ("youtube.com/watch?v=", "youtu.be/", "youtube.com/shorts/", "youtube.com/live/")
+            ):
+                ch = "other"
+            seed_obj: Dict[str, Any] = {"url": u, "source_channel": ch}
+            for opt_k in ("seed_query_or_venue_node", "discovered_at", "notes"):
+                if s.get(opt_k) is not None:
+                    seed_obj[opt_k] = str(s[opt_k])
+            seeds_out.append(seed_obj)
+
+        if not seeds_out:
+            fallback_u = str(item.get("url") or item.get("source_url") or "").strip()
+            if not fallback_u.startswith(("http://", "https://")) and assigned_sources:
+                fallback_u = str(assigned_sources[0].get("url") or "").strip()
+            if fallback_u.startswith(("http://", "https://")):
+                seeds_out.append({"url": fallback_u, "source_channel": "other"})
+
+        if not seeds_out:
+            continue
+
+        salvaged_leads.append(
+            {
+                "lead_id": lead_id,
+                "stage_name": stage_name,
+                "seed_sources": seeds_out,
+                "attribution_status": attr,
+                "context_snippet": snippet,
+            }
+        )
+
+    handoff_to_save = {
+        "contract_version": "1.0.0",
+        "run_id": norm_json["run_id"],
+        "search_brief": norm_json["search_brief"],
+        "requested_count": max(1, len(salvaged_leads)),
+        "generated_at": norm_json["generated_at"],
+        "leads": salvaged_leads,
+        "discovered_sources": (
+            cleaned_obj.get("discovered_sources")
+            if isinstance(cleaned_obj.get("discovered_sources"), list)
+            else []
+        ),
+    }
+
+    if salvaged_leads:
+        try:
+            save_agent_document(store, "discovery_handoffs", handoff_to_save, doc_id=handoff_to_save["run_id"])
+        except ValueError:
+            pass
+        for lead_doc in salvaged_leads:
+            try:
+                save_agent_document(store, "leads", lead_doc, doc_id=lead_doc["lead_id"])
+            except ValueError:
+                pass
+
+    worker["output_json"] = handoff_to_save if salvaged_leads else cleaned_obj or norm_json
+    worker["contract_valid"] = bool(validation["valid"] or salvaged_leads)
+    worker["contract_errors"] = validation["errors"]
+    worker["lead_count"] = len(salvaged_leads) if salvaged_leads else validation["lead_count"]
+
+
 def _poll_batch_once(
     store: SimonStore,
     batch: Dict[str, Any],
@@ -967,36 +1142,34 @@ def _poll_batch_once(
     api_key: Optional[str] = None,
     request_fn: Callable[..., Tuple[int, Dict[str, Any]]] = _http_json,
 ) -> bool:
-    changed = False
-    is_unconstrained = bool(batch.get("unconstrained", False))
-    brief_str = str(batch.get("search_brief") or DEFAULT_DISCOVERY_BRIEF)
-
-    active_targets: List[Tuple[int, Dict[str, Any], str]] = []
-    for idx, worker in enumerate(batch.get("workers") or []):
+    workers = batch.get("workers") or []
+    active_workers: List[Tuple[int, Dict[str, Any], str]] = []
+    for idx, worker in enumerate(workers):
         status = str(worker.get("status") or "")
-        iid = worker.get("interaction_id")
-        if not iid or status in TERMINAL_STATUSES or status == "error":
+        interaction_id = str(worker.get("interaction_id") or "").strip()
+        if not interaction_id or status in TERMINAL_STATUSES or status == "error":
             continue
-        active_targets.append((idx, worker, str(iid)))
+        active_workers.append((idx, worker, interaction_id))
 
-    if not active_targets:
+    if not active_workers:
         return False
 
-    def _poll_one(target: Tuple[int, Dict[str, Any], str]) -> Tuple[int, Dict[str, Any], Optional[Dict[str, Any]], Optional[str]]:
-        w_idx, w_obj, iid = target
+    def _poll_one(iid: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         try:
-            res = poll_interaction(iid, api_key=api_key, request_fn=request_fn)
-            return w_idx, w_obj, res, None
+            return poll_interaction(iid, api_key=api_key, request_fn=request_fn), None
         except Exception as exc:  # noqa: BLE001
-            return w_idx, w_obj, None, str(exc)
+            return None, str(exc)
 
-    with ThreadPoolExecutor(max_workers=min(8, len(active_targets))) as pool:
-        polled_results = list(pool.map(_poll_one, active_targets))
+    max_workers = min(8, max(1, len(active_workers)))
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        polled_results = list(pool.map(lambda item: _poll_one(item[2]), active_workers))
 
-    leads_to_save: List[Tuple[str, Dict[str, Any], Optional[str]]] = []
-    now_iso = _utc_now_iso()
+    changed = False
+    multi_worker = len(workers) > 1
+    brief_str = str(batch.get("search_brief") or DEFAULT_DISCOVERY_BRIEF)
+    mode_str = str(batch.get("mode") or "live")
 
-    for idx, worker, polled, err_str in polled_results:
+    for (_, worker, _), (polled, err_str) in zip(active_workers, polled_results):
         if err_str is not None or polled is None:
             worker["error"] = err_str
             continue
@@ -1016,55 +1189,26 @@ def _poll_batch_once(
             worker["error"] = polled["error"]
 
         if polled["status"] == "completed":
-            worker["output_text"] = polled.get("output_text")
-            norm_out = _normalize_handoff_for_validation(
-                polled.get("output_json"),
-                run_id_fallback=f"{batch_id}_w{idx + 1}",
-                brief_fallback=brief_str,
-                unconstrained=is_unconstrained,
+            _ingest_completed_live_worker(
+                store=store,
+                batch_id=batch_id,
+                search_brief=brief_str,
+                worker=worker,
+                polled=polled,
+                multi_worker=multi_worker,
             )
-            validation = _validate_handoff_payload(norm_out)
-            cleaned_payload = validation.get("cleaned", norm_out)
-            worker["output_json"] = cleaned_payload
-            worker["contract_valid"] = validation["valid"]
-            worker["contract_errors"] = validation["errors"]
-            worker["lead_count"] = validation["lead_count"]
             changed = True
-            if isinstance(cleaned_payload, dict):
-                if validation["valid"]:
-                    try:
-                        save_agent_document(store, "discovery_handoffs", cleaned_payload)
-                    except ValueError:
-                        pass
-                # Stream every discovered lead immediately into `leads` so UI & Stage 2 see them live!
-                for lead_idx, lead_item in enumerate(cleaned_payload.get("leads") or []):
-                    if not isinstance(lead_item, dict) or not lead_item.get("stage_name"):
-                        continue
-                    lead_copy = dict(lead_item)
-                    lid = str(lead_copy.get("lead_id") or f"lead_{batch_id}_w{idx + 1}_{lead_idx + 1:02d}").strip()
-                    lead_copy["lead_id"] = lid
-                    lead_copy.setdefault("run_id", cleaned_payload.get("run_id") or f"{batch_id}_w{idx + 1}")
-                    lead_copy.setdefault("search_brief", brief_str)
-                    lead_copy.setdefault("discovered_at", now_iso)
-                    leads_to_save.append(("leads", lead_copy, lid))
 
         _sync_worker_agent_report(
             store,
             batch_id=batch_id,
             brief=brief_str,
             worker=worker,
-            mode=str(batch.get("mode") or "live"),
+            mode=mode_str,
         )
 
-    if leads_to_save:
-        for col, lead_doc, lid in leads_to_save:
-            try:
-                save_agent_document(store, col, lead_doc, doc_id=lid)
-            except ValueError:
-                pass
-
     if changed:
-        batch["updated_at"] = now_iso
+        batch["updated_at"] = _utc_now_iso()
         save_agent_document(store, "fleet_runs", batch, doc_id=batch_id)
     return changed
 
@@ -1956,7 +2100,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
           </label>
           <label style="font-size:0.86rem;" id="leadsPerAgentWrap">
             Leads / Scout:
-            <input type="number" id="leadsPerAgentInput" min="1" max="25" value="2" disabled style="width:68px; margin-left:6px; opacity:0.5;" />
+            <input type="number" id="leadsPerAgentInput" min="1" max="50" value="6" disabled style="width:68px; margin-left:6px; opacity:0.5;" />
           </label>
           <label style="display:inline-flex; align-items:center; gap:6px; font-size:0.86rem; cursor:pointer; font-weight:700; color:var(--accent);">
             <input type="checkbox" id="unconstrainedToggle" checked />
@@ -2876,6 +3020,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       const isUnc = Boolean(el('unconstrainedToggle') && el('unconstrainedToggle').checked);
       showBanner(isLive ? 'Launching live web search sandboxes on Gemini Managed Agents…' : 'Running fast simulated scouts…', 'info');
       el('dispatchBtn').disabled = true;
+      el('cascadeBtn').disabled = true;
       try {{
         const res = await fetch('/api/discovery/dispatch', {{
           method: 'POST',
@@ -2884,7 +3029,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
             source_ids: Array.from(selectedIds),
             brief: el('briefInput').value,
             agent_count: Math.max(1, Math.min(Number(el('agentCountInput').value || 1), 100)),
-            leads_per_agent: Math.max(1, Math.min(Number(el('leadsPerAgentInput').value || 2), 25)),
+            leads_per_agent: Math.max(1, Math.min(Number(el('leadsPerAgentInput').value || 6), 50)),
             unconstrained: isUnc,
             live: isLive,
             reset_previous: el('resetPrevToggle') ? el('resetPrevToggle').checked : false,
@@ -2912,6 +3057,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
         showBanner(err.message, 'err');
       }} finally {{
         el('dispatchBtn').disabled = false;
+        el('cascadeBtn').disabled = false;
       }}
     }};
 
@@ -2920,7 +3066,7 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
       stopLiveStreamPolling();
       forceProceedCascade = false;
       const scouts = Math.max(1, Math.min(Number(el('agentCountInput').value || 1), 100));
-      const perScout = Math.max(1, Math.min(Number(el('leadsPerAgentInput').value || 2), 25));
+      const perScout = Math.max(1, Math.min(Number(el('leadsPerAgentInput').value || 6), 50));
       const isUnc = Boolean(el('unconstrainedToggle') && el('unconstrainedToggle').checked);
       const isLive = Boolean(el('liveToggle') && el('liveToggle').checked);
       el('cascadeBtn').disabled = true;
@@ -2952,7 +3098,6 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
 
         let discoveredSoFar = (dData.workers || []).reduce((acc, w) => acc + (w.lead_count || 0), 0);
         if (dData.mode === 'live') {{
-          // Stream live Managed Agent tool steps & leads every 2.5s until finished (or user clicks Proceed Now)
           for (let attempt = 0; attempt < 240; attempt++) {{
             if (forceProceedCascade) break;
             await new Promise((r) => setTimeout(r, 2500));
@@ -2967,6 +3112,9 @@ DISCOVERY_HTML = f"""<!DOCTYPE html>
             if (state.allFinished) break;
           }}
           if (el('proceedPartialCascadeBtn')) el('proceedPartialCascadeBtn').style.display = 'none';
+          if (discoveredSoFar === 0) {{
+            throw new Error('Live scouts finished with 0 verified leads — select additional sources or re-run.');
+          }}
         }}
 
         showBanner(
