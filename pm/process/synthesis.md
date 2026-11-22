@@ -2,22 +2,24 @@
 
 *Living analytical model for Simon's dedicated **System Improver** agent. Synthesizes empirical telemetry from [observations.md](./observations.md) without collapsing nuanced tradeoffs into binary choices.*
 
-*Last synthesized: 2026-11-21 (53-session full audit: 21 root chats, 32 subagents, 168 friction signals)*
+*Last synthesized: 2026-11-21 (60-session full audit: 22 root chats, 38 subagents, 193 friction signals, PRs #1–#35)*
 
 ---
 
 ## 1. What Is Working Well (Preserve & Compound)
 
 1. **`SessionStart` Progressive Disclosure (`session_start.py` → `PROJECT.md`)**:
-   - Fired cleanly across **51** sessions/subagents with zero latency spikes, orienting every chat window on `Focus`, bucket locations, and `Recent sessions` immediately.
+   - Fired cleanly across **60+** sessions/subagents with zero latency spikes, orienting every chat window on `Focus`, bucket locations, and `Recent sessions` immediately.
 2. **Dual-Track Sync Separation (`--docs-only` vs. `--code` in `sync_main.py`)**:
-   - Separating Steward documentation commits (`--docs-only`, `--autostash`) from verified code slices (`--code --paths ...`) kept `origin/main` continuously live across 21 parallel chats while catching `11×` lint issues before push.
+   - Separating Steward documentation commits (`--docs-only`, `--autostash`) from verified code slices (`--code --paths ...`) kept `origin/main` continuously live across 22 parallel chats while catching `11×` lint issues before push.
 3. **Organic Skill Discovery (`project-manager`, `main-sync`, `plain-english`, `agent-evals`, `gemini-api-*`)**:
    - Agents consistently activated repo and plugin runbooks (`21×` Steward, `18×` `main-sync`, `8×` `plain-english`, `5×` `agent-evals`, `8×` `gemini-api-*`) because frontmatter descriptions name concrete workflow triggers.
 4. **Non-Interactive Git & Toolchain Hardening**:
    - `gh auth setup-git`, `GIT_TERMINAL_PROMPT=0`, and `auto_approve_toolchain.py` eliminated early terminal hangs and repetitive approval prompts.
 5. **Parallel Isolated Subagent Execution (`Workspace: "share"`)**:
-   - Running feature/UI/eval subagents in parallel worktrees shipped Stage 3 Screening, 9-agent rubrics, and Two-Stage UI in hours.
+   - Running feature/UI/eval subagents in parallel worktrees shipped Stage 3 Screening, `/taste-profile`, 9-agent rubrics, and Source Hunter in hours.
+6. **Two-Phase Partitioned Swarms (`OBS-2026-11-21-15`)**:
+   - Pairing read-only audit mappers + a terminology-locking `triage-lead` with strictly disjoint file-owner authors and an independent `verifier` delivered repo-wide Plain-English overhauls (PR `#32`) and full product/governance audits (`c6683ac6`) with zero `edit_file` collisions.
 
 ---
 
@@ -41,6 +43,13 @@
 - **Root Cause**: The team has converged on 5 repeatable engineering/ops flows, yet every chat still invokes generic `self` subagents with hand-written prompts (`32` subagents across `21` root chats) and re-discovers Cloud Run deploy / UI audit steps.
 - **Observed Symptoms (`OBS-2026-11-21-07`, `OBS-2026-11-21-11`)**:
   - `16×` ad-hoc Project Manager Steward subagents, `10×` isolated feature/UI builders, `4×` parallel rubric authors, plus repeated Managed Agent deploy/model-swap and Cloud Run/CI debugging sessions.
+
+### Theme D · Product/UI Specification & Cross-Teammate Feature Drift
+- **Root Cause**: While `pm/log/` and `pm/decisions.md` excelled at append-only historical provenance, the repository lacked a living, in-place **product & UI specification bucket (`pm/product/`)**, a pre-code route-ownership check, and a retirement/pruning rule on `pm/current.md`.
+- **Observed Symptoms (`OBS-2026-11-21-12`, `OBS-2026-11-21-13`, `OBS-2026-11-21-14`)**:
+  1. **Parallel SPA vs. SSR split-brain (`PRs #10–#35`)**: JT's vanilla-JS SPA (`simon/static/`) and Kevin's 7 Python SSR pages (`simon/*_ui.py`) evolved without a shared route-ownership contract — triggering a 5-PR convergence loop (`#27, #30, #31, #32, #34`) followed immediately by PR `#35` landing nationwide presets, Source Hunter, and Pipeline Cascade on SSR `/discovery` while primary tab `1. Discovery` still pointed to stale SPA `/?tab=discovery`.
+  2. **Post-hoc changelog Steward vs. current product truth**: Across `21×` runs, Steward appended PR summaries to `pm/current.md` (growing to 85 dense lines / 26 KB with contradictory `3-tab` vs `6/7/8` vs `5-tab` labels) without updating wireframes, user stories, or feature versions in place.
+  3. **Retired-feature residue (`PRs #29, #33`)**: Fast refactors removed `synthesis-scout`, MVP shortlist UI, and Phase 3B critics, yet `pm/current.md` `Next Up` still told agents to wire `SIMON_SYNTHESIS_AGENT` and `run_881b5370`, `app.js` kept dead DOM IDs/drawers, and player `@ MM:SS` chips dropped silently.
 
 ---
 
@@ -82,3 +91,14 @@
 - **Two High-Leverage Missing Skills**:
   - `cloudrun-deploy-and-verify` (Cloud Run staging build/deploy, GitHub Actions CI triage, live endpoint & Firestore checks).
   - `ui-flow-audit` (management-facing Plain-English copy pass, explicit state-machine check, Python `unittest` UI regression run).
+
+### Opportunity 5 · Version-Aware Project Manager Steward & Pre-Implementation Spec Gate
+- **Light calibration (Pre-Code Spec Check & Locked Terminology in `pm/product/`)**:
+  - Require `simon-feature-engineer` and `ui-flow-audit` to read `pm/product/{README,ui-strategy,wireframes,features}.md` before editing routes or templates so engineers check SPA vs. SSR route ownership, Continuous Playback Invariants, and STE-100 terms upfront without slowing down coding turns.
+  - *Tradeoff*: Zero extra subagent calls; adds ~3 fast local file reads at the start of UI/feature tasks while preventing duplicate surfaces like PR `#35`'s SSR-only `/discovery` drift.
+- **Medium calibration (Single Version-Aware Steward + `<120-Line` `pm/current.md` Cap)**:
+  - Upgrade the existing `Project Manager (Steward)` (`project-manager/SKILL.md`, `simon-steward.md`) — **explicitly instead of spawning a separate technical-writer subagent** — to process structured `FEAT-XX: vA -> vB | PR #NN | ...` deltas from engineers, update `pm/product/*.md` **in place** (`v1.0`, `v1.x`, `v2.0`, `Proposed`, `Split-UI`, `Retired`), and prune `pm/current.md` under 120 lines.
+  - *Tradeoff*: Keeps product specs, live sprint status, and `PROJECT.md` atomic inside one Track A (`--docs-only`) commit, eliminating both multi-writer `edit_file` collisions and stale `Next Up` drift.
+- **Deeper calibration (Automated Route-Ownership & Dead-Reference Regression Checks)**:
+  - Extend `tests/test_agency_studio_ui.py` and `tests/test_discovery_ui.py` with lightweight assertions verifying that primary topbar tabs match canonical routes in `pm/product/ui-strategy.md`, every `getElementById(...)` hook in `app.js` resolves in `index.html` (or is guarded safely), and retired agent slugs never reappear in active presets.
+  - *Tradeoff*: Catches split-brain links and refactor residue deterministically in `<3s` during `sync_main.py --code` without imposing heavyweight pre-PR approval bureaucracy during hackathon sprints.
